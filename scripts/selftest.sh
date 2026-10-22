@@ -268,6 +268,8 @@ stop >/dev/null
 check "an offline turn is logged" 'tail -n 1 "$W/.protocol.log" | grep -q "offline=1"'
 mkdir -p "$W/emptymount/notes"; cp "$W/marker.bak" "$W/.chief-of-staff"; printf 'library: %s\n' "$W/emptymount" >> "$W/.chief-of-staff"
 check "a folder without .library-id is an error, not a library" 'L search tax | grep -q "has no .library-id"'
+check "a broken library does not free web research" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
+check "agents cannot delete the library id file" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm /lib/.library-id\"}")" "$P")" = 2 ]'
 cp "$W/marker.bak" "$W/.chief-of-staff"
 
 
@@ -371,6 +373,9 @@ if command -v python3 >/dev/null && command -v curl >/dev/null; then
   check "panel saves a pasted link as a note" 'printf "https://example.com/a" | curl -s -X POST --data-binary @- -H "X-Name: link.md" -H "X-Kind: text" "$B/import?t=$TK" >/dev/null && grep -q "^source: https://example.com/a" "$W"/knowledge/inbox/*link.md'
   check "panel answers a non-ASCII token with 403" '[ "$(curl -s -o /dev/null -w %{http_code} "$B/api?t=%C3%A9")" = 403 ]'
   check "panel rejects an empty pasted text" '[ "$(printf "  " | curl -s -o /dev/null -w %{http_code} -X POST --data-binary @- -H "X-Kind: text" "$B/import?t=$TK")" = 400 ]'
+  check "panel api carries the library graph" 'curl -s "$B/api?t=$TK" | python3 -c "import json,sys; L=json.load(sys.stdin)[\"library\"]; ids={n[\"id\"] for n in L[\"nodes\"]}; assert L[\"state\"]==\"online\" and \"tax-2\" in ids and [\"tax-1\",\"tax-2\"] in L[\"edges\"]"'
+  check "panel page scripts run only with the per-response nonce" 'curl -s -D "$W/h.txt" "$B/?t=$TK" > "$W/p.html" && n=$(sed -n "s/.*script-src .nonce-\([^'"'"']*\).*/\1/p" "$W/h.txt") && [ -n "$n" ] && grep -q "<script nonce=\"$n\">" "$W/p.html" && ! grep -qi "unsafe-inline" "$W/h.txt"'
+  check "panel warns when an import holds a secret" 'printf "key AKIAABCDEFGHIJKLMNOP" | curl -s -X POST --data-binary @- -H "X-Name: k.txt" -H "X-Kind: text" "$B/import?t=$TK" | grep -q "holds a key or token"'
   check "panel never sends the token on as a referrer" 'curl -s -D - -o /dev/null "$B/?t=$TK" | grep -qi "^referrer-policy: no-referrer"'
   kill $pp 2>/dev/null; wait $pp 2>/dev/null
 else

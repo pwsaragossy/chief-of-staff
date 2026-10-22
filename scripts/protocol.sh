@@ -94,13 +94,15 @@ $p" >&2; exit 2; fi ;;
         exit 2 ;;
       WebSearch|WebFetch)
         [ -f "$st/library" ] && exit 0
-        [ $lst = 0 ] || { mark offline; exit 0; }   # library unreachable: research goes on, the turn is logged offline=1
+        # only a library that is really absent (disk unplugged) lets research go on without it; a broken one does not
+        [ $lst = 1 ] && { mark offline; exit 0; }
+        [ $lst = 0 ] || { sh "$L" where | sed -n 2p >&2; exit 2; }
         echo "Blocked by chief-of-staff: search the library first, then search the web only for what it lacks. Run: sh \"$(dirname "$0")/library.sh\" search <terms>" >&2
         exit 2 ;;
       Write|Edit|MultiEdit|Bash)   # the marker says where the library lives: only the owner edits it
         case $(jget tool_name) in
-          Bash) case $in in *.chief-of-staff*) case $in in *">"*|*"tee "*|*"sed -i"*|*"mv "*|*"cp "*|*"rm "*|*perl*|*python*|*"ln "*) ;; *) exit 0 ;; esac ;; *) exit 0 ;; esac ;;
-          *) [ "$(jget file_path)" = "$root/.chief-of-staff" ] || exit 0 ;;
+          Bash) case $in in *.chief-of-staff*|*.library-id*) case $in in *">"*|*"tee "*|*"sed -i"*|*"mv "*|*"cp "*|*"rm "*|*perl*|*python*|*"ln "*) ;; *) exit 0 ;; esac ;; *) exit 0 ;; esac ;;
+          *) case $(jget file_path) in "$root/.chief-of-staff"|*/.library-id) ;; *) exit 0 ;; esac ;;
         esac
         echo "Blocked by chief-of-staff: $root/.chief-of-staff marks the workspace and says where the library lives; agents do not change it. To move the library, central runs library.sh offload after the owner agrees." >&2
         exit 2 ;;

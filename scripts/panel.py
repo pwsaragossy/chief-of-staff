@@ -9,6 +9,8 @@ import http.server, json, os, re, secrets, subprocess, sys, time, urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAX_UPLOAD = 50 * 1024 * 1024
+# the same patterns library.awk blocks in notes
+SECRET = re.compile(rb"AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40}|sk-[A-Za-z0-9_-]{32}|xox[baprs]-[A-Za-z0-9-]{10}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10}[.]eyJ[A-Za-z0-9_-]{10}[.]")
 US = "\x1f"
 
 
@@ -39,12 +41,48 @@ def front_matter(path):
     return out
 
 
-def sh(script, *args):
+def sh(script, *args, cwd=None):
     try:
-        r = subprocess.run(["sh", os.path.join(HERE, script), *args], capture_output=True, text=True, timeout=20)
+        r = subprocess.run(["sh", os.path.join(HERE, script), *args], capture_output=True, text=True, timeout=20,
+                           cwd=cwd, env=dict(os.environ, CLAUDE_PROJECT_DIR=cwd or os.getcwd()))
     except subprocess.TimeoutExpired:
         return ""
     return r.stdout
+
+
+MAX_NODES = 300  # an SVG graph of thousands of notes freezes the browser; the lists below stay complete
+
+
+def library(root):
+    """The library view, computed on demand from library.sh (graph + where): never a stored index."""
+    where = sh("library.sh", "where", cwd=root).splitlines()
+    path = where[0] if where else os.path.join(root, "knowledge")
+    if len(where) > 1:
+        return {"state": "offline" if "offline" in where[1] else "error", "path": path, "message": where[1],
+                "color": "yellow", "nodes": [], "edges": [], "problems": [], "dangling": [], "stale": [], "pairs": []}
+    nodes, edges, dangling, pairs, retired = [], [], [], [], 0
+    for line in sh("library.sh", "graph", cwd=root).splitlines():
+        f = line.split("\t")
+        if f[0] == "N" and len(f) >= 9:
+            nodes.append({"id": f[1], "title": f[2], "type": f[3], "state": f[4], "origin": f[5], "group": f[6],
+                          "problems": int(f[7] or 0), "in": int(f[8] or 0)})
+        elif f[0] == "E" and len(f) >= 3:
+            edges.append([f[1], f[2]])
+        elif f[0] == "D" and len(f) >= 3:
+            dangling.append([f[1], f[2]])
+        elif f[0] == "R" and len(f) >= 3:
+            edges.append([f[1], f[2]]); retired += 1
+        elif f[0] == "P" and len(f) >= 3:
+            pairs.append([f[1], f[2]])
+    problems = [n["id"] for n in nodes if n["problems"]]
+    stale = [n["id"] for n in nodes if n["state"] == "stale"]
+    shown = sorted(nodes, key=lambda n: (n["state"] == "retired", -n["in"]))[:MAX_NODES]
+    keep = {n["id"] for n in shown}
+    color = "yellow" if problems or dangling or pairs else "green"
+    return {"state": "online", "path": path, "color": color, "total": len(nodes), "retired": retired,
+            "nodes": shown, "edges": [e for e in edges if e[0] in keep and e[1] in keep],
+            "problems": problems, "dangling": dangling, "stale": stale, "pairs": pairs,
+            "origins": sorted({n["origin"] for n in nodes if n["origin"]})}
 
 
 def snapshot(root):
@@ -69,8 +107,9 @@ def snapshot(root):
             "brief": sh("track.sh", "brief", pdir).strip().split(" Waiting on prerequisites:")[0],
             "next": front_matter(os.path.join(pdir, "STATE.md")).get("next", ""),
         })
+    lib = library(root)
     rank = {"red": 2, "yellow": 1, "green": 0}
-    overall = max((p["color"] for p in projects), key=lambda c: rank.get(c, 0), default="green")
+    overall = max([p["color"] for p in projects] + [lib["color"]], key=lambda c: rank.get(c, 0))
 
     cards = []
     board = os.path.join(root, "board")
@@ -94,11 +133,10 @@ def snapshot(root):
             last[kv["turn"]] = kv
     turns = sorted(last.values(), key=lambda k: k.get("t", ""), reverse=True)[:10]
 
-    inbox = os.path.join(root, "knowledge", "inbox")
+    inbox = os.path.join(lib["path"], "inbox")
     n_inbox = len([n for n in os.listdir(inbox) if not n.startswith(".")]) if os.path.isdir(inbox) else 0
-    notes = os.path.join(root, "knowledge", "notes")
-    n_notes = len([n for n in os.listdir(notes) if n.endswith(".md")]) if os.path.isdir(notes) else 0
-    return {"workspace": root, "overall": overall, "projects": projects, "cards": cards,
+    n_notes = lib.get("total", 0)
+    return {"library": lib, "workspace": root, "overall": overall, "projects": projects, "cards": cards,
             "turns": [{k: t.get(k, "") for k in ("when", "project", "substantive", "specialists",
                                                   "reviewers", "track", "violation")} for t in turns],
             "inbox": n_inbox, "notes": n_notes, "time": time.strftime("%H:%M:%S")}
@@ -152,6 +190,15 @@ button{padding:9px 16px;border:0;border-radius:8px;background:var(--fg);color:va
 svg.edges{position:absolute;left:0;top:0;pointer-events:none;z-index:0;overflow:visible}
 svg.edges path{fill:none;stroke:var(--line);stroke-width:1.5}
 svg.edges path.ok{stroke:var(--green);opacity:.6}
+svg.lgraph{width:100%;height:440px;display:block;border-top:1px solid var(--line)}
+svg.lgraph line{stroke:var(--line);stroke-width:1}
+svg.lgraph circle{stroke:var(--card);stroke-width:1.5}
+svg.lgraph circle.active{fill:var(--green)}svg.lgraph circle.stale{fill:var(--yellow)}svg.lgraph circle.retired{fill:var(--muted);opacity:.5}
+svg.lgraph circle.bad{stroke:var(--red);stroke-width:3}
+svg.lgraph text{font-size:10px;fill:var(--muted)}
+.lists{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;border-top:1px solid var(--line)}
+.lists div{padding:12px 16px;font-size:13px}.lists b{display:block;margin-bottom:4px}.lists ul{margin:0;padding-left:16px;color:var(--muted)}
+select{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);margin-left:8px}
 </style></head><body><main>
 <div class="top"><span id="overall" class="dot"></span><h1>Chief of staff</h1><span class="grow"></span><span id="time" class="muted"></span></div>
 <div id="ws" class="muted"></div>
@@ -162,12 +209,31 @@ svg.edges path.ok{stroke:var(--green);opacity:.6}
 <form id="linkform"><input id="link" type="text" placeholder="Link or text" aria-label="Link or text"><button>Save</button></form>
 <div id="msg" class="muted" role="status"></div>
 <div id="lib" class="muted"></div>
+<h2>Library</h2><div id="library" class="box"></div>
 <h2>Last turns</h2><div id="turns" class="box"></div>
 </main><script>
 const T=new URLSearchParams(location.search).get("t");
 const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e};
 function empty(box,text){box.replaceChildren(el("div","empty",text))}
-const openMaps=new Set();let last=null;
+const openMaps=new Set();let last=null,graphOpen=false,origin="";
+const SVG=t=>document.createElementNS("http://www.w3.org/2000/svg",t);
+function drawGraph(L){
+  const W=900,H=440,nodes=L.nodes.filter(n=>!origin||n.origin===origin),at=new Map();
+  nodes.forEach((n,i)=>{const a=2*Math.PI*i/Math.max(nodes.length,1);at.set(n.id,{n,x:W/2+180*Math.cos(a),y:H/2+150*Math.sin(a),vx:0,vy:0})});
+  const E=L.edges.filter(e=>at.has(e[0])&&at.has(e[1]));
+  for(let k=0;k<220;k++){const P=[...at.values()];  // small force layout: repulsion, springs on links, pull to the centre
+    for(let i=0;i<P.length;i++)for(let j=i+1;j<P.length;j++){const a=P[i],b=P[j];let dx=a.x-b.x,dy=a.y-b.y,d=dx*dx+dy*dy+.01;const f=900/d;a.vx+=dx*f;a.vy+=dy*f;b.vx-=dx*f;b.vy-=dy*f}
+    E.forEach(([s,t])=>{const a=at.get(s),b=at.get(t),dx=b.x-a.x,dy=b.y-a.y;a.vx+=dx*.02;a.vy+=dy*.02;b.vx-=dx*.02;b.vy-=dy*.02});
+    P.forEach(p=>{p.vx+=(W/2-p.x)*.004;p.vy+=(H/2-p.y)*.004;p.x=Math.min(W-20,Math.max(20,p.x+p.vx*.5));p.y=Math.min(H-14,Math.max(14,p.y+p.vy*.5));p.vx*=.6;p.vy*=.6})}
+  const svg=SVG("svg");svg.setAttribute("class","lgraph");svg.setAttribute("viewBox","0 0 "+W+" "+H);
+  E.forEach(([s,t])=>{const a=at.get(s),b=at.get(t),l=SVG("line");[["x1",a.x],["y1",a.y],["x2",b.x],["y2",b.y]].forEach(([k,v])=>l.setAttribute(k,v));svg.append(l)});
+  at.forEach(p=>{const c=SVG("circle");c.setAttribute("cx",p.x);c.setAttribute("cy",p.y);c.setAttribute("r",4+Math.min(6,p.n.in));
+    c.setAttribute("class",p.n.state+(p.n.problems?" bad":""));const tt=SVG("title");tt.textContent=p.n.title+" ["+p.n.id+"] "+p.n.state+(p.n.problems?", has problems":"");c.append(tt);svg.append(c);
+    if(nodes.length<=60){const t=SVG("text");t.setAttribute("x",p.x+8);t.setAttribute("y",p.y+3);t.textContent=p.n.title.slice(0,28);svg.append(t)}});
+  return svg}
+function list(title,items,fmt){const d=el("div");d.append(el("b","",title+" ("+items.length+")"));
+  if(items.length){const u=el("ul");items.slice(0,8).forEach(x=>u.append(el("li","",fmt(x))));if(items.length>8)u.append(el("li","","and "+(items.length-8)+" more: library.sh doctor"));d.append(u)}
+  return d}
 function drawMap(p){
   const wrap=el("div","map"),cols=el("div","cols"),nodes=new Map();
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("class","edges");cols.append(svg);
@@ -211,6 +277,17 @@ function render(){
   if(!d.cards.length)empty(C,"Nothing waiting");else C.replaceChildren(...d.cards.map(c=>{
     const row=el("div","row");row.append(el("span","dot yellow"),el("div","grow",c.title+(c.project?" ("+c.project+")":"")),el("span","muted",c.since));return row}));
   document.getElementById("lib").textContent=d.inbox+" item(s) in the inbox, "+d.notes+" note(s) in the library.";
+  const B=document.getElementById("library"),L=d.library,head=el("div","row"),hb=el("div","grow");head.append(el("span","dot "+L.color),hb);
+  if(L.state!=="online"){hb.append(el("div","name",L.state==="offline"?"Library offline":"Library error"),el("div","muted",L.message));B.replaceChildren(head)}
+  else{hb.append(el("div","name",L.total+" notes"+(L.retired?", "+L.retired+" retired":"")),el("div","muted",L.path));
+    const t=el("button","toggle",graphOpen?"Hide graph":"Graph");t.onclick=()=>{graphOpen=!graphOpen;render()};hb.append(t);
+    if(graphOpen&&L.origins.length>1){const s=el("select");s.setAttribute("aria-label","Origin");[["","All origins"],...L.origins.map(o=>[o,o])].forEach(([v,x])=>{const o=el("option","",x);o.value=v;if(v===origin)o.selected=true;s.append(o)});
+      s.onchange=()=>{origin=s.value;render()};hb.append(s)}
+    const parts=[head];if(graphOpen&&L.nodes.length){parts.push(drawGraph(L));if(L.total>L.nodes.length)parts.push(el("div","empty","Showing the "+L.nodes.length+" most linked notes of "+L.total+"."))}
+    const ls=el("div","lists"),title=id=>{const n=L.nodes.find(x=>x.id===id);return n?n.title+" ["+id+"]":id};
+    ls.append(list("With problems",L.problems,title),list("Broken links",L.dangling,x=>title(x[0])+" → "+x[1]),
+      list("Past review date",L.stale,title),list("Possible duplicates",L.pairs,x=>title(x[0])+" / "+title(x[1])));
+    parts.push(ls);B.replaceChildren(...parts)}
   const U=document.getElementById("turns");
   if(!d.turns.length)empty(U,"No turns yet");else{
     const t=el("table"),h=el("tr");["When","Project","Specialists","Reviewers","Track gaps",""].forEach(x=>h.append(el("th","",x)));t.append(h);
@@ -222,7 +299,7 @@ function render(){
 async function send(body,name,kind){
   const m=document.getElementById("msg");m.textContent="Saving…";
   const r=await fetch("import?t="+encodeURIComponent(T),{method:"POST",body,headers:{"X-Name":encodeURIComponent(name),"X-Kind":kind}});
-  m.textContent=r.ok?"Saved to the inbox. Ask central to process it.":await r.text();load()}
+  const t=await r.text();m.textContent=r.ok?"Saved to the inbox. Ask central to process it."+t.slice(5):t;load()}
 const drop=document.getElementById("drop"),file=document.getElementById("file");
 drop.onclick=()=>file.click();file.onchange=()=>[...file.files].forEach(f=>send(f,f.name,"file"));
 drop.ondragover=e=>{e.preventDefault();drop.classList.add("over")};drop.ondragleave=()=>drop.classList.remove("over");
@@ -257,7 +334,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return False
         return True
 
-    def reply(self, ctype, body):
+    def reply(self, ctype, body, nonce=""):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -265,7 +342,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")  # the token is in the URL: never send it on
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'nonce-%s'; script-src 'nonce-%s'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" % (nonce, nonce))
         self.end_headers()
         self.wfile.write(body)
 
@@ -274,7 +351,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         path = urllib.parse.urlparse(self.path).path
         if path == "/":
-            self.reply("text/html; charset=utf-8", PAGE.encode())
+            n = secrets.token_urlsafe(16)  # per response: an injected <script> without it does not run
+            self.reply("text/html; charset=utf-8", PAGE.replace("<style>", '<style nonce="%s">' % n, 1).replace("<script>", '<script nonce="%s">' % n, 1).encode(), n)
         elif path == "/api":
             self.reply("application/json", json.dumps(snapshot(self.root)).encode())
         else:
@@ -303,14 +381,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.deny(400, "Nothing to save: choose a file or paste a link.")
             data = ("---\nsource: %s\nreceived: %s\nvia: panel\n---\n" % (text.splitlines()[0][:300], time.strftime("%Y-%m-%d"))
                     + text + "\n").encode()
-        inbox = os.path.join(self.root, "knowledge", "inbox")
+        where = sh("library.sh", "where", cwd=self.root).splitlines()
+        if len(where) != 1:
+            return self.deny(503, where[1] if len(where) > 1 else "The library is not reachable.")
+        inbox = os.path.join(where[0], "inbox")
         os.makedirs(inbox, exist_ok=True)
         try:
             with open(os.path.join(inbox, name), "xb") as f:
                 f.write(data)
         except FileExistsError:
             return self.deny(409, "A file with that name arrived the same second. Send it again.")
-        self.reply("text/plain; charset=utf-8", b"saved")
+        warn = b" Warning: it looks like it holds a key or token; remove it before the library is shared." if SECRET.search(data) else b""
+        self.reply("text/plain; charset=utf-8", b"saved" + warn)
 
 
 def main():
