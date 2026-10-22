@@ -35,6 +35,9 @@ esac
 # iCloud Drive are the sign it is on
 case $dest in "$HOME"/Desktop/*|"$HOME"/Documents/*)
   [ -d "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Documents" ] && cloud=1 ;; esac
+up=$(dirname "$dest"); while [ ! -d "$up" ]; do up=$(dirname "$up"); done
+outer=$(git -C "$up" rev-parse --show-toplevel 2>/dev/null)
+[ -n "$remote" ] && [ -n "$outer" ] && die "$dest is inside the git repo $outer, which versions it: back that repo up instead of --remote"
 [ -n "$remote" ] && [ -n "$cloud" ] && die "a git repo inside a synced cloud folder gets corrupted by the sync: use a plain folder for --remote"
 if [ -n "$remote" ]; then
   # nothing secret leaves this computer: every note passes the secret check first
@@ -53,7 +56,8 @@ home=$root/knowledge
 [ "$dest" = "$home" ] && rm -rf "${dest:?}/.git"   # back inside the workspace repo: no repo inside the repo
 if [ "$dest" != "$home" ]; then
   [ -f "$dest/.library-id" ] || { od -An -N8 -tx1 /dev/urandom | tr -d ' \n' > "$dest/.library-id"; chmod 444 "$dest/.library-id"; }
-  if [ -z "$cloud" ] && [ "$(git -C "$dest" rev-parse --show-toplevel 2>/dev/null)" != "$(cd "$dest" && pwd -P)" ]; then
+  # a folder inside another repo (an Obsidian vault kept in git) is versioned by that repo: no repo inside it
+  if [ -z "$cloud" ] && [ -z "$(git -C "$dest" rev-parse --show-toplevel 2>/dev/null)" ]; then
     # the inbox holds the owner's raw files, waiting to be processed: it never goes to a remote
     { grep -qx 'inbox/' "$dest/.gitignore" 2>/dev/null || echo 'inbox/' >> "$dest/.gitignore"; }
     git -C "$dest" init -q && git -C "$dest" add -A && git -C "$dest" -c user.name=chief-of-staff -c user.email=chief-of-staff@localhost commit -qm "library: moved here from $lib" ||

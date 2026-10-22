@@ -1,42 +1,46 @@
 ---
 name: setup
-description: Create a chief-of-staff workspace (central, board, projects, knowledge base) in a folder the owner chooses. Use when the user says "set up chief of staff", "create my workspace", or runs /chief-of-staff:setup.
+description: Create a chief-of-staff workspace (central, board, projects) and the company library, its second brain, in the places the owner picks from one block of questions. Use when the user says "set up chief of staff", "create my workspace", or runs /chief-of-staff:setup.
 ---
 
 # Set up a chief-of-staff workspace
 
-Templates live in `${CLAUDE_PLUGIN_ROOT}/templates`. That variable is resolved in this text only, not
-in your shell, so copy the literal path shown here into your commands.
+`setup.sh` is `${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh`; that variable is resolved in this text only, not
+in your shell, so copy the literal path into your commands. The owner answers once, by clicking; you do
+everything else.
 
-1. Ask for one thing only: the workspace folder (default: `chief-of-staff` in the home folder).
-   Expand `~` to the absolute path yourself before using it.
-   - If it holds a `.chief-of-staff` file, stop: the workspace exists; say so and list its projects.
-   - If it exists and is not empty, stop and ask for an empty or new folder. Never set up over
-     existing files.
-2. Create the layout and copy the templates (the marker is written last, so a failed run can be
-   repeated):
-
+1. Look before asking, and say nothing yet:
    ```sh
-   W="/absolute/path/to/workspace"; T="${CLAUDE_PLUGIN_ROOT}/templates"
-   mkdir -p "$W/central" "$W/board" "$W/projects" "$W/knowledge/inbox" "$W/knowledge/notes" "$W/knowledge/templates"
-   for d in board projects knowledge/inbox knowledge/notes; do : > "$W/$d/.gitkeep"; done
-   cp "$T/central/CLAUDE.md" "$W/central/CLAUDE.md"
-   cp "$T/ROUTING.md" "$W/ROUTING.md"
-   mkdir -p "$W/specialists" && cp "$T"/specialists/*.md "$W/specialists/"
-   cp "$T/knowledge/note.md" "$W/knowledge/templates/note.md"
-   printf '.dispatch.lock/\n.dispatch.log\n.dispatch-*.out\n.protocol.log\n' > "$W/.gitignore"
-   git -C "$W" init -q
-   git -C "$W" config user.name >/dev/null || git -C "$W" config user.name "chief-of-staff"
-   git -C "$W" config user.email >/dev/null || git -C "$W" config user.email "chief-of-staff@localhost"
-   printf 'chief-of-staff workspace v0.1\n' > "$W/.chief-of-staff"; chmod 444 "$W/.chief-of-staff"
-   git -C "$W" add -A && git -C "$W" commit -qm "chief-of-staff: new workspace"
+   sh setup.sh detect
+   gh auth status >/dev/null 2>&1 && echo gh-ok
    ```
+   `detect` prints the places where the library could live, best first: `<label> TAB <folder> TAB <why>`.
+   If `~/chief-of-staff` exists and holds a `.chief-of-staff` file, stop: the workspace exists; say so and
+   list its projects.
 
-3. Tell the user, in at most 5 lines:
+2. Ask everything in ONE AskUserQuestion call, with these questions (the first option of each is the
+   recommendation, marked "(Recommended)"; the owner can always type another answer):
+   - **Workspace** — "Where should the workspace live?" Options: `~/chief-of-staff`, and
+     `~/Documents/chief-of-staff`. Description: the central conversation, the board and one folder per
+     project.
+   - **Library** — "Where should the company library (its second brain) live?" Options: the first lines
+     of `detect`, at most 4, in its order (it puts an Obsidian vault first only when there is exactly
+     one; with several, which vault belongs to this company is the owner's pick). Label = the label, description = the folder and the why.
+   - **Backup** — only when `gh-ok` was printed: "Back up to private GitHub repositories?" Options:
+     "Yes, private repos (Recommended)" (description: creates private repos on your GitHub account and
+     pushes; nothing is public) and "Not now".
+
+3. Run, with the absolute paths (expand `~` yourself; the inside-the-workspace answer means no
+   `--library`; add `--backup` only on yes):
+   ```sh
+   sh setup.sh create "/absolute/workspace" --library "/absolute/library folder" --backup
+   ```
+   It refuses a folder that is not empty and creates nothing then: ask again for that answer only.
+
+4. Tell the owner, in at most 5 lines:
    - open Claude Code in `<workspace>/central` to talk to the chief of staff; start new projects there;
    - each project gets its own folder in `projects/`, and its own conversation is opened there;
    - only `central` asks them questions; the other sessions write cards in `board/`;
-   - the workspace is a git repo with **no backup yet**: add a private remote and push to it
-     (the dispatcher refuses to run without a remote);
+   - where the library is, and the `Backup:` line of `create` as it was printed;
    - in cloud sessions (Claude Code on the web) the plugin hooks do not run; the rules still hold
      through the CLAUDE.md files only if the workspace is the repository of that session.

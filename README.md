@@ -49,8 +49,11 @@ Claude Code clones with your existing git credentials
 (`gh auth login` then `gh auth setup-git`). Inside Claude Code you can use
 `/plugin marketplace add` and `/plugin install` instead.
 
-Then open Claude Code in any folder and run `/chief-of-staff:setup`. It asks where to create the
-workspace (default `~/chief-of-staff`) and creates:
+Then open Claude Code in any folder and run `/chief-of-staff:setup`. It looks at your computer first,
+then asks three questions in one block, each with a recommendation: where the workspace goes (default
+`~/chief-of-staff`); where the company library goes (inside the workspace, your Obsidian vault, iCloud
+Drive, Dropbox, Google Drive, OneDrive or an external disk); and, when the GitHub CLI is signed in,
+whether to back up to private GitHub repositories. Then it creates:
 
 ```
 <workspace>/
@@ -58,7 +61,7 @@ workspace (default `~/chief-of-staff`) and creates:
   central/CLAUDE.md      the one door to the owner
   board/                 one card per open item (status, project, owner, due)
   projects/<slug>/       CLAUDE.md + STATE.md + TRACK.md per project
-  knowledge/             inbox/, notes/, templates/ (or elsewhere: library.sh offload)
+  knowledge/             inbox/, notes/, templates/ (or the folder you picked; move later: library.sh offload)
   specialists/           one role card per specialist (edit freely)
   ROUTING.md             who to call for what
 ```
