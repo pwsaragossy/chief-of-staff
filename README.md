@@ -39,7 +39,7 @@ What it gives you:
   a personal note or another team's, and a personal note that links a team note gets a warning.
   Team notes are pulled at session start and pushed after a turn whose notes pass the checks; a
   conflict with a teammate becomes a card for that project's session. Join, leave and use ask you
-  first.
+  first; settings changed any other way stop the turn until you confirm them (`library.sh trust`).
 - **A routing table** (`ROUTING.md`) so nobody has to remember whom to call.
 - **A local panel**: green, yellow or red per project with the reason, a live map of each track
   (stages, deliverables by state, prerequisites, the delivery line, items added since opening), decisions

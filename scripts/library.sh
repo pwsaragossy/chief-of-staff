@@ -18,13 +18,14 @@
 #   library.sh use <personal|team>              from a project folder: the library this project writes to and searches
 #   library.sh join <git-url> [<name>]          connect a team library (central only; an empty repo becomes one)
 #   library.sh leave <name>                     disconnect a team library (central only)
+#   library.sh trust                            the owner confirms the library settings as they are (central only)
 # Before the command, --lib <name> picks another library than the session's (personal, or a team's).
 # A session uses its project's library (projects/<p>/.library names a team; none = personal); central uses personal.
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib.sh"
 
 die() { echo "library: $*" >&2; exit 1; }
-usage() { sed -n '4,23p' "$0" | sed 's/^# //' >&2; exit 1; }
+usage() { sed -n '4,24p' "$0" | sed 's/^# //' >&2; exit 1; }
 dir=${CLAUDE_PROJECT_DIR:-$PWD}
 root=$(cos_root "$dir") || die "not inside a chief-of-staff workspace"
 name=; [ "${1:-}" = --lib ] && { name=${2:-}; shift 2 || usage; }
@@ -159,7 +160,8 @@ case ${1:-} in
     [ $# -eq 2 ] || usage
     case ${dir#"$root"/} in projects/?*) p=${dir#"$root"/projects/}; p=${p%%/*} ;; *) die "run it from a project folder (projects/<name>)" ;; esac
     setlib "$2"; [ $state = 4 ] && die "no library named '$2' (library.sh libs lists them)"
-    if [ "$2" = personal ]; then rm -f "$root/projects/$p/.library"; else printf '%s\n' "$2" > "$root/projects/$p/.library"; fi
+    f=$root/projects/$p/.library; [ -f "$f" ] && chmod u+w "$f"
+    if [ "$2" = personal ]; then rm -f "$f"; else printf '%s\n' "$2" > "$f"; chmod 444 "$f"; fi
     cos_cfgsave "$root"
     echo "Project '$p' now writes to and searches the library '$2' ($lib). Other libraries only through search --all, with a warning." ;;
   join)
@@ -190,6 +192,9 @@ case ${1:-} in
     cos_cfgsave "$root"
     echo "Connected the team library '$n' ($p, $(ls "$p/notes" | grep -c '\.md$') notes) from $url."
     echo "A project uses it with: library.sh use $n (from the project folder). It syncs at session start and after each turn that saved notes in it." ;;
+  trust)   # the owner checked library.sh libs and confirms the settings as they are now
+    [ $# -eq 1 ] || usage; central_only "records the library settings"
+    cos_cfgsave "$root"; echo "Recorded the library settings as they are now; library.sh libs lists them." ;;
   leave)
     [ $# -eq 2 ] || usage; central_only "disconnects a team library"
     [ "$2" = personal ] && die "the personal library cannot be left"

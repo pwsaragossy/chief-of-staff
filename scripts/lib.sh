@@ -85,8 +85,8 @@ cos_libpath() {
 # cos_cfg ROOT -> one checksum of every library setting (the marker and each project's .library); library.sh
 # records it after join, use, leave and offload, so a change made any other way shows at the turn end
 cos_cfg() { { cat "$1/.chief-of-staff"; for _f in "$1"/projects/*/.library; do [ -f "$_f" ] && { printf '%s\n' "$_f"; cat "$_f"; }; done; } 2>/dev/null | cksum | tr -d ' \t'; }
-cos_cfgrec() { printf '%s/config-%s' "${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"; }
-cos_cfgsave() { mkdir -p "$(dirname "$(cos_cfgrec "$1")")" && cos_cfg "$1" > "$(cos_cfgrec "$1")"; }
+cos_cfgrec() { printf '%s/cos-cfg-%s' "${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"; }
+cos_cfgsave() { _c=$(cos_cfgrec "$1"); mkdir -p "$(dirname "$_c")" && { [ -f "$_c" ] && chmod u+w "$_c"; cos_cfg "$1" > "$_c"; chmod 444 "$_c"; }; }
 # cos_libof ROOT FILE -> "name<TAB>path" of the library whose notes/ holds FILE (empty when none)
 cos_libof() {
   cos_libs "$1" | while IFS="$(printf '\t')" read -r _n _p; do

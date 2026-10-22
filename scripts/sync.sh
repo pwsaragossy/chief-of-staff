@@ -32,6 +32,10 @@ case $cmd in
     g config user.name >/dev/null || g config user.name chief-of-staff
     g config user.email >/dev/null || g config user.email chief-of-staff@localhost
     if [ $# -ge 4 ]; then shift 4; else shift $#; fi
+    # what leaves is one commit: the last shared state plus exactly the gated files, as they were gated. Commits
+    # made by hand in this folder are folded in, so their content never leaves unless the gate saw it
+    b=$(g merge-base HEAD '@{u}' 2>/dev/null || g rev-list --max-parents=0 HEAD 2>/dev/null | tail -n 1)
+    [ -n "$b" ] && g reset -q --soft "$b"
     [ $# -gt 0 ] && g add -A -- "$@"   # only what the gate passed: anything else stays local
     g diff --cached --quiet || g commit -qm "notes from $s"
     if ! g rev-parse -q --verify '@{u}' >/dev/null; then   # the first push failed at join: push now, nothing to merge

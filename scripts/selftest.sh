@@ -386,12 +386,17 @@ JB1=$(printf '{"command":"%s"}' 'echo t2 > projects/a/{.,x}library'); JB2=$(prin
 check "brace expansion and \$'...' quoting cannot spell the protected names" '[ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$JB1")" "$V/m1")" = 2 ] && [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$JB2")" "$V/m1")" = 2 ] && [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo \${HOME}/x > out.txt\"}")" "$V/m1")" = 0 ]'
 check "a library search does not ask" '[ -z "$(hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$J")" "$V/m1/projects/a")" ]'
 K m1 projects/a use t1 >/dev/null
+check "use leaves .library read-only" '[ ! -w "$V/m1/projects/a/.library" ]'
 check "a personal session cannot write into a team library, not even through .. or another letter case" 'W() { rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$1\"}")" "$2"; }; r=$(W "$V/m1/libraries/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/knowledge/../libraries/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/LIBRARIES/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/knowledge/nope/../../libraries/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/libraries/t1/notes/ok.md" "$V/m1/projects/a")$(W "$V/m1/knowledge/notes/ok.md" "$V/m1/central"); [ "$r" = 222200 ] || { echo "got $r"; false; }'
 check "a team project writes and searches its team's library" '[ "$(K m1 projects/a where)" = "$V/m1/libraries/t1" ] && [ "$(K m1 central where)" = "$V/m1/knowledge" ]'
 check "agents cannot write inside a library's git data" '[ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$V/m1/libraries/t1/.git/cos-foreign\"}")" "$V/m1/projects/a")" = 2 ]'
-hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$V/m1/projects/a" >/dev/null; printf 'personal\n' > "$V/m1/projects/a/.library"
+hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$V/m1/projects/a" >/dev/null; chmod u+w "$V/m1/projects/a/.library"; printf 'personal\n' > "$V/m1/projects/a/.library"
 check "a .library changed without library.sh stops the turn" 'hk "$(ev Stop ",\"stop_hook_active\":false")" "$V/m1/projects/a" 2>&1 | grep -q "The library settings (.chief-of-staff or a project.s .library) changed without library.sh"'
-printf 't1\n' > "$V/m1/projects/a/.library"
+printf 't1\n' > "$V/m1/projects/a/.library"; chmod 444 "$V/m1/projects/a/.library"
+mkdir "$V/cfg.saved"; mv "$CLAUDE_PLUGIN_DATA"/cos-cfg-* "$V/cfg.saved/"; hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$V/m1/projects/a" >/dev/null
+check "a missing settings record is not trusted again while teams exist" 'hk "$(ev Stop ",\"stop_hook_active\":false")" "$V/m1/projects/a" 2>&1 | grep -q "The record of the library settings is missing" && ! ls "$CLAUDE_PLUGIN_DATA"/cos-cfg-* >/dev/null 2>&1'
+check "library.sh trust asks the owner, and the record name is protected" 'hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh library.sh trust\"}")" "$V/m1/central" | grep -q "\"permissionDecision\":\"ask\"" && [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm ~/.cache/chief-of-staff/cos-cfg-1\"}")" "$V/m1")" = 2 ]'
+mv "$V/cfg.saved"/* "$CLAUDE_PLUGIN_DATA/"; rmdir "$V/cfg.saved"; K m1 central trust >/dev/null
 TN="$V/m1/libraries/t1/notes"; PN="$V/m1/knowledge/notes"
 note2() { d=$1; shift; N="$d" note "$@"; }
 N0=$N; N=$PN; note pers-1 "Personal salary target" 2026-01-01 "My salary target." "none similar"
@@ -444,6 +449,9 @@ check "a shared source, title or list item is not a copy" '! sa | grep -q "copie
 rm -f "$TN/team-7.md" "$PN/pers-7.md"; ta; rm -f "$TN/team-1.md"
 check "deleting a team note says to retire it, and nothing is pushed" 'sa | grep -q "Deleting a note does not reach the team library .t1.: retire it instead" && on notes/team-1.md'
 git -C "$TL" checkout -q -- notes/team-1.md; ta
+ta; sed 's/^id: pers-3/id: team-9/' "$PN/pers-3.md" > "$TN/team-9.md"; git -C "$TL" add notes/team-9.md; git -C "$TL" -c user.name=a -c user.email=a@a commit -qm hand
+N0=$N; N=$TN; note team-9 "Quarterly roadmap meeting" 2026-01-05 "Held on the first Monday." "none similar"; N=$N0
+check "a commit made by hand leaves only as the gate saw it" 'sa >/dev/null; i=0; while [ $i -lt 50 ] && ! on notes/team-9.md; do i=$((i+1)); sleep 0.1; done; on notes/team-9.md && ! git -C "$V/t1.git" log -p --all | grep -q "never goes below 400"'
 check "with the problems gone the next turn pushes the good note" 'sa >/dev/null; i=0; while [ $i -lt 50 ] && ! on notes/team-5.md; do i=$((i+1)); sleep 0.1; done; on notes/team-5.md'
 mkdir -p "$V/m1/projects/b"; ln -s "$TN/team-5.md" "$PA/f.md"
 check "a symlink to another library's note is not a way in" 'W() { rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$1\"}")" "$2"; }; [ "$(W "$PA/f.md" "$V/m1/central")" = 2 ]'

@@ -63,7 +63,7 @@ do not copy their content into this library or its deliverables unless the owner
 - Team libraries sync by themselves: pulled at session start, pushed after each turn whose notes
   passed the checks. A conflict becomes a card for this session in `board/`, with the steps.
 - Only central connects or disconnects a team, after the owner agrees: `library.sh join <git-link>`,
-  `library.sh leave <name>`. A project switches library with `library.sh use <name>`; the owner confirms.
+  `library.sh leave <name>`. A project switches library with `library.sh use <name>`; the owner confirms. If the turn end says the library settings changed or their record is missing, show the owner `library.sh libs` and, on their OK, run `library.sh trust` from central.
 
 ## 6. Moving the library (disk, cloud folder, private repo)
 Only central does this, after the owner agrees: `sh library.sh offload <folder> [--remote <git-url>]`.

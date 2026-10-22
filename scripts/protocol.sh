@@ -57,7 +57,8 @@ case $(jget hook_event_name) in
   UserPromptSubmit)
     rm -f "$st"/*
     : > "$st/start"   # notes modified after this are the turn's notes (whatever tool or path wrote them)
-    [ -f "$(cos_cfgrec "$root")" ] || cos_cfgsave "$root"   # first use: trust the settings as they are
+    # first use: trust the settings as they are, but only while there is no team to share with
+    [ -f "$(cos_cfgrec "$root")" ] || cos_libs "$root" | grep -qv '^personal' || cos_cfgsave "$root"
     # what each other team library holds now, so the turn end blames this session only for what it changed there
     cos_libs "$root" | while IFS="$TAB" read -r n q; do [ "$n" = personal ] || [ "$n" = "$lname" ] || [ ! -d "$q/.git" ] && continue
       { git -C "$q" rev-parse -q --verify HEAD; git -C "$q" status --porcelain -uall --no-renames; } > "$st/snap-$n" 2>/dev/null; done
@@ -150,7 +151,7 @@ $p"; fi ;;
             uq=$(printf '%s' "$cq" | tr -d "\"'\\\\")
             # the names, or a glob that could spell them (.[c]hief, .l*, .ch?ef, ?library), next to a write.
             # ponytail: a name built in a variable (a=.chi; ...${a}ef) is not seen; the files are read-only on disk
-            sus=; case $uq in *.chief*|*.library*|*cos-foreign*) sus=1 ;; esac   # not "chief-of-staff": the plugin's own folder has that name
+            sus=; case $uq in *.chief*|*.library*|*cos-foreign*|*cos-cfg*) sus=1 ;; esac   # not "chief-of-staff": the plugin's own folder has that name
             printf '%s\n' "$uq" | grep -Eq '\.[][?*]|(^|[^a-z0-9_.-])\.(c(h(i(e(f)?)?)?)?|l(i(b(r(a(r(y)?)?)?)?)?)?)([^a-z0-9_-]|$)|[][?*](l?ibrary|c?hief)|(^|[^$])\{[^}]*,[^}]*\}' && sus=1   # also {.,x}library
             case $cq in *"\$'"*) sus=1 ;; esac   # $'\056library' (quotes are gone from uq)
             # whole words only: a folder named "firmware" or a random temp name is not rm
@@ -166,7 +167,7 @@ $p"; fi ;;
               case $nq in *library.sh*off*|*offload*)
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this moves the whole library (and may push it to a git remote). Only approve if you asked for it."}}' ;;
               # any use, join or leave word after library.sh (a search for "use" asks too: rare, and safe)
-              *) printf '%s\n' "$nq" | grep -Eq 'library\.sh(.*[^a-z0-9_-](use|join|leave)([^a-z0-9_-]|$)|[^;&|]*[$`]| *([;&|)]|$))' &&
+              *) printf '%s\n' "$nq" | grep -Eq 'library\.sh(.*[^a-z0-9_-](use|join|leave|trust)([^a-z0-9_-]|$)|[^;&|]*[$`]| *([;&|)]|$))' &&
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this changes which library a project uses, or connects or disconnects a team library: what is shared with whom. Only approve if you asked for it."}}' ;; esac
               exit 0
             fi ;;
@@ -280,7 +281,9 @@ LIBS
       ( IFS=$TAB; set -f; set -- $push; q=$1; shift
         sh "$(dirname "$0")/sync.sh" push "$q" "${project:-central}" "$root" "$@" </dev/null >/dev/null 2>&1 & )
     fi
-    r=$(cos_cfgrec "$root"); [ -f "$r" ] && [ "$(cat "$r")" != "$(cos_cfg "$root")" ] && gap "The library settings (.chief-of-staff or a project's .library) changed without library.sh join, use or leave, which the owner approves. Restore them: git -C \"$root\" checkout -- .chief-of-staff projects (or delete a new .library)."
+    r=$(cos_cfgrec "$root")
+    [ ! -f "$r" ] && cos_libs "$root" | grep -qv '^personal' && gap "The record of the library settings is missing. Ask the owner to check library.sh libs from central and confirm library.sh trust."
+    [ -f "$r" ] && [ "$(cat "$r")" != "$(cos_cfg "$root")" ] && gap "The library settings (.chief-of-staff or a project's .library) changed without library.sh join, use or leave, which the owner approves. Restore them: git -C \"$root\" checkout -- .chief-of-staff projects (or delete a new .library)."
     [ -n "$lgaps" ] && reason="${reason:+$reason }Library notes written this turn have problems:
 $lgaps
 Fix each note (format: $lib/templates/note.md). When a new note is better than an old one, or merges several, retire the old: sh \"$L\" retire <old-id> <new-id> \"<why it lost>\". Valid alternatives stay: write [[id]] coexists (reason)."
