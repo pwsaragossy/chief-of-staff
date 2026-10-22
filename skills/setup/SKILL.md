@@ -28,7 +28,7 @@ in your shell, so copy the literal path shown here into your commands.
    git -C "$W" init -q
    git -C "$W" config user.name >/dev/null || git -C "$W" config user.name "chief-of-staff"
    git -C "$W" config user.email >/dev/null || git -C "$W" config user.email "chief-of-staff@localhost"
-   printf 'chief-of-staff workspace v0.1\n' > "$W/.chief-of-staff"
+   printf 'chief-of-staff workspace v0.1\n' > "$W/.chief-of-staff"; chmod 444 "$W/.chief-of-staff"
    git -C "$W" add -A && git -C "$W" commit -qm "chief-of-staff: new workspace"
    ```
 

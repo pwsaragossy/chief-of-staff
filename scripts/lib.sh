@@ -36,8 +36,8 @@ fm_set() {
 }
 
 # cos_lib ROOT -> prints the library folder: ROOT/knowledge, or the "library: /absolute/path" line of the
-# marker (set by library.sh offload). Returns 1 when it is not reachable because its disk or parent folder
-# is gone (offline: disk unplugged), 2 when it is missing from a folder that exists, or exists without the
+# marker (set by library.sh offload). Returns 1 when its disk is unplugged (offline: a missing or empty mount
+# point under /Volumes, /mnt or /media), 2 when it is missing anywhere else, or exists without the
 # .library-id file offload writes (an empty mount point, or a wrong path),
 # 3 when the line is not one absolute path.
 cos_lib() {
@@ -46,11 +46,16 @@ cos_lib() {
   printf '%s\n' "$_l"
   case $_l in /*) ;; *) return 3 ;; esac
   case $_l in */../*|*/..|*/./*) return 3 ;; esac
-  # offline only when what holds the folder is gone (the disk under /Volumes, or the parent folder);
-  # a library missing from a folder that is still there was moved or deleted: broken, not offline
+    # offline only when the disk that holds it is unplugged; a library missing anywhere else was moved or
+  # deleted (an agent cannot make it "offline" to skip the gates): broken
   if [ ! -d "$_l" ]; then
-    case $_l in /Volumes/?*) _m=${_l#/Volumes/}; _m=/Volumes/${_m%%/*} ;; *) _m=$(dirname "$_l") ;; esac
-    [ -d "$_m" ] && return 2
+    # a mount point: /Volumes/<disk> (macOS), /media/<user>/<disk> or /mnt/<disk> (Linux); any other path is broken
+    case $_l in
+      /Volumes/?*/*|/mnt/?*/*) _m=$(printf '%s' "$_l" | cut -d/ -f1-3) ;;
+      /media/?*/?*/*) _m=$(printf '%s' "$_l" | cut -d/ -f1-4) ;;
+      *) return 2 ;;
+    esac
+    [ -d "$_m" ] && [ -n "$(ls -A "$_m" 2>/dev/null)" ] && return 2   # a mounted disk without the library: moved or deleted
     return 1
   fi
   [ -f "$_l/.library-id" ] && [ -d "$_l/notes" ] || return 2

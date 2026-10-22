@@ -52,7 +52,7 @@ n=$(find "$dest/notes" -name '*.md' -type f | wc -l | tr -d ' ')
 home=$root/knowledge
 [ "$dest" = "$home" ] && rm -rf "${dest:?}/.git"   # back inside the workspace repo: no repo inside the repo
 if [ "$dest" != "$home" ]; then
-  [ -f "$dest/.library-id" ] || od -An -N8 -tx1 /dev/urandom | tr -d ' \n' > "$dest/.library-id"
+  [ -f "$dest/.library-id" ] || { od -An -N8 -tx1 /dev/urandom | tr -d ' \n' > "$dest/.library-id"; chmod 444 "$dest/.library-id"; }
   if [ -z "$cloud" ] && [ "$(git -C "$dest" rev-parse --show-toplevel 2>/dev/null)" != "$(cd "$dest" && pwd -P)" ]; then
     # the inbox holds the owner's raw files, waiting to be processed: it never goes to a remote
     { grep -qx 'inbox/' "$dest/.gitignore" 2>/dev/null || echo 'inbox/' >> "$dest/.gitignore"; }
@@ -64,7 +64,7 @@ fi
 m=$root/.chief-of-staff
 grep -v '^library:' "$m" > "$m.tmp.$$" || : > "$m.tmp.$$"
 [ "$dest" = "$home" ] || printf 'library: %s\n' "$dest" >> "$m.tmp.$$"
-mv "$m.tmp.$$" "$m"
+chmod 444 "$m.tmp.$$"; mv -f "$m.tmp.$$" "$m"   # read-only: agents do not edit it by accident
 
 old=
 if [ "$lib" = "$home" ]; then

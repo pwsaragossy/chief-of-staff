@@ -288,6 +288,13 @@ note noid-1 "Zebra key" 2026-09-01 "key sk-abcdefghijklmnopqrstuvwxyz0123456789"
 check "a real sk- key is still a secret" 'L check "$N/noid-1.md" | grep -q "looks like a secret"'
 rm -f "$N/noid-1.md"
 check "a nested marker or a ../ path to it is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/central/.chief-of-staff\"}")" "$P")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/central/../.chief-of-staff\"}")" "$P")" = 2 ]'
+check "the marker in capitals is the same file and is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/.CHIEF-OF-STAFF\"}")" "$P")" = 2 ]'
+check "an offload command cannot carry a marker write past the block" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh library.sh offload /x; echo library: /y > .chief-of-staff\"}")" "$P")" = 2 ]'
+check "a split offload word still asks" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh library.sh off* /x\"}")" "$P" | grep -q "permissionDecision"'
+turn >/dev/null
+printf 'x\n' > "$N/old-mtime.md"; touch -t 202001010000 "$N/old-mtime.md"
+check "a note with an old mtime (mv, cp -p, touch -t) is still caught at the turn end" 'stop | grep -q "old-mtime.md: has no front matter"'
+rm -f "$N/old-mtime.md"
 check "writing the marker with dd is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"printf x | dd of=.chief-of-staff\"}")" "$P")" = 2 ]'
 check "moving the library asks the owner first" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh library.sh offload /x --remote u\"}")" "$P" | grep -q "\"permissionDecision\":\"ask\""'
 
@@ -296,7 +303,7 @@ cp "$W/.chief-of-staff" "$W/marker.bak"
 printf 'library: %s\n' "$W/library-deleted" >> "$W/.chief-of-staff"
 check "a library deleted from a folder that is still there is broken, not offline" '! L where | grep -q "Library offline" && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
 cp "$W/marker.bak" "$W/.chief-of-staff"
-printf 'library: %s\n' "$W/unplugged-disk/knowledge" >> "$W/.chief-of-staff"
+printf 'library: %s\n' "/Volumes/cos-selftest-no-disk/knowledge" >> "$W/.chief-of-staff"
 check "an unplugged library is reported, not fatal" 'L search tax | grep -q "Library offline"'
 turn >/dev/null
 check "web research goes on while the library is offline" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 0 ]'
@@ -326,9 +333,13 @@ check "offload copies, verifies and pushes to a private repo" 'O "$X/disk/lib" -
 check "the inbox stays out of the library repo" 'grep -qx "inbox/" "$X/disk/lib/.gitignore" && ! git -C "$X/disk/lib" ls-files | grep -q "^inbox/"'
 check "the workspace now reads the moved library" '[ "$(L where)" = "$X/disk/lib" ] && L search rate services | grep -q "^1\. \[\[tax-2\]\]"'
 check "the old folder is kept, renamed and ignored by git" 'ls -d "$W"/knowledge.offloaded-* >/dev/null && grep -qx "knowledge.offloaded-\*/" "$W/.gitignore"'
-mv "$X/disk" "$X/disk-unplugged"
+check "offload leaves the marker and the library id read-only" '! [ -w "$W/.chief-of-staff" ] && ! [ -w "$X/disk/lib/.library-id" ]'
+cp "$W/.chief-of-staff" "$W/marker.bak2"; chmod u+w "$W/.chief-of-staff"
+printf 'library: /Volumes/cos-selftest-no-disk/lib\n' > "$W/.chief-of-staff"
 check "an unplugged disk turns the library offline, not broken" 'L where | grep -q "Library offline"'
-mv "$X/disk-unplugged" "$X/disk"
+mv "$X/disk" "$X/disk-moved"; cp "$W/marker.bak2" "$W/.chief-of-staff"
+check "a library moved out from a normal folder is broken, not offline" '! L where | grep -q "Library offline"'
+mv "$X/disk-moved" "$X/disk"
 check "offload brings the library back into the workspace" 'O "$W/knowledge" | grep -q "back inside the workspace" && [ "$(L where)" = "$W/knowledge" ] && [ ! -d "$W/knowledge/.git" ] && [ "$(ls "$N"/*.md | wc -l | tr -d " ")" = "$n0" ]'
 rm -rf "$X" "$W"/knowledge.offloaded-*
 

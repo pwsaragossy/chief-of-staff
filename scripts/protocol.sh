@@ -103,15 +103,20 @@ $p"; fi ;;
         echo "Blocked by chief-of-staff: search the library first, then search the web only for what it lacks. Run: sh \"$(dirname "$0")/library.sh\" search <terms>" >&2
         exit 2 ;;
       Write|Edit|MultiEdit|Bash)   # the marker says where the library lives: only the owner edits it
+        lc=$(printf '%s' "$in" | tr 'A-Z' 'a-z')   # macOS file names ignore case: .CHIEF-OF-STAFF is the marker
         case $(jget tool_name) in
           Bash)
-            # moving the library sends every note somewhere: the owner confirms each time
-            case $in in *library.sh*offload*|*offload.sh*)
-              echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this moves the whole library (and may push it to a git remote). Only approve if you asked for it."}}'
-              exit 0 ;; esac
-            # ponytail: a word list, not a shell parser; a command that names the files and could write them is blocked
-            case $in in *.chief*|*library-id*) case $in in *">"*|*tee*|*sed*|*mv*|*cp*|*rm*|*perl*|*python*|*ln*|*dd*|*install*|*rsync*|*touch*|*awk*|*truncate*|*ed\ *|*ex\ *) ;; *) exit 0 ;; esac ;; *) exit 0 ;; esac ;;
-          *) case $(printf '%s' "$in" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.chief-of-staff/*) ;; *) exit 0 ;; esac ;;
+            # ponytail: a word list, not a shell parser; the files are also read-only on disk (offload, setup).
+            # A command that names them and could write them is blocked
+            blk=
+            case $lc in *.chief*|*library-id*) case $lc in *">"*|*tee*|*sed*|*mv*|*cp*|*rm*|*perl*|*python*|*ln*|*dd*|*install*|*rsync*|*touch*|*awk*|*truncate*|*chmod*|*chflags*|*unlink*|*node*|*ruby*|*php*|*git*|*ed\ *|*ex\ *) blk=1 ;; esac ;; esac
+            if [ -z "$blk" ]; then
+              # moving the library sends every note somewhere: the owner confirms each time
+              case $lc in *library.sh*off*|*offload*)
+                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this moves the whole library (and may push it to a git remote). Only approve if you asked for it."}}' ;; esac
+              exit 0
+            fi ;;
+          *) case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.chief-of-staff/*) ;; *) exit 0 ;; esac ;;
         esac
         echo "Blocked by chief-of-staff: $root/.chief-of-staff marks the workspace and says where the library lives; agents do not change it. To move the library, central runs library.sh offload after the owner agrees." >&2
         exit 2 ;;
@@ -138,9 +143,12 @@ $p"; fi ;;
     if [ -f "$st/start" ] && [ $lst = 0 ]; then
       set --
       while IFS= read -r f; do [ -n "$f" ] && set -- "$@" "$f"; done <<NOTES
-$(find "$lib/notes" -name '*.md' -type f -newer "$st/start" 2>/dev/null | head -n 20)
+$(find "$lib/notes" -name '*.md' -type f -cnewer "$st/start" 2>/dev/null | head -n 21)
 NOTES
-      [ $# -gt 0 ] && lgaps=$(sh "$L" gate "$@" | grep -v ': warning: ' | head -n 20)
+      # ctime, not mtime: mv, cp -p or touch -t keep or set an old mtime, never an old ctime
+      [ $# -gt 20 ] && { more="More than 20 notes changed this turn; only 20 were checked: run library.sh doctor."; set -- $(printf '%s\n' "$@" | head -n 20); }
+      [ $# -gt 0 ] && lgaps=$(sh "$L" gate "$@" | grep -v ': warning: ' | head -n 20)${more:+
+$more}
     fi
     [ -n "$lgaps" ] && reason="${reason:+$reason }Library notes written this turn have problems:
 $lgaps
