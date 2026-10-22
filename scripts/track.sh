@@ -80,7 +80,8 @@ check() {
       x)   if [ -z "$ev" ]; then echo "$id is marked done without evidence: (the path of its proof file)"
            else case $ev in
              /*|*..*|TRACK.md|STATE.md|CLAUDE.md|./TRACK.md|./STATE.md|./CLAUDE.md) echo "$id: evidence $ev must be a proof file inside the project folder, not a control file or a path outside" ;;
-             *) if [ ! -e "$dir/$ev" ]; then echo "$id is marked done, but its evidence $ev does not exist"
+             *) if [ ! -e "$dir/$ev" ] && [ -e "$dir/${ev%% *}" ]; then echo "$id: evidence must be the file path alone (found \"$ev\"); write evidence: ${ev%% *} and put any note in that file"
+                elif [ ! -e "$dir/$ev" ]; then echo "$id is marked done, but its evidence $ev does not exist"
                 elif [ -L "$dir/$ev" ] || [ ! -f "$dir/$ev" ]; then echo "$id: evidence $ev must be a regular file, not a folder or a link"
                 elif [ ! -s "$dir/$ev" ]; then echo "$id: evidence $ev is empty"; fi ;;
            esac; fi

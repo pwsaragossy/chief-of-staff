@@ -243,4 +243,14 @@ else
   echo "skip panel checks: python3 or curl missing"
 fi
 
+mkdir -p "$W/t3"; printf ok > "$W/t3/v.md"
+printf -- '---\nstage: 1\n---\n## Stage 1: A\n- [x] r | R | card: reviewer | needs: - | evidence: v.md (verdict: approve)\n' > "$W/t3/TRACK.md"
+check "a note after the evidence path gets a clear message" 'T check "$W/t3" | grep -q "evidence must be the file path alone (found \"v.md (verdict: approve)\"); write evidence: v.md"'
+
+mkdir -p "$W/projects/delta"; cp "$W/projects/beta/STATE.md" "$W/projects/delta/STATE.md"
+printf '2026-01-01 00:00:00 t=%s turn=z1 project=delta substantive=1 agents=1 specialists=1 reviewers=0 pushed=true violation=1\n' "$(date +%s)" >> "$W/.protocol.log"
+check "an unresolved violation makes the project red" 'H delta | grep -q "^red: a turn ended"'
+printf '2026-01-01 00:00:01 t=%s turn=z1 project=delta substantive=0 agents=1 specialists=0 reviewers=1 pushed=false violation=0\n' "$(date +%s)" >> "$W/.protocol.log"
+check "a violation fixed later in the same session clears" '! H delta | grep -q "^red"'
+
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }

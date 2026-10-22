@@ -22,9 +22,13 @@ for s in "$root"/projects/*/STATE.md; do
   [ -n "$gap" ] && red "track: $gap"
   sev=$(awk '/^## 1\./ { on = 1; next } on && NF { print tolower($1); exit }' "$s" | tr -cd 'a-z')
   [ "$sev" = red ] && red "STATE.md says red"
+  # a violation counts unless a later line of the same session complied (the agent fixed it after the push)
   [ -f "$root/.protocol.log" ] && awk -v p="project=$p" -v c=$((now - 86400)) '
-      index($0, " " p " ") && /violation=1/ { for (i = 1; i <= NF; i++) if ($i ~ /^t=/ && substr($i, 3) + 0 >= c) f = 1 }
-      END { exit !f }' "$root/.protocol.log" && red "a turn ended without the specialists, the reviewer or the track gate"
+      index($0, " " p " ") {
+        t = 0; for (i = 1; i <= NF; i++) { if ($i ~ /^t=/) t = substr($i, 3) + 0; if ($i ~ /^turn=/) id = $i }
+        if (/violation=1/ && t >= c) bad[id] = 1
+        else if (/violation=0/ && !/specialists=0 reviewers=0/) delete bad[id] }
+      END { for (k in bad) f = 1; exit !f }' "$root/.protocol.log" && red "a turn ended without the specialists, the reviewer or the track gate"
   [ -f "$root/.dispatch.log" ] && awk -v p="$p" 'index($0, "ALERT") && (index($0, " " p ";") || index($0, " " p ",")) { f = 1 } END { exit !f }' "$root/.dispatch.log" && red "dispatcher ALERT: read .dispatch.log, then delete the ALERT line to clear it"
 
   for c in "$root"/board/*.md; do
