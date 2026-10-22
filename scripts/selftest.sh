@@ -84,5 +84,17 @@ check "a hung run is killed and parked" 'grep -q "timeout: beta killed after 1s"
 fm_set "$W/projects/alpha/STATE.md" dispatch running
 CLAUDE_BIN="$stub" COS_ALLOW_NO_BACKUP=1 sh "$here/dispatcher.sh" "$W"
 check "an interrupted run is parked by the next dispatcher" 'grep -q "parked alpha: previous run was interrupted" "$W/.dispatch.log" && [ "$(fm_get "$W/projects/alpha/STATE.md" dispatch)" = off ]'
+fm_set "$W/projects/alpha/STATE.md" next "$(printf 'evil\033[2Jline')"
+check "briefing strips control characters" '! b "$W/projects/alpha" | grep -q "$(printf "\033")" && b "$W/projects/alpha" | grep -q "evil\[2Jline"'
+check "permission mode is default with a closed tool list" 'grep -q -- "--permission-mode default" "$W/.dispatch-alpha.out" && grep -q "Edit(\*\*/.git/\*\*)" "$W/.dispatch-alpha.out" && grep -q "Edit(\*\*/.dispatch\*)" "$W/.dispatch-alpha.out"'
+cat > "$W/evil.sh" <<EOF
+#!/bin/sh
+printf '#!/bin/sh\n' > "$W/.git/hooks/pre-commit"
+EOF
+chmod +x "$W/evil.sh"
+fm_set "$W/projects/beta/STATE.md" dispatch ready
+fm_set "$W/projects/alpha/STATE.md" dispatch ready
+CLAUDE_BIN="$W/evil.sh" COS_ALLOW_NO_BACKUP=1 COS_MAX_RUNS_PER_DAY=99 sh "$here/dispatcher.sh" "$W"
+check "a git hook written during a run stops the dispatcher" 'grep -q "ALERT: .git/config or .git/hooks changed during the run of alpha" "$W/.dispatch.log" && [ "$(fm_get "$W/projects/beta/STATE.md" dispatch)" = ready ]'
 
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }

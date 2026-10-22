@@ -21,6 +21,8 @@ bin=${CLAUDE_BIN:-claude}
 log="$root/.dispatch.log"
 today=$(date +%F)
 note() { printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$log"; }
+# Everything in .git that can make git run code: config and hooks.
+git_fingerprint() { cat "$root/.git/config" "$root"/.git/hooks/* 2>/dev/null | cksum; }
 
 command -v "$bin" >/dev/null 2>&1 || { note "refused: '$bin' not found; set CLAUDE_BIN to its absolute path"; exit 1; }
 
@@ -59,14 +61,17 @@ for s in "$root"/projects/*/STATE.md; do
   p=$(basename "$(dirname "$s")")
   fm_set "$s" dispatch running
   note "run $p: $(fm_get "$s" next)"
-  # Guard rails: the whole workspace is reachable (board, ROUTING.md); agent rules, settings,
-  # Keychain, push and questions are not. These are permission rules, not a sandbox.
+  # Guard rails: a closed list of tools (no free shell, so no sed/cp around the Edit denies). The
+  # whole workspace is reachable (board, ROUTING.md); agent rules, settings, git internals, the
+  # dispatcher's own log and lock, Keychain, push and questions are not. Permission rules, not a sandbox.
+  before=$(git_fingerprint)
   (cd "$root/projects/$p" && exec "$bin" -p "$prompt" \
     --add-dir "$root" \
-    --permission-mode acceptEdits \
+    --permission-mode default \
     --max-budget-usd "$budget" \
-    --allowedTools "Bash(git add:*)" "Bash(git commit:*)" "Bash(git status:*)" "Bash(git diff:*)" \
-    --disallowedTools "Edit(**/CLAUDE.md)" "Edit(**/.claude/**)" \
+    --allowedTools Read Glob Grep Edit Write \
+      "Bash(git add:*)" "Bash(git commit:*)" "Bash(git status:*)" "Bash(git diff:*)" \
+    --disallowedTools "Edit(**/CLAUDE.md)" "Edit(**/.claude/**)" "Edit(**/.git/**)" "Edit(**/.dispatch*)" \
       "Bash(security:*)" "Bash(git push:*)" "AskUserQuestion" \
     >> "$root/.dispatch-$p.out" 2>&1) &
   run=$!
@@ -78,11 +83,17 @@ for s in "$root"/projects/*/STATE.md; do
   wait "$run"; rc=$?
   kill "$watch" 2>/dev/null; wait "$watch" 2>/dev/null; run= watch=
   [ -f "$lock/timeout" ] && note "timeout: $p killed after ${limit}s"
+  # Git config or hooks changed during an unattended run: stop everything, push nothing.
+  if [ "$(git_fingerprint)" != "$before" ]; then
+    fm_set "$s" dispatch off
+    note "ALERT: .git/config or .git/hooks changed during the run of $p; dispatcher stopped, nothing pushed"
+    exit 1
+  fi
   # A run that ended without a handoff must not loop: park it for a human look.
   if [ "$(fm_get "$s" dispatch)" = "running" ]; then fm_set "$s" dispatch off; note "done $p rc=$rc, no handoff: dispatch set to off"
   else note "done $p rc=$rc, dispatch now $(fm_get "$s" dispatch)"; fi
 done
 
 if [ "${COS_PUSH:-0}" = 1 ]; then
-  git -C "$root" push -q 2>>"$log" && note "pushed" || note "push failed"
+  git -C "$root" -c core.hooksPath=/dev/null push -q --no-verify 2>>"$log" && note "pushed" || note "push failed"
 fi

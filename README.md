@@ -73,8 +73,10 @@ action needs nobody. Guard rails:
 - at most `COS_MAX_RUNS_PER_DAY` runs (default 3), `COS_MAX_BUDGET_USD` per run (default 2),
   `COS_RUN_TIMEOUT` seconds per run (default 1800); one dispatcher at a time, a stale lock is
   taken over;
-- the unattended session cannot edit `CLAUDE.md` or `.claude/`, call `security` (Keychain),
-  `git push`, or ask questions;
+- the unattended session gets a closed list of tools (read, edit, and `git add/commit/status/diff`;
+  no free shell) and cannot edit `CLAUDE.md`, `.claude/`, `.git/` or the dispatcher's own log,
+  call `security` (Keychain), `git push`, or ask questions;
+- if `.git/config` or `.git/hooks` change during a run, the dispatcher stops and pushes nothing;
 - every run is logged in `<workspace>/.dispatch.log`, output in `.dispatch-<slug>.out`;
 - a run that ends without a handoff, times out, or is interrupted is parked (`dispatch: off`)
   instead of looping.
@@ -92,8 +94,8 @@ On macOS, fill in `templates/dispatcher/com.chief-of-staff.dispatcher.plist`. On
   `CLAUDE.md` rules are what prevent it.
 - The ask guard has been tested by script, not yet in an interactive session.
 - The reviewer is the same model with a different brief. It catches incoherence, not authority.
-- The dispatcher's guard rails rely on Claude Code permission rules; they are not a sandbox. The
-  CLAUDE.md deny covers the Edit tool; a shell command (`sed`, `mv`) could still change the file.
+- The dispatcher's guard rails rely on Claude Code permission rules; they are not a sandbox. For a
+  stronger boundary, run the dispatcher inside a container or a separate user account.
 - Notes still `new` after 21 days are to be discarded by the project session (a rule in the
   `knowledge` skill); no script enforces it yet.
 
