@@ -28,4 +28,9 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
 - **Close track items with proof.** An item is `[x]` only with `evidence:` pointing to a file in this
   folder (the deliverable or the reviewer's verdict); `[-]` needs `why:`. Move `stage:` forward only
   when the stage's items are closed; the hook checks this at the end of every turn.
+- **The delivery line is the planned end.** `delivery:` in TRACK.md is the stage that delivers what
+  the owner asked for. Add any item that makes the work complete; when every item up to the
+  delivery line is closed, write `DELIVERY.md` (what was asked, what was delivered, the proof files)
+  and set STATE.md `status: delivered`. After that, new work is a proposal on the project card,
+  not something you start.
 - **On close:** run the `handoff` skill. STATE.md is a snapshot of now; the diary lives in git.

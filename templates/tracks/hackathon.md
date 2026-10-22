@@ -1,6 +1,7 @@
 ---
 track: hackathon
 stage: 1
+delivery: 4
 stale_hours: 3
 ---
 # Track: hackathon

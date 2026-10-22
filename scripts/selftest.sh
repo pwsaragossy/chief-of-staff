@@ -124,6 +124,16 @@ check "a deliverable without specialists cannot end" '[ "$(rc "$(ev Stop ",\"sto
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/STATE.md\"}")" "$P"
 check "updating STATE.md is not a deliverable" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
+for f in TRACK.md DELIVERY.md; do
+  h "$(ev UserPromptSubmit)" "$P" >/dev/null
+  h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/$f\"}")" "$P" >/dev/null
+  check "updating $f is not a deliverable" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
+done
+for f in sub/DELIVERY.md NOTTRACK.md; do
+  h "$(ev UserPromptSubmit)" "$P" >/dev/null
+  h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/$f\"}")" "$P" >/dev/null
+  check "$f is a real deliverable, not a control file" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
+done
 check "every turn is logged for the adherence metric" 'grep -q "substantive=1 agents=2 specialists=1 reviewers=1 library=1 web=1 saved=1" "$W/.protocol.log"'
 mkdir -p "$W/specialists"; : > "$W/specialists/researcher.md"
 check "a subagent without a role card is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"do research\"}")" "$P")" = 2 ]'
@@ -179,7 +189,7 @@ check "a closed stage passes" 'T check "$G"'
 check "a reviewer item cannot be marked not applicable" 'sed "s/^- \[x\] review-1 | Review | card: reviewer | needs: positioning, tm | evidence: out\/pos2.md$/- [-] review-1 | Review | card: reviewer | needs: positioning, tm | why: owner said skip/" "$G/TRACK.md" > "$W/t2/TRACK.md" && T check "$W/t2" | grep -q "review-1 is a reviewer item and cannot be marked not applicable"'
 check "n/a needs a reason" 'sed "s/ | why: internal codename//" "$G/TRACK.md" > "$G/T2" && mkdir -p "$W/t2" && cp "$G/T2" "$W/t2/TRACK.md" && T check "$W/t2" | grep -q "tm is marked not applicable without why"'
 check "done before its prerequisite fails" 'sed "s/^- \[ \] logo | Logo | card: designer | needs: name | evidence:$/- [x] logo | Logo | card: designer | needs: name | evidence: out\/pos.md/" "$G/TRACK.md" > "$W/t2/TRACK.md" && T check "$W/t2" | grep -q "logo is marked done, but it needs name, which is open"'
-check "the brief lists what is open now and what waits" 'T brief "$G" | grep -q "stage 2 of 2 (Identity). Open now: name (marketing). Waiting on prerequisites: review-2 needs name, logo; logo needs name."'
+check "the brief lists what is open now and what waits" 'T brief "$G" | grep -q "stage 2 of 2 (Identity), delivery line at stage 2. Open now: name (marketing). Waiting on prerequisites: review-2 needs name, logo; logo needs name."'
 # track gates cannot be passed by shortcuts
 bad() { [ -e "$W/t2/out" ] || ln -s "$G/out" "$W/t2/out"; sed "$1" "$G/TRACK.md" > "$W/t2/TRACK.md" && T check "$W/t2" | grep -q "$2"; }
 check "evidence cannot be an absolute path" 'bad "s#evidence: out/pos.md#evidence: /etc/hosts#" "evidence /etc/hosts must be a proof file"'
@@ -252,5 +262,39 @@ printf '2026-01-01 00:00:00 t=%s turn=z1 project=delta substantive=1 agents=1 sp
 check "an unresolved violation makes the project red" 'H delta | grep -q "^red: a turn ended"'
 printf '2026-01-01 00:00:01 t=%s turn=z1 project=delta substantive=0 agents=1 specialists=0 reviewers=1 pushed=false violation=0\n' "$(date +%s)" >> "$W/.protocol.log"
 check "a violation fixed later in the same session clears" '! H delta | grep -q "^red"'
+
+# delivery line: the planned end of the original request
+D="$W/projects/eps"; mkdir -p "$D/o"; printf x > "$D/o/a"; printf x > "$D/o/r"
+sed -e "s/{{PROJECT_NAME}}/eps/" "$here/../templates/project/STATE.md" > "$D/STATE.md"
+printf -- '---\ntrack: t\nstage: 1\ndelivery: 1\n---\n## Stage 1: A\n- [x] a | A | card: product | needs: - | evidence: o/a\n- [x] r | R | card: reviewer | needs: a | evidence: o/r\n## Stage 2: B\n- [ ] b | B | card: product | needs: a | evidence:\n- [ ] r2 | R2 | card: reviewer | needs: b | evidence:\n' > "$D/TRACK.md"
+check "a reached delivery line must be declared" 'T check "$D" | grep -q "stage 1 is the delivery line and every item up to it is closed: write DELIVERY.md"'
+check "the briefing asks for the delivery first" 'T brief "$D" | grep -q "^Delivery line reached (stage 1)"'
+fm_set "$D/STATE.md" status delivered
+check "delivered needs DELIVERY.md" 'T check "$D" | grep -q "DELIVERY.md is missing or empty"'
+printf "asked X, delivered X\n" > "$D/DELIVERY.md"
+check "a declared delivery passes, with later stages still open" 'T check "$D"'
+check "after delivery the briefing says new work is a proposal" 'T brief "$D" | grep -q "^Delivered: the original request is done"'
+check "a delivered project is green and does not go stale" 'touch -t 202001010000 "$D/STATE.md" && H eps | grep -q "^green: delivered"'
+sed -i.bak "s/^- \[x\] a | A/- [ ] a | A/; s/ | evidence: o\/a$/ | evidence:/" "$D/TRACK.md"
+check "delivered before the line is closed fails" 'T check "$D" | grep -q "status is delivered, but these items up to the delivery line (stage 1) are open: a"'
+check "delivery must be a stage that exists" 'fm_set "$D/TRACK.md" delivery 9 && T check "$D" | grep -q "delivery: 9 in TRACK.md, but the track has 2 stages"; r=$?; fm_set "$D/TRACK.md" delivery 1; [ $r = 0 ]'
+sh "$here/track.sh" baseline "$D"
+check "baseline records the item count at opening" '[ "$(fm_get "$D/TRACK.md" baseline)" = 4 ]'
+check "items gives the map with states" 'T items "$D" | tr "\037" "|" | grep -q "^I|2|blocked|b|product|a|B$" && T items "$D" | tr "\037" "|" | grep -q "^I|1|ready|a|product|-|A$"'
+check "baseline also records the delivery line at opening" '[ "$(fm_get "$D/TRACK.md" baseline_delivery)" = 1 ]'
+check "baseline is written once" '! sh "$here/track.sh" baseline "$D" 2>/dev/null && [ "$(fm_get "$D/TRACK.md" baseline)" = 4 ]'
+check "status carries the delivery fields" '[ "$(T status "$D" | cut -d "$(printf "\037")" -f5,8 | tr "\037" ,)" = 1,1 ]'
+# a delivered word alone is not enough, and moved lines or removed items are visible
+Z="$W/projects/zeta"; mkdir -p "$Z"
+sed -e "s/{{PROJECT_NAME}}/zeta/" "$here/../templates/project/STATE.md" > "$Z/STATE.md"
+printf -- '---\ntrack: t\nstage: 1\ndelivery: 1\n---\n## Stage 1: A\n- [ ] a | A | card: product | needs: - | evidence:\n- [-] x | X | card: product | needs: - | why: n/a\n- [ ] r | R | card: reviewer | needs: a | evidence:\n## Stage 2: B\n- [ ] b | B | card: product | needs: a | evidence:\n- [ ] r2 | R2 | card: reviewer | needs: b | evidence:\n' > "$Z/TRACK.md"
+sh "$here/track.sh" baseline "$Z"
+check "an untouched open project stays green" 'H zeta | grep -q "^green: on track"'
+check "moving the delivery line later is visible in health" 'fm_set "$Z/TRACK.md" delivery 2 && H zeta | grep -q "^yellow: delivery line moved from stage 1 to stage 2"; r=$?; fm_set "$Z/TRACK.md" delivery 1; [ $r = 0 ]'
+check "deleting items is visible in health" 'grep -v "^- \[-\] x " "$Z/TRACK.md" > "$Z/T2" && cp "$Z/TRACK.md" "$Z/T0" && mv "$Z/T2" "$Z/TRACK.md" && H zeta | grep -q "^yellow: 1 items removed"; r=$?; mv "$Z/T0" "$Z/TRACK.md"; [ $r = 0 ]'
+check "a delivered word with the line not reached is red, not green" 'fm_set "$Z/STATE.md" status delivered && H zeta | grep -q "^red: track: STATE.md status is delivered"'
+fm_set "$Z/STATE.md" status active
+M="$W/projects/mu"; mkdir -p "$M"; sed -e "s/{{PROJECT_NAME}}/mu/" "$here/../templates/project/STATE.md" > "$M/STATE.md"; fm_set "$M/STATE.md" status delivered; touch -t 202001010000 "$M/STATE.md"
+check "without a track, the word delivered does not silence the stale check" 'H mu | grep -q "^yellow: no handoff"'
 
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }

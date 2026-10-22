@@ -2,7 +2,10 @@
 # Track gates. A project's TRACK.md lists the minimum deliverables per stage (templates/tracks/).
 #   check  <project_dir>  one problem per line, exit 1 if any (the Stop hook blocks on these)
 #   brief  <project_dir>  one line for the session briefing: stage, what is open now, what waits
-#   status <project_dir>  "stage<US>stages<US>closed<US>total" for health.sh
+#   status <project_dir>  "stage<US>stages<US>closed<US>total<US>delivery<US>delivered<US>baseline<US>baseline_delivery" for health.sh
+#   items  <project_dir>  the map for the panel: S<US>n<US>name and I<US>stage<US>state<US>id<US>card<US>needs<US>deliverable
+#   baseline <project_dir>  records the item count when the project opens (new-project runs it once)
+# delivery: N in the front matter is the stage that delivers the original request (default: the last stage).
 # Item line: - [ ] id | deliverable | card: role | needs: a, b | evidence: path   ([x] done, [-] n/a + why:)
 # No TRACK.md: silent, exit 0 (old projects keep working).
 . "$(dirname "$0")/lib.sh"
@@ -40,6 +43,9 @@ open_needs() { # ids in $1 (comma list) that are not closed
 }
 stages=$(printf '%s\n' "$rows" | grep -c "^S$US")
 sname=$(printf '%s\n' "$rows" | awk -F "$US" -v c="$cur" '$1 == "S" && $2 == c { print $3; exit }')
+rawdel=$(fm_get "$t" delivery); del=$rawdel; case $del in ''|*[!0-9]*) del=$stages ;; esac
+# items of stages 1..delivery still open; empty = the original request is delivered
+undelivered=$(printf '%s\n' "$rows" | awk -F "$US" -v d="$del" '$1 == "I" && $2 <= d && $3 != "x" && $3 != "-" { print $4 }')
 
 check() {
   case $rawstage in ''|*[!0-9]*|0) echo "stage: in the TRACK.md front matter must be a whole number from 1 to $stages (found '$rawstage')" ;; esac
@@ -69,6 +75,17 @@ check() {
           if (ok) { dn[i] = 1; ch = 1 } } } while (ch)
       for (i = 1; i <= n; i++) if (!dn[i]) l = l (l ? ", " : "") id[i]
       if (l != "") print "these items wait on each other in a loop, so none can close: " l }'
+  # the delivery line: the planned end of the original request
+  case $rawdel in ''|[1-9]|[1-9][0-9]) [ "$del" -le "$stages" ] || echo "delivery: $del in TRACK.md, but the track has $stages stages" ;;
+    *) echo "delivery: in the TRACK.md front matter must be a stage number from 1 to $stages (found '$rawdel')" ;; esac
+  if [ -z "$undelivered" ] && [ "$stages" -gt 0 ]; then
+    case $state in
+      delivered|done) [ -s "$dir/DELIVERY.md" ] || echo "STATE.md status is $state, but DELIVERY.md is missing or empty: write what the owner asked, what was delivered and the proof files" ;;
+      *) echo "stage $del is the delivery line and every item up to it is closed: write DELIVERY.md (what the owner asked, what was delivered, the proof files) and set STATE.md status: delivered. More work goes on the project card as a proposal for the owner." ;;
+    esac
+  elif [ "$state" = delivered ]; then
+    echo "STATE.md status is delivered, but these items up to the delivery line (stage $del) are open: $(printf '%s' "$undelivered" | tr '\n' ' ')"
+  fi
   # every stage needs a reviewer item, so no stage passes on the word of the agent that did the work
   printf '%s\n' "$rows" | awk -F "$US" '$1 == "S" { s[$2] = 1 } $1 == "I" && $5 == "reviewer" { r[$2] = 1 }
     END { for (k in s) if (!(k in r)) print "stage " k " has no item with card: reviewer" }'
@@ -105,8 +122,23 @@ case $cmd in
     p=$(check); [ -z "$p" ] && exit 0
     printf '%s\n' "$p"; exit 1 ;;
   status)
-    printf '%s\n' "$rows" | awk -F "$US" -v c="$cur" -v n="$stages" '
-      $1 == "I" { t++; if ($3 == "x" || $3 == "-") d++ } END { printf "%s\037%s\037%d\037%d\n", c, n, d, t }' ;;
+    printf '%s\n' "$rows" | awk -F "$US" -v c="$cur" -v n="$stages" -v dl="$del" -v ok="$([ -z "$undelivered" ] && [ "$stages" -gt 0 ] && echo 1 || echo 0)" -v b="$(fm_get "$t" baseline | tr -cd 0-9)" -v b0="$(fm_get "$t" baseline_delivery | tr -cd 0-9)" '
+      $1 == "I" { t++; if ($3 == "x" || $3 == "-") d++ } END { printf "%s\037%s\037%d\037%d\037%s\037%s\037%s\037%s\n", c, n, d, t, dl, ok, b, b0 }' ;;
+  items)
+    # deliverable text comes straight from the item line (the rows above leave it out)
+    printf '%s\n' "$rows" | awk -F "$US" 'NR != FNR { if (/^- \[.\] /) { sub(/\r$/, ""); k = split(substr($0, 7), f, / \| /); i = f[1]; gsub(/^ +| +$/, "", i); t = f[2]; gsub(/^ +| +$/, "", t); desc[i] = t }; next }
+      $1 == "I" { m[$4] = $3 } { r[++nr] = $0 } END {
+      for (i = 1; i <= nr; i++) { split(r[i], f, FS); if (f[1] == "S") { print r[i]; continue }
+        if (f[1] != "I") continue
+        st = f[3] == "x" ? "done" : f[3] == "-" ? "na" : "ready"
+        if (st == "ready") { k = split(f[6], a, /, */); for (j = 1; j <= k; j++) if (a[j] != "-" && a[j] != "" && m[a[j]] != "x" && m[a[j]] != "-") st = "blocked" }
+        print "I\037" f[2] "\037" st "\037" f[4] "\037" f[5] "\037" f[6] "\037" desc[f[4]] } }' - "$t"
+    ;;
+  baseline)
+    # once: a second run would reset the yardstick that shows items removed or the delivery line moved
+    [ -n "$(fm_get "$t" baseline)" ] && { echo "baseline is already recorded in TRACK.md; it is not rewritten" >&2; exit 1; }
+    fm_set "$t" baseline "$(printf '%s\n' "$rows" | grep -c "^I$US")"
+    fm_set "$t" baseline_delivery "$del" ;;
   brief)
     now=; wait=
     while IFS=$US read -r kind s m id card needs ev why; do
@@ -116,8 +148,15 @@ case $cmd in
     done <<EOF
 $rows
 EOF
+    if [ -z "$undelivered" ]; then
+      case $state in
+        delivered|done) echo "Delivered: the original request is done (DELIVERY.md, delivery line at stage $del). New work is a proposal on the project card unless the owner approved it." ;;
+        *) echo "Delivery line reached (stage $del): before anything else, write DELIVERY.md and set STATE.md status: delivered." ;;
+      esac
+      [ "$cur" -le "$del" ] && exit 0
+    fi
     if [ -z "$now" ]; then now="none, the stage can pass its gate"; [ -n "$wait" ] && now="nothing until the prerequisites below are closed"; fi
-    printf 'Track %s, stage %s of %s (%s). Open now: %s.%s\n' "$(fm_get "$t" track)" "$cur" "$stages" "$sname" \
+    printf 'Track %s, stage %s of %s (%s), delivery line at stage %s. Open now: %s.%s\n' "$(fm_get "$t" track)" "$cur" "$stages" "$sname" "$del" \
       "$now" "${wait:+ Waiting on prerequisites: $wait.}" ;;
-  *) echo "usage: track.sh check|brief|status <project_dir>" >&2; exit 2 ;;
+  *) echo "usage: track.sh check|brief|status|items|baseline <project_dir>" >&2; exit 2 ;;
 esac

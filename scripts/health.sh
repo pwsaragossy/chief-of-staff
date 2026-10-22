@@ -1,6 +1,6 @@
 #!/bin/sh
 # Health of each project, the one source for the panel. One line per project, fields split by \037:
-#   slug  color  reason  stage  stages  closed  total
+#   slug  color  reason  stage  stages  closed  total  delivery  delivered  baseline  baseline_delivery
 # red    = track gate problem, STATE says red, a protocol violation in the last 24 h, a dispatcher ALERT
 # yellow = a card waiting on the owner, STATE.md unchanged for longer than stale_hours, status paused
 # green  = none of the above
@@ -34,12 +34,19 @@ for s in "$root"/projects/*/STATE.md; do
   for c in "$root"/board/*.md; do
     [ -f "$c" ] && [ "$(fm_get "$c" status)" = waiting-owner ] && [ "$(fm_get "$c" project)" = "$p" ] && { yellow "waiting on the owner: $(basename "$c" .md)"; break; }
   done
-  h=$(fm_get "$d/TRACK.md" stale_hours); case $h in ''|*[!0-9]*) h=48 ;; esac
-  [ -n "$(find "$s" -mmin +$((h * 60)) 2>/dev/null)" ] && yellow "no handoff for more than $h h"
-  [ "$(fm_get "$s" status)" = paused ] && yellow "paused"
-
   st=$(sh "$(dirname "$0")/track.sh" status "$d")
-  [ -n "$st" ] || st="$US$US$US"
-  [ -n "$color" ] || { color=green; reason="on track"; }
+  [ -n "$st" ] || st="$US$US$US$US$US$US$US"
+  tot=$(printf '%s' "$st" | cut -d "$US" -f4); dl=$(printf '%s' "$st" | cut -d "$US" -f5); dv=$(printf '%s' "$st" | cut -d "$US" -f6)
+  bl=$(printf '%s' "$st" | cut -d "$US" -f7); bd=$(printf '%s' "$st" | cut -d "$US" -f8)
+  [ -n "$bl" ] && [ "${tot:-0}" -lt "$bl" ] && yellow "$((bl - tot)) items removed from the track since opening ($bl at opening, $tot now)"
+  [ -n "$bd" ] && [ "$bd" != "$dl" ] && yellow "delivery line moved from stage $bd to stage $dl since opening"
+  h=$(fm_get "$d/TRACK.md" stale_hours); case $h in ''|*[!0-9]*) h=48 ;; esac
+  status=$(fm_get "$s" status | tr 'A-Z' 'a-z')
+  # quiet = STATE.md says delivered AND the track agrees (all items up to the line closed); a bare word is not enough
+  quiet=; case $status in delivered|done) [ "$dv" = 1 ] && quiet=1 ;; esac
+  [ -z "$quiet" ] && [ -n "$(find "$s" -mmin +$((h * 60)) 2>/dev/null)" ] && yellow "no handoff for more than $h h"
+  [ "$status" = paused ] && yellow "paused"
+  if [ -n "$quiet" ]; then on="delivered: the original request is done"; else on="on track"; fi
+  [ -n "$color" ] || { color=green; reason=$on; }
   printf '%s\037%s\037%s\037%s\n' "$p" "$color" "$(printf '%s' "$reason" | clean)" "$st"
 done

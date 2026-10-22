@@ -50,12 +50,22 @@ def sh(script, *args):
 def snapshot(root):
     projects = []
     for line in sh("health.sh", root).splitlines():
-        f = (line.split(US) + [""] * 7)[:7]
-        slug, color, reason, stage, stages, closed, total = f
+        f = (line.split(US) + [""] * 11)[:11]
+        slug, color, reason, stage, stages, closed, total, delivery, delivered, baseline, baseline_delivery = f
         pdir = os.path.join(root, "projects", slug)
+        stage_names, items = [], []
+        for row in sh("track.sh", "items", pdir).splitlines():
+            r = row.split(US)
+            if r[0] == "S" and len(r) >= 3:
+                stage_names.append({"n": r[1], "name": r[2]})
+            elif r[0] == "I" and len(r) >= 7:
+                items.append({"stage": r[1], "state": r[2], "id": r[3], "card": r[4],
+                              "needs": [n.strip() for n in r[5].split(",") if n.strip() not in ("", "-")], "what": r[6]})
         projects.append({
             "slug": slug, "color": color, "reason": reason,
             "stage": stage, "stages": stages, "closed": closed, "total": total,
+            "delivery": delivery, "delivered": delivered == "1", "baseline": baseline, "baseline_delivery": baseline_delivery,
+            "stage_names": stage_names, "items": items,
             "brief": sh("track.sh", "brief", pdir).strip().split(" Waiting on prerequisites:")[0],
             "next": front_matter(os.path.join(pdir, "STATE.md")).get("next", ""),
         })
@@ -123,6 +133,25 @@ form{display:flex;gap:8px;margin-top:10px}input[type=text]{flex:1;padding:9px 12
 button{padding:9px 16px;border:0;border-radius:8px;background:var(--fg);color:var(--bg);font:inherit;cursor:pointer}
 #msg{min-height:20px;margin-top:8px;font-size:13px}
 .empty{padding:16px;color:var(--muted)}
+.toggle{background:none;color:var(--fg);border:1px solid var(--line);padding:4px 10px;font-size:12px;margin-top:8px}
+.map{overflow-x:auto;margin-top:10px}
+.cols{display:flex;gap:28px;position:relative;padding:22px 2px 10px 40px;width:max-content}
+.col{display:flex;flex-direction:column;gap:8px;width:160px;flex:none;position:relative;z-index:1}
+.col h3{font-size:12px;margin:0 0 2px;color:var(--muted);font-weight:600}
+.node{border:1.5px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;background:var(--card)}
+.node b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.node small{color:var(--muted)}
+.node.done{border-color:var(--green);box-shadow:inset 3px 0 0 var(--green)}
+.node.na{border-style:dashed;opacity:.55}
+.node.ready{border-color:var(--fg)}
+.node.blocked{opacity:.45}
+.finish{flex:none;width:0;border-left:2px dashed var(--yellow);position:relative;z-index:1}
+.finish span{position:absolute;top:-20px;transform:translateX(-50%);font-size:11px;font-weight:600;color:var(--yellow);white-space:nowrap}
+.finish.reached{border-color:var(--green)}.finish.reached span{color:var(--green)}
+.legend{font-size:12px;color:var(--muted);margin-top:4px}
+svg.edges{position:absolute;left:0;top:0;pointer-events:none;z-index:0;overflow:visible}
+svg.edges path{fill:none;stroke:var(--line);stroke-width:1.5}
+svg.edges path.ok{stroke:var(--green);opacity:.6}
 </style></head><body><main>
 <div class="top"><span id="overall" class="dot"></span><h1>Chief of staff</h1><span class="grow"></span><span id="time" class="muted"></span></div>
 <div id="ws" class="muted"></div>
@@ -138,9 +167,30 @@ button{padding:9px 16px;border:0;border-radius:8px;background:var(--fg);color:va
 const T=new URLSearchParams(location.search).get("t");
 const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e};
 function empty(box,text){box.replaceChildren(el("div","empty",text))}
+const openMaps=new Set();let last=null;
+function drawMap(p){
+  const wrap=el("div","map"),cols=el("div","cols"),nodes=new Map();
+  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("class","edges");cols.append(svg);
+  p.stage_names.forEach(s=>{
+    const c=el("div","col");c.append(el("h3","",s.n+". "+s.name));
+    p.items.filter(i=>i.stage===s.n).forEach(i=>{const n=el("div","node "+i.state);n.title=i.what+" ("+i.state+")";
+      n.append(el("b","",i.id),el("small","",i.card));nodes.set(i.id,n);c.append(n)});
+    cols.append(c);
+    if(s.n===p.delivery){const f=el("div","finish"+(p.delivered?" reached":""));f.append(el("span","",p.delivered?"Delivered":"Delivery"));cols.append(f)}
+  });
+  wrap.append(cols,el("div","legend","Outlined: can start now. Faded: waiting on a prerequisite. Dashed: not applicable. Green edge: done."));
+  requestAnimationFrame(()=>{const o=cols.getBoundingClientRect();svg.setAttribute("width",cols.scrollWidth);svg.setAttribute("height",cols.scrollHeight);
+    const pos=n=>{const b=n.getBoundingClientRect();return{l:b.left-o.left,r:b.right-o.left,y:b.top-o.top+b.height/2}};
+    p.items.forEach(i=>i.needs.forEach(nm=>{const a=nodes.get(nm),b=nodes.get(i.id);if(!a||!b)return;const A=pos(a),B=pos(b);
+      const path=document.createElementNS("http://www.w3.org/2000/svg","path");
+      const d=A.r<B.l?`M${A.r},${A.y} C${A.r+16},${A.y} ${B.l-16},${B.y} ${B.l},${B.y}`:`M${A.l},${A.y} C${A.l-14},${A.y} ${B.l-14},${B.y} ${B.l},${B.y}`;
+      path.setAttribute("d",d);const st=p.items.find(x=>x.id===nm);if(st&&st.state==="done")path.setAttribute("class","ok");svg.append(path)}))});
+  return wrap}
 async function load(){
   const r=await fetch("api?t="+encodeURIComponent(T));if(!r.ok){document.getElementById("msg").textContent="Panel stopped. Start it again.";return}
-  const d=await r.json();
+  last=await r.json();render()}
+function render(){
+  const d=last;if(!d)return;
   document.getElementById("overall").className="dot "+d.overall;
   document.getElementById("time").textContent="Updated "+d.time;
   document.getElementById("ws").textContent=d.workspace;
@@ -149,7 +199,12 @@ async function load(){
     const row=el("div","row"),body=el("div","grow");row.append(el("span","dot "+p.color),body);
     body.append(el("div","name",p.slug),el("div","",p.reason));
     if(p.total){const b=el("div","bar"),i=el("i");i.style.width=(100*p.closed/p.total)+"%";b.append(i);
-      body.append(b,el("div","muted",p.closed+" of "+p.total+" deliverables closed. "+p.brief))}
+      const diff=p.baseline!==""?p.total-p.baseline:0,moved=p.baseline_delivery!==""&&p.baseline_delivery!==p.delivery;
+      body.append(b,el("div","muted",p.closed+" of "+p.total+" deliverables closed"+(diff>0?", "+diff+" added since opening":"")+(diff<0?", "+(-diff)+" removed since opening":"")+(moved?", delivery line moved from stage "+p.baseline_delivery+" to "+p.delivery:"")+
+        (p.delivered?". Original request delivered.":". "+p.brief)));
+      const t=el("button","toggle",openMaps.has(p.slug)?"Hide map":"Map");
+      t.onclick=()=>{openMaps.has(p.slug)?openMaps.delete(p.slug):openMaps.add(p.slug);render()};body.append(t);
+      if(openMaps.has(p.slug))body.append(drawMap(p))}
     else if(p.next)body.append(el("div","muted","Next: "+p.next));
     return row}));
   const C=document.getElementById("cards");

@@ -12,7 +12,9 @@ What it gives you:
   criteria, then a track for the kind of project (hackathon, software, brand, launch, research):
   stages of minimum deliverables, each naming the specialist who makes it, what it needs first and
   the file that proves it. A hook stops any session that moves past a stage with an open item, a
-  missing proof file, or no reviewer verdict.
+  missing proof file, or no reviewer verdict. Each track has a delivery line, the stage that
+  delivers what the owner asked for: when it closes, the session must write `DELIVERY.md` and mark
+  the project delivered, and further ideas become proposals instead of an endless loop.
 - **Standard handoffs.** Every project has a `STATE.md` in one format (adapted from the I-PASS
   clinical handoff). The next session writes an arrival synthesis and checks one fact before acting.
 - **Specialists with a written method, and an independent reviewer, enforced by hooks.** Nine
@@ -25,7 +27,8 @@ What it gives you:
   deleted and every reference repointed). Web search is blocked until the library was searched,
   and a turn that searched the web cannot end until it saved what it found.
 - **A routing table** (`ROUTING.md`) so nobody has to remember whom to call.
-- **A local panel**: green, yellow or red per project with the reason, track progress, decisions
+- **A local panel**: green, yellow or red per project with the reason, a live map of each track
+  (stages, deliverables by state, prerequisites, the delivery line, items added since opening), decisions
   waiting on the owner, the last turns, and a box to drop files or links into the knowledge inbox.
 - **An optional dispatcher** that starts the next session on its own. Off by default.
 
@@ -97,7 +100,8 @@ Every hook does nothing outside a workspace, so the plugin does not affect your 
 - The same Stop hook runs `scripts/track.sh check` in a project session: a stage below `stage:` with
   an open item, an item marked done whose proof file does not exist or whose prerequisites are
   open, a not-applicable item without a reason, a reviewer item marked not applicable, a stage
-  without a reviewer item, or STATE.md set to done with open items. The briefing lists what is open
+  without a reviewer item, STATE.md set to done or delivered with open items, or a reached delivery
+  line without `DELIVERY.md` and `status: delivered`. The briefing lists what is open
   now in the current stage.
 
 ## The dispatcher (off by default)

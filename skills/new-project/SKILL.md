@@ -33,7 +33,10 @@ the owner to pick, in the same round of buttons if possible.
 2. Create `../projects/<slug>/` with `CLAUDE.md` and `STATE.md` from
    `${CLAUDE_PLUGIN_ROOT}/templates/project/` (copy the literal path shown here), filling the
    `{{...}}` fields from the answers. Put the answers in STATE.md section 2.
-   Copy the chosen track to `../projects/<slug>/TRACK.md`. If an item truly cannot apply, mark it
+   Copy the chosen track to `../projects/<slug>/TRACK.md`. Set `delivery:` to the stage that
+   delivers what the owner asked for (the success answer): that is the planned end. Then run
+   `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" baseline ../projects/<slug>` once, which records how
+   many items the map had at opening, so the panel shows how much was added later. If an item truly cannot apply, mark it
    `[-]` with `why:` instead of deleting it, so the reviewer sees it.
 3. Create the card `../board/<Project name>.md` from `${CLAUDE_PLUGIN_ROOT}/templates/board/card.md`,
    with `owner` set to the project session (for example `session-<slug>`), never the owner.

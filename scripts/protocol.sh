@@ -44,7 +44,10 @@ case $(jget hook_event_name) in
       Write|Edit|MultiEdit)
         case $in in
           *"$root/knowledge/"*) mark saved ;;
-          *.md\"*|*.html\"*|*.pptx\"*|*.docx\"*|*.pdf\"*) case $in in *STATE.md\"*|*"/board/"*) ;; *) mark deliverable ;; esac ;;
+          *.md\"*|*.html\"*|*.pptx\"*|*.docx\"*|*.pdf\"*) case $in in *STATE.md\"*|*"/board/"*) ;; *) ctl=; fp=$(jget file_path); r=${fp#"$root/projects/"}
+              # only a project's own TRACK.md / DELIVERY.md (projects/<slug>/FILE) is a control file; the path comes from file_path, not from the content
+              case $r in */*/*) ;; */TRACK.md|*/DELIVERY.md) [ "$r" != "$fp" ] && ctl=1 ;; esac
+              [ -n "$ctl" ] || mark deliverable ;; esac ;;
         esac ;;
     esac
     case $in in *library.sh*search*|*"$root/knowledge"*) [ "$tool" = Write ] || [ "$tool" = Edit ] || mark library ;; esac
