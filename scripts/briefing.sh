@@ -34,8 +34,9 @@ waiting() { # list cards waiting on the owner; $1 = project slug filter (empty =
         p=$(basename "$(dirname "$s")")
         out "- $p: status $(fm "$s" status), updated $(fm "$s" updated), next: $(fm "$s" next)"
       done
-      n=$(ls "$root"/knowledge/inbox 2>/dev/null | wc -l | tr -d ' ')
+      n=$(ls "$(cos_lib "$root")"/inbox 2>/dev/null | wc -l | tr -d ' ')
       out "Knowledge inbox: $n item(s) waiting to be processed."
+      sh "$(dirname "$0")/library.sh" brief | tr -d '\000-\011\013-\037'
       ;;
     projects/*)
       p=${rel#projects/}; p=${p%%/*}
@@ -49,13 +50,7 @@ waiting() { # list cards waiting on the owner; $1 = project slug filter (empty =
       tb=$(sh "$(dirname "$0")/track.sh" brief "$root/projects/$p" | tr -d '\000-\011\013-\037' | cut -c1-600)
       [ -n "$tb" ] && out "$tb (TRACK.md: a stage passes only when every item is closed with its proof file.)"
       w=$(waiting "$p"); [ -n "$w" ] && { out "Cards of this project waiting on the owner:"; out "$w"; }
-      notes=$(for f in "$root"/knowledge/notes/*.md; do
-        [ -f "$f" ] && [ "$(fm "$f" status)" = "new" ] || continue
-        case "[$(fm "$f" projects | tr -d '[] ')]," in
-          (*"[$p]"*|*"[$p,"*|*",$p,"*|*",$p]"*) out "- $(basename "$f" .md) (confidence $(fm "$f" confidence))" ;;
-        esac
-      done)
-      [ -n "$notes" ] && { out "New knowledge notes linked to this project, to integrate or discard:"; out "$notes"; }
+      sh "$(dirname "$0")/library.sh" brief "$p" | tr -d '\000-\011\013-\037'
       ;;
     *)
       out "This session is outside central/ and projects/. It does not ask the owner either."

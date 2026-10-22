@@ -3,6 +3,7 @@
 # Print the workspace root (the nearest folder holding a .chief-of-staff marker) or fail.
 cos_root() {
   d=${1:-$PWD}
+  case $d in /*) ;; *) return 1 ;; esac   # a relative path never reaches "/": dirname would loop on "."
   while [ -n "$d" ] && [ "$d" != "/" ]; do
     [ -f "$d/.chief-of-staff" ] && { printf '%s\n' "$d"; return 0; }
     d=$(dirname "$d")
@@ -32,4 +33,18 @@ fm_set() {
     infm && index($0, ENVIRON["K"] ":") == 1 { print ENVIRON["K"] ": " ENVIRON["V"]; done = 1; next }
     { print }
   ' "$1" > "$tmp" && mv "$tmp" "$1"
+}
+
+# cos_lib ROOT -> prints the library folder: ROOT/knowledge, or the "library: /absolute/path" line of the
+# marker (set by library.sh offload). Returns 1 when that folder is not reachable (offline: disk unplugged),
+# 2 when it exists without the .library-id file offload writes (an empty mount point, or a wrong path),
+# 3 when the line is not one absolute path.
+cos_lib() {
+  _l=$(sed -n 's/^library: *//p' "$1/.chief-of-staff" 2>/dev/null | head -n 1)
+  [ -n "$_l" ] || { printf '%s\n' "$1/knowledge"; return 0; }
+  printf '%s\n' "$_l"
+  case $_l in /*) ;; *) return 3 ;; esac
+  case $_l in */../*|*/..|*/./*) return 3 ;; esac
+  [ -d "$_l" ] || return 1
+  [ -f "$_l/.library-id" ] && [ -d "$_l/notes" ] || return 2
 }

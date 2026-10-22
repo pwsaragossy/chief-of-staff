@@ -47,6 +47,19 @@ rawdel=$(fm_get "$t" delivery); del=$rawdel; case $del in ''|*[!0-9]*) del=$stag
 # items of stages 1..delivery still open; empty = the original request is delivered
 undelivered=$(printf '%s\n' "$rows" | awk -F "$US" -v d="$del" '$1 == "I" && $2 <= d && $3 != "x" && $3 != "-" { print $4 }')
 
+# cites FILE [PREFIX]: each [[id]] in FILE must be a library note that is not retired
+cites() {
+  _r=$(cos_root "$dir") || return 0
+  _l=$(cos_lib "$_r") || return 0
+  grep -o '\[\[[^]|#]*' "$1" 2>/dev/null | sed 's/^\[\[//' | sort -u | while IFS= read -r _i; do
+    _n="$_l/notes/$_i.md"
+    if [ ! -f "$_n" ]; then echo "${2:-}$(basename "$1") cites [[$_i]], which is not a note in the library ($_l/notes)"
+    elif [ "$(fm_get "$_n" status)" = retired ]; then _s=$(fm_get "$_n" superseded_by)
+      echo "${2:-}$(basename "$1") cites [[$_i]], which is retired${_s:+: cite [[$_s]] instead}"
+    fi
+  done
+}
+
 check() {
   case $rawstage in ''|*[!0-9]*|0) echo "stage: in the TRACK.md front matter must be a whole number from 1 to $stages (found '$rawstage')" ;; esac
   [ "$cur" -gt "$stages" ] && echo "stage: $cur in TRACK.md, but the track has $stages stages"
@@ -86,6 +99,14 @@ check() {
   elif [ "$state" = delivered ]; then
     echo "STATE.md status is delivered, but these items up to the delivery line (stage $del) are open: $(printf '%s' "$undelivered" | tr '\n' ' ')"
   fi
+  # what the delivery rests on: a Sources section, and every [[note]] it or a proof file cites must be a live library note
+  if [ -s "$dir/DELIVERY.md" ]; then
+    grep -Eq '^(## Sources|Sources:)' "$dir/DELIVERY.md" || echo "DELIVERY.md needs a '## Sources' section: the library notes ([[id]]) and files it rests on, or 'Sources: none (searched: <terms>)'"
+    cites "$dir/DELIVERY.md"
+  fi
+  printf '%s\n' "$rows" | while IFS=$US read -r kind s m id card needs ev why; do
+    [ "$kind" = I ] && [ "$m" = x ] && [ -n "$ev" ] && [ -f "$dir/$ev" ] && cites "$dir/$ev" "$id: "
+  done
   # every stage needs a reviewer item, so no stage passes on the word of the agent that did the work
   printf '%s\n' "$rows" | awk -F "$US" '$1 == "S" { s[$2] = 1 } $1 == "I" && $5 == "reviewer" { r[$2] = 1 }
     END { for (k in s) if (!(k in r)) print "stage " k " has no item with card: reviewer" }'
