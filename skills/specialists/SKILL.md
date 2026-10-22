@@ -1,28 +1,27 @@
 ---
 name: specialists
-description: Answer through senior specialists and an independent reviewer instead of as a generalist. Use whenever a decision or deliverable crosses an area of expertise (research, product, engineering, money, law, marketing, risk), or the user runs /chief-of-staff:specialists.
+description: Answer through senior specialists who follow written role cards, then an independent reviewer, instead of as a generalist. Use whenever a deliverable, decision or research crosses an area of expertise (research, product, engineering, money, law, marketing, risk), or the user runs /chief-of-staff:specialists.
 ---
 
-# Senior specialists and an independent reviewer
+# Senior specialists with a method, and an independent reviewer
 
-A generalist agreeing with a generalist owner produces "more or less" answers. Delegate.
+A specialist that only gives an opinion is a generalist with a title. Each one works from its role
+card in the workspace `specialists/` folder: what to gather first, the method, the tools and when to
+use each, the checks a senior professional never skips, the evidence standard and the output format.
 
-1. **Pick** from the workspace `ROUTING.md` the specialists the subject needs. If none fits, define
-   one: title, seniority, what they would check first. Keep it to the few the question needs.
-2. **Brief each specialist as a subagent**, with the full mission: the question, the files to read,
-   what to deliver, and the format below. Run independent specialists in parallel. Every brief
-   starts with the library: run the `knowledge` skill's search first, paste what it returned into
-   the brief, and tell the specialist to research only what is missing and to save every new
-   finding as a linked note (or replace the note it makes obsolete).
-3. **Format every specialist writes** (saved to a file in the project, not only in chat):
-   - one-line answer first;
-   - each claim marked **[FACT]** (with its source: link, file, command output) or **[INFERENCE]**;
-   - what would change the conclusion;
-   - what they did not check.
-4. **Independent review**: a separate subagent, who did not do the work, attacks it. Its brief is to
-   attack the premises, not just the structure: wrong assumptions, contradictions between
-   specialists, missing costs, what the owner would have to do by hand. Give it the specialists'
-   files, not your summary.
+1. **Pick** from the workspace `ROUTING.md` the cards the subject needs, usually one or two plus the
+   reviewer. If no card fits, write one in the same format first (`specialists/<role>.md`).
+2. **Search the library first** (`knowledge` skill). What it returns goes into every brief, so no
+   specialist redoes research the workspace already has.
+3. **Brief each specialist as a subagent.** The brief contains, in this order:
+   - the line `Role card: <role>` and the full text of that card (the hook blocks a brief without it);
+   - the question, the files to read, the library results, and what to deliver;
+   - "research only what is missing; save each new finding as a linked note, or replace the note
+     it makes obsolete; finish with the never-skip checklist of your card".
+   Run independent specialists in parallel.
+4. **Review.** A separate subagent with `Role card: reviewer` (and that card's text) receives the
+   specialists' role cards and their full outputs, not your summary. It checks every never-skip item,
+   attacks the premises, recomputes the numbers and returns a verdict.
 5. **Merge**: fix what the reviewer proved; record what stays open in STATE.md section 7. Only then
    does anything go to the owner, through the card if it needs a decision.
 

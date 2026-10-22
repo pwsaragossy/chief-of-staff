@@ -12,10 +12,15 @@ What it gives you:
   registration, stages with gates (continue, stop, pause, redo).
 - **Standard handoffs.** Every project has a `STATE.md` in one format (adapted from the I-PASS
   clinical handoff). The next session writes an arrival synthesis and checks one fact before acting.
-- **Specialists and an independent reviewer.** No generalist answers: senior specialists as
-  subagents, each claim marked FACT or INFERENCE, and someone who did not do the work attacks it.
-- **A knowledge base that gets used.** What you send to study becomes a note linked to a project;
-  the project briefing lists it until the project session integrates or discards it.
+- **Specialists with a written method, and an independent reviewer, enforced by hooks.** Eight
+  role cards (`specialists/`: researcher, product, engineer, finance, legal, marketing, security,
+  reviewer) say what each senior specialist gathers first, its method, its toolbox and when to use
+  each tool, what it never skips, its evidence standard and output format. A substantive turn
+  cannot end without at least one specialist and the reviewer.
+- **A library consulted before research.** Notes in `knowledge/notes/` link to each other
+  (`links:`), and a newer note replaces the one it makes obsolete (`supersedes:`; the old file is
+  deleted and every reference repointed). Web search is blocked until the library was searched,
+  and a turn that searched the web cannot end until it saved what it found.
 - **A routing table** (`ROUTING.md`) so nobody has to remember whom to call.
 - **An optional dispatcher** that starts the next session on its own. Off by default.
 
@@ -40,7 +45,8 @@ workspace (default `~/chief-of-staff`) and creates:
   central/CLAUDE.md      the one door to the owner
   board/                 one card per open item (status, project, owner, due)
   projects/<slug>/       CLAUDE.md + STATE.md per project
-  knowledge/             inbox/, notes/, topics/, templates/
+  knowledge/             inbox/, notes/, templates/
+  specialists/           one role card per specialist (edit freely)
   ROUTING.md             who to call for what
 ```
 
@@ -56,11 +62,18 @@ Skills: `setup`, `new-project`, `handoff`, `specialists`, `knowledge`.
 
 ## Hooks
 
-Both hooks do nothing outside a workspace, so the plugin does not affect your other projects.
+Every hook does nothing outside a workspace, so the plugin does not affect your other projects.
 
 - `SessionStart` prints a factual briefing (at most 2000 characters): cards waiting on the owner,
   the project's status and next action, new knowledge notes to integrate.
 - `PreToolUse` on `AskUserQuestion` blocks button questions in any session that is not `central/`.
+- `scripts/protocol.sh` (UserPromptSubmit, PreToolUse, PostToolUse, SubagentStop, Stop) restates
+  the protocol every turn and enforces it: a subagent brief must name an existing role card
+  (`Role card: <role>`, or `Role card: utility` for a helper); a specialist cannot finish without
+  its never-skip checklist; web search waits for a library search (`scripts/library.sh search`);
+  a substantive turn (a deliverable file, web research, or a long answer) cannot end without a
+  specialist and the reviewer, nor research end without a saved note. Each push happens once per
+  turn. Every turn is logged to `<workspace>/.protocol.log`, the adherence record.
 
 ## The dispatcher (off by default)
 
@@ -114,9 +127,10 @@ What is ours, with no equivalent found in ECC:
 - a project playbook with a coherence check of the success criteria and gates;
 - a per-project state snapshot with an arrival synthesis by the next session;
 - an unattended dispatcher with a run ceiling, budget, timeout, no shell, and git hook checks;
-- specialists who mark each claim FACT or INFERENCE, attacked by an independent reviewer
-  (ECC's `santa-method` and `council` skills are the closest, for code and content review);
-- a knowledge base where each note is linked to a project and must be integrated or discarded;
+- specialists who work from written role cards and are checked by hooks, attacked by an
+  independent reviewer (ECC's `santa-method` and `council` skills are the closest, for code and
+  content review, and they are skills the model may not call);
+- a linked library, searched before the web, where a newer note replaces the old one;
 - a routing table of whom to call for what.
 
 ## Known limits
@@ -128,6 +142,12 @@ What is ours, with no equivalent found in ECC:
   `CLAUDE.md` rules are what prevent it.
 - The ask guard has been tested by script, not yet in an interactive session.
 - The reviewer is the same model with a different brief. It catches incoherence, not authority.
+- "Substantive" is a heuristic (deliverable file, web research, or an answer over about 2500
+  characters). A short answer to a real decision is not forced through specialists.
+- The hooks check that specialists and the reviewer ran, not that they were good.
+- The role cards' sources were checked once by a reviewer on 2026-10-22; a few dates and versions
+  (RICE post, Nielsen heuristics revision, EDPB guideline versions) are left without a year on
+  purpose. Thresholds marked "default, adjust to the case" are conventions, not standards.
 - The dispatcher's guard rails rely on Claude Code permission rules; they are not a sandbox. For a
   stronger boundary, run the dispatcher inside a container or a separate user account.
 - Notes still `new` after 21 days are to be discarded by the project session (a rule in the

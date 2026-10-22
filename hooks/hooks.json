@@ -4,14 +4,22 @@
       {
         "matcher": "startup|resume|clear|compact",
         "hooks": [
-          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/briefing.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/briefing.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ],
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/protocol.sh\"", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/protocol.sh\"",
+            "timeout": 5
+          }
         ]
       }
     ],
@@ -19,13 +27,21 @@
       {
         "matcher": "AskUserQuestion",
         "hooks": [
-          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/ask-guard.sh\"", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/ask-guard.sh\"",
+            "timeout": 5
+          }
         ]
       },
       {
-        "matcher": "WebSearch|WebFetch",
+        "matcher": "WebSearch|WebFetch|Agent",
         "hooks": [
-          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/protocol.sh\"", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/protocol.sh\"",
+            "timeout": 5
+          }
         ]
       }
     ],
@@ -33,14 +49,33 @@
       {
         "matcher": "Agent|WebSearch|WebFetch|Write|Edit|MultiEdit|Bash|Read|Grep|Glob",
         "hooks": [
-          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/protocol.sh\"", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/protocol.sh\"",
+            "timeout": 5
+          }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/protocol.sh\"", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/protocol.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/protocol.sh\"",
+            "timeout": 5
+          }
         ]
       }
     ]

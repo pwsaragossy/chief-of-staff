@@ -104,7 +104,7 @@ P="$W/projects/alpha"
 h() { printf '%s' "$1" | CLAUDE_PROJECT_DIR="$2" sh "$here/protocol.sh"; }
 ev() { printf '{"session_id":"s1","hook_event_name":"%s"%s}' "$1" "${2:-}"; }
 rc() { h "$1" "$2" >/dev/null 2>&1; echo $?; }
-check "prompt hook restates the protocol" 'h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "at least one specialist and one independent reviewer"'
+check "prompt hook restates the protocol" 'h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "at least one specialist and the independent reviewer"'
 check "prompt hook is silent outside a workspace" '[ -z "$(h "$(ev UserPromptSubmit)" /tmp)" ]'
 check "a short turn ends freely" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
 check "web search is blocked before the library" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
@@ -113,7 +113,9 @@ check "web search is allowed after the library" '[ "$(rc "$(ev PreToolUse ",\"to
 h "$(ev PostToolUse ",\"tool_name\":\"WebSearch\"")" "$P"
 check "research without specialists or saving cannot end" 'h "$(ev Stop ",\"stop_hook_active\":false")" "$P" 2>&1 | grep -q "specialists skill" && h "$(ev Stop ",\"stop_hook_active\":false")" "$P" 2>&1 | grep -q "saved nothing to the library"'
 check "the gate lets go on the second stop" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":true")" "$P")" = 0 ]'
-h "$(ev PostToolUse ",\"tool_name\":\"Agent\"")" "$P"; h "$(ev PostToolUse ",\"tool_name\":\"Agent\"")" "$P"
+h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher ...\"}")" "$P"
+check "a specialist without the reviewer cannot end" 'h "$(ev Stop ",\"stop_hook_active\":false")" "$P" 2>&1 | grep -q "1 specialist(s) and 0 reviewer(s)"'
+h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: reviewer ...\"}")" "$P"
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/knowledge/notes/n9.md\"}")" "$P"
 check "specialists plus a saved note end freely" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
@@ -122,7 +124,15 @@ check "a deliverable without specialists cannot end" '[ "$(rc "$(ev Stop ",\"sto
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/STATE.md\"}")" "$P"
 check "updating STATE.md is not a deliverable" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
-check "every turn is logged for the adherence metric" 'grep -q "substantive=1 agents=2 library=1 web=1 saved=1" "$W/.protocol.log"'
+check "every turn is logged for the adherence metric" 'grep -q "substantive=1 agents=2 specialists=1 reviewers=1 library=1 web=1 saved=1" "$W/.protocol.log"'
+mkdir -p "$W/specialists"; : > "$W/specialists/researcher.md"
+check "a subagent without a role card is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"do research\"}")" "$P")" = 2 ]'
+check "a role card that does not exist is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: astrologer\"}")" "$P")" = 2 ]'
+check "an existing role card is allowed" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher\"}")" "$P")" = 0 ]'
+check "a utility helper is allowed" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: utility\"}")" "$P")" = 0 ]'
+check "a specialist cannot finish without its checklist" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance answer\"")" "$P")" = 2 ]'
+check "a specialist with its checklist finishes" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Never-skip checklist ok\"")" "$P")" = 0 ]'
+check "a helper without a role finishes" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"found 3 files\"")" "$P")" = 0 ]'
 
 # library: search follows links; replace deletes the old note and repoints references
 N="$W/knowledge/notes"

@@ -22,6 +22,7 @@ in your shell, so copy the literal path shown here into your commands.
    for d in board projects knowledge/inbox knowledge/notes; do : > "$W/$d/.gitkeep"; done
    cp "$T/central/CLAUDE.md" "$W/central/CLAUDE.md"
    cp "$T/ROUTING.md" "$W/ROUTING.md"
+   mkdir -p "$W/specialists" && cp "$T"/specialists/*.md "$W/specialists/"
    cp "$T/knowledge/note.md" "$W/knowledge/templates/note.md"
    printf '.dispatch.lock/\n.dispatch.log\n.dispatch-*.out\n.protocol.log\n' > "$W/.gitignore"
    git -C "$W" init -q
