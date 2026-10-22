@@ -74,7 +74,7 @@ action needs nobody. Guard rails:
   `COS_RUN_TIMEOUT` seconds per run (default 1800); one dispatcher at a time, a stale lock is
   taken over;
 - the unattended session gets read and edit tools only, with no shell at all (so no git, no
-  Keychain, no push), cannot ask questions, and cannot edit `CLAUDE.md`, `.claude/`, `.git/` or the
+  Keychain, no push), cannot ask questions, and cannot edit `CLAUDE.md`, `.claude/`, `.git/`, `.gitattributes` or the
   dispatcher's own files (deny rules anchored to the workspace's absolute path);
 - the dispatcher itself commits after each run, with git hooks and other code-running git config
   switched off; if `.git/config` or `.git/hooks` changed anyway, it stops and commits or pushes nothing;

@@ -86,7 +86,7 @@ CLAUDE_BIN="$stub" COS_ALLOW_NO_BACKUP=1 sh "$here/dispatcher.sh" "$W"
 check "an interrupted run is parked by the next dispatcher" 'grep -q "parked alpha: previous run was interrupted" "$W/.dispatch.log" && [ "$(fm_get "$W/projects/alpha/STATE.md" dispatch)" = off ]'
 fm_set "$W/projects/alpha/STATE.md" next "$(printf 'evil\033[2Jline')"
 check "briefing strips control characters" '! b "$W/projects/alpha" | grep -q "$(printf "\033")" && b "$W/projects/alpha" | grep -q "evil\[2Jline"'
-check "permission mode is default with a closed tool list" 'grep -q -- "--permission-mode default" "$W/.dispatch-alpha.out" && grep -q "Edit(/$W/.git/\*\*)" "$W/.dispatch-alpha.out" && grep -q "Edit(/$W/.dispatch\*)" "$W/.dispatch-alpha.out" && ! grep -q "Bash(git" "$W/.dispatch-alpha.out"'
+check "permission mode is default with a closed tool list" 'grep -q -- "--permission-mode default" "$W/.dispatch-alpha.out" && grep -q "Edit(/$W/.git/\*\*)" "$W/.dispatch-alpha.out" && grep -q "Edit(/$W/.dispatch\*)" "$W/.dispatch-alpha.out" && grep -q "Edit(/$W/\*\*/.gitattributes)" "$W/.dispatch-alpha.out" && ! grep -q "Bash(git" "$W/.dispatch-alpha.out"'
 check "the dispatcher commits the run itself" 'git -C "$W" log --format=%s | grep -q "^dispatch: alpha$"'
 cat > "$W/evil.sh" <<EOF
 #!/bin/sh

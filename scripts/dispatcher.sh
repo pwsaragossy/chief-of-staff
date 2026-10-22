@@ -72,7 +72,7 @@ for s in "$root"/projects/*/STATE.md; do
     --max-budget-usd "$budget" \
     --allowedTools Read Glob Grep Edit Write \
     --disallowedTools Bash AskUserQuestion \
-      "Edit(/$root/**/CLAUDE.md)" "Edit(/$root/**/.claude/**)" "Edit(/$root/.git/**)" "Edit(/$root/.dispatch*)" \
+      "Edit(/$root/**/CLAUDE.md)" "Edit(/$root/**/.claude/**)" "Edit(/$root/.git/**)" "Edit(/$root/**/.gitattributes)" "Edit(/$root/.dispatch*)" \
     >> "$root/.dispatch-$p.out" 2>&1) &
   run=$!
   rm -f "$lock/timeout"
