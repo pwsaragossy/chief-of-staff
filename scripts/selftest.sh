@@ -377,8 +377,21 @@ check "setup can join a team library" 'sh "$here/setup.sh" create "$V/m3" --join
 check "use only runs from a project folder" 'K m1 central use t1 | grep -q "from a project folder"'
 check "agents cannot write a project's .library" '[ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$V/m1/projects/a/.library\"}")" "$V/m1/projects/a")" = 2 ] && [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo t1 > .library\"}")" "$V/m1/projects/a")" = 2 ]'
 check "switching a project's library asks the owner" 'hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh library.sh use t1\"}")" "$V/m1/projects/a" | grep -q "\"permissionDecision\":\"ask\""'
+check "use, join and leave ask the owner in any quoting, tab or variable form" '( for c in "sh library.sh u'"\\''\\''"'se t1" "sh library.sh \\\"join\\\" x" "sh library.sh\\tleave t1" "sh library.sh --lib t1 use t1" "c=use; sh library.sh \$c t1" "echo use | xargs sh library.sh"; do hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$c\"}")" "$V/m1/projects/a" | grep -q "\"permissionDecision\":\"ask\"" || { echo "no ask: $c"; exit 1; }; done )'
+J='{"command":"sh library.sh search pricing users","description":"use the library"}'   # bash brace-expands {a,b} built inline
+check "a --lib value with a space does not hide join" 'hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh library.sh --lib '"'"'a b'"'"' join u t3\"}")" "$V/m1/central" | grep -q "\"permissionDecision\":\"ask\""'
+check "the marker and .library cannot be written through a glob" '( for c in "chmod u+w .[c]hief-of-staff" "echo t2 > projects/a/.[l]ibrary" "cp x projects/a/?library" "tee .l*"; do [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$c\"}")" "$V/m1")" = 2 ] || { echo "not blocked: $c"; exit 1; }; done ) && [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -rf build/*\"}")" "$V/m1")" = 0 ]'
+check "the plugin's own folder name and 2>&1 are not a write to the marker" '[ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh /p/chief-of-staff/scripts/library.sh 2>&1 | head; cat .library 2>/dev/null\"}")" "$V/m1")" = 0 ]'
+JB1=$(printf '{"command":"%s"}' 'echo t2 > projects/a/{.,x}library'); JB2=$(printf '{"command":"echo t2 > projects/a/$%s\\\\056library%s"}' "'" "'")
+check "brace expansion and \$'...' quoting cannot spell the protected names" '[ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$JB1")" "$V/m1")" = 2 ] && [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$JB2")" "$V/m1")" = 2 ] && [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo \${HOME}/x > out.txt\"}")" "$V/m1")" = 0 ]'
+check "a library search does not ask" '[ -z "$(hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$J")" "$V/m1/projects/a")" ]'
 K m1 projects/a use t1 >/dev/null
+check "a personal session cannot write into a team library, not even through .. or another letter case" 'W() { rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$1\"}")" "$2"; }; r=$(W "$V/m1/libraries/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/knowledge/../libraries/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/LIBRARIES/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/knowledge/nope/../../libraries/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/libraries/t1/notes/ok.md" "$V/m1/projects/a")$(W "$V/m1/knowledge/notes/ok.md" "$V/m1/central"); [ "$r" = 222200 ] || { echo "got $r"; false; }'
 check "a team project writes and searches its team's library" '[ "$(K m1 projects/a where)" = "$V/m1/libraries/t1" ] && [ "$(K m1 central where)" = "$V/m1/knowledge" ]'
+check "agents cannot write inside a library's git data" '[ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$V/m1/libraries/t1/.git/cos-foreign\"}")" "$V/m1/projects/a")" = 2 ]'
+hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$V/m1/projects/a" >/dev/null; printf 'personal\n' > "$V/m1/projects/a/.library"
+check "a .library changed without library.sh stops the turn" 'hk "$(ev Stop ",\"stop_hook_active\":false")" "$V/m1/projects/a" 2>&1 | grep -q "The library settings (.chief-of-staff or a project.s .library) changed without library.sh"'
+printf 't1\n' > "$V/m1/projects/a/.library"
 TN="$V/m1/libraries/t1/notes"; PN="$V/m1/knowledge/notes"
 note2() { d=$1; shift; N="$d" note "$@"; }
 N0=$N; N=$PN; note pers-1 "Personal salary target" 2026-01-01 "My salary target." "none similar"
@@ -394,21 +407,72 @@ touch "$TN/team-2.md"
 check "the turn cannot end with a team note linking another library" 'hk "$(ev Stop ",\"stop_hook_active\":false")" "$V/m1/projects/a" 2>&1 | grep -q "team-2.md: links to \[\[pers-1\]\], a note of the library .personal."'
 rm -f "$TN/team-2.md"
 check "a team project's delivery cannot cite a personal note" 'printf -- "---\ntrack: t\nstage: 1\ndelivery: 1\n---\n## Stage 1: A\n- [x] a | A | card: product | needs: - | evidence: o\n- [x] r | R | card: reviewer | needs: a | evidence: o\n" > "$V/m1/projects/a/TRACK.md"; printf x > "$V/m1/projects/a/o"; printf "status: delivered\n" > /dev/null; printf "asked, delivered\n\nSources: [[pers-1]] [[team-1]]\n" > "$V/m1/projects/a/DELIVERY.md"; sed -e "s/{{PROJECT_NAME}}/a/; s/^status: .*/status: delivered/" "$here/../templates/project/STATE.md" > "$V/m1/projects/a/STATE.md"; sh "$here/track.sh" check "$V/m1/projects/a" | grep -q "cites \[\[pers-1\]\] from the library .personal." && ! sh "$here/track.sh" check "$V/m1/projects/a" | grep -q "team-1"'
-sh "$here/sync.sh" push "$V/m1/libraries/t1" a "$V/m1"
+sh "$here/sync.sh" push "$V/m1/libraries/t1" a "$V/m1" notes/team-1.md
 check "sync pushes the team's notes" 'git -C "$V/t1.git" ls-tree -r --name-only HEAD | grep -qx notes/team-1.md && grep -q "pushed ok" "$V/m1/libraries/t1/.git/cos-sync"'
-check "the inbox never goes to the team repo" ': > "$V/m1/libraries/t1/inbox/raw.txt"; sh "$here/sync.sh" push "$V/m1/libraries/t1" a "$V/m1"; ! git -C "$V/t1.git" ls-tree -r --name-only HEAD | grep -q "^inbox/"'
+check "the inbox never goes to the team repo" ': > "$V/m1/libraries/t1/inbox/raw.txt"; sh "$here/sync.sh" push "$V/m1/libraries/t1" a "$V/m1" inbox/raw.txt; ! git -C "$V/t1.git" ls-tree -r --name-only HEAD | grep -q "^inbox/"'
 check "the other member gets them at session start" 'CLAUDE_PROJECT_DIR="$V/m3/central" sh "$here/briefing.sh" >/dev/null; i=0; while [ $i -lt 50 ] && [ ! -f "$V/m3/libraries/t1/notes/team-1.md" ]; do i=$((i+1)); sleep 0.1; done; [ -f "$V/m3/libraries/t1/notes/team-1.md" ]'
 hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$V/m1/projects/a" >/dev/null
 N0=$N; N=$TN; note team-3 "Team support hours" 2026-01-03 "9 to 5." "none similar"; N=$N0
 hk "$(ev Stop ",\"stop_hook_active\":false")" "$V/m1/projects/a" >/dev/null 2>&1
 check "a turn that saved a good team note pushes it by itself" 'i=0; while [ $i -lt 50 ] && ! git -C "$V/t1.git" ls-tree -r --name-only HEAD | grep -qx notes/team-3.md; do i=$((i+1)); sleep 0.1; done; git -C "$V/t1.git" ls-tree -r --name-only HEAD | grep -qx notes/team-3.md'
+# what leaves for the team is exactly what the turn's gate checked (review round 4)
+PA=$V/m1/projects/a; TL=$V/m1/libraries/t1
+ta() { hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$PA" >/dev/null; }
+sa() { hk "$(ev Stop ",\"stop_hook_active\":${1:-false}")" "$PA" 2>&1; sleep 1; }
+on() { git -C "$V/t1.git" ls-tree -r --name-only HEAD | grep -qx "$1"; }
+git clone -q "$V/t1.git" "$V/mate"; printf -- '---\nid: mate-1\n---\nSee [[their-private-x]].\n' > "$V/mate/notes/mate-1.md"
+git -C "$V/mate" add notes && git -C "$V/mate" -c user.name=t -c user.email=t@t commit -qm mate && git -C "$V/mate" push -q
+ta; sh "$here/sync.sh" pull "$TL"
+check "a teammate's note pulled during the turn is not blamed on this session" '[ -f "$TN/mate-1.md" ] && ! sa | grep -q mate-1'
+ta; N0=$N; N=$TN; note team-4 "Team refund window" 2026-01-05 "See [[pers-1]]." "none similar"; N=$N0
+sa >/dev/null; sa true >/dev/null
+ta; N0=$N; N=$TN; note team-5 "Team invoice day" 2026-01-05 "The 5th." "none similar"; N=$N0
+check "a note blocked in one turn is not pushed by the next turn" 'sa | grep -q "team-4.md: links to \[\[pers-1\]\]" && ! on notes/team-4.md && ! on notes/team-5.md'
+rm -f "$TN/team-4.md"; ta; : > "$TN/dump.txt"; : > "$TL/templates/leak.txt"
+check "only notes go to the team: other files block the push" 'sa | grep -q "Only notes (notes/<id>.md) go to the team library .t1.. Remove or move these first: notes/dump.txt templates/leak.txt" && ! on notes/dump.txt && ! on notes/team-5.md'
+rm -f "$TN/dump.txt" "$TL/templates/leak.txt"
+N0=$N; N=$PN; note pers-3 "Owner pricing floor for the pilots" 2026-01-05 "The owner never goes below 400 a month on any pilot, whatever the client says." "none similar"; N=$N0
+ta; sed 's/^id: pers-3/id: team-6/' "$PN/pers-3.md" > "$TN/team-6.md"
+check "a verbatim copy of a personal note is blocked" 'sa | grep -q "team-6.md: copies text from $PN/pers-3.md" && ! on notes/team-6.md'
+rm -f "$TN/team-6.md"; ta
+printf -- '---\nid: team-8\n---\n# Context\n\nSee the owner: "> The owner never goes below 400 a month on any pilot, whatever the client says. Noted."\n\nCompared: none similar\n' > "$TN/team-8.md"
+check "a copy inside a quote or a longer line is still a copy" 'sa | grep -q "team-8.md: copies text from $PN/pers-3.md" && ! on notes/team-8.md'
+rm -f "$TN/team-8.md"; ta
+printf -- '---\nid: team-7\nsources:\n  - https://www.example.com/reports/2026/market-size-study.pdf\n---\n# Owner pricing floor for the pilots\n\n- https://www.example.com/reports/2026/market-size-study.pdf\nShort body.\n' > "$TN/team-7.md"
+sed 's/team-7/pers-7/' "$TN/team-7.md" > "$PN/pers-7.md"
+check "a shared source, title or list item is not a copy" '! sa | grep -q "copies text"'
+rm -f "$TN/team-7.md" "$PN/pers-7.md"; ta; rm -f "$TN/team-1.md"
+check "deleting a team note says to retire it, and nothing is pushed" 'sa | grep -q "Deleting a note does not reach the team library .t1.: retire it instead" && on notes/team-1.md'
+git -C "$TL" checkout -q -- notes/team-1.md; ta
+check "with the problems gone the next turn pushes the good note" 'sa >/dev/null; i=0; while [ $i -lt 50 ] && ! on notes/team-5.md; do i=$((i+1)); sleep 0.1; done; on notes/team-5.md'
+mkdir -p "$V/m1/projects/b"; ln -s "$TN/team-5.md" "$PA/f.md"
+check "a symlink to another library's note is not a way in" 'W() { rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$1\"}")" "$2"; }; [ "$(W "$PA/f.md" "$V/m1/central")" = 2 ]'
+rm -f "$PA/f.md"
 sh "$here/sync.sh" pull "$V/m3/libraries/t1"
 sed -i.bak 's/9 to 5\./8 to 4./' "$V/m3/libraries/t1/notes/team-3.md"; sed -i.bak 's/9 to 5\./10 to 6./' "$TN/team-3.md"; rm -f "$TN"/*.bak "$V/m3/libraries/t1/notes"/*.bak
-sh "$here/sync.sh" push "$V/m3/libraries/t1" b "$V/m3"
-check "a conflict is undone and becomes a card for the session, not the owner" '! sh "$here/sync.sh" push "$V/m1/libraries/t1" a "$V/m1" && grep -q "^owner: session-a" "$V/m1/board/Library conflict - t1.md" && grep -q "conflict" "$V/m1/libraries/t1/.git/cos-sync" && [ ! -d "$V/m1/libraries/t1/.git/rebase-merge" ] && grep -q "10 to 6" "$TN/team-3.md"'
+sh "$here/sync.sh" push "$V/m3/libraries/t1" b "$V/m3" notes/team-3.md
+check "a conflict is undone and becomes a card for the session, not the owner" '! sh "$here/sync.sh" push "$V/m1/libraries/t1" a "$V/m1" notes/team-3.md && grep -q "^owner: session-a" "$V/m1/board/Library conflict - t1.md" && grep -q "conflict" "$V/m1/libraries/t1/.git/cos-sync" && [ ! -d "$V/m1/libraries/t1/.git/rebase-merge" ] && grep -q "10 to 6" "$TN/team-3.md"'
+N0=$N; N=$TN; note pending-x "Pending note of a team session" 2026-01-04 "Not saved by central." "none similar"; N=$N0
+hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$V/m1/central" >/dev/null
+N0=$N; N=$TN; note team-leak "Owner salary target" 2026-01-04 "Private." "none similar"; N=$N0
+check "a team note written by hand from a personal session stops the turn and is not pushed" 'o=$(hk "$(ev Stop ",\"stop_hook_active\":false")" "$V/m1/central" 2>&1); printf "%s" "$o" | grep -q "notes/team-leak.md" && ! printf "%s" "$o" | grep -q "pending-x" && hk "$(ev Stop ",\"stop_hook_active\":false")" "$V/m1/central" 2>&1 | grep -q "Notes changed in the team library .t1., which this session does not use" && sleep 1 && ! git -C "$V/t1.git" ls-tree -r --name-only HEAD | grep -qx notes/team-leak.md'
+rm -f "$TN/team-leak.md" "$TN/pending-x.md"
 check "leave refuses while a project uses the team" 'K m1 central leave t1 | grep -q "projects still use .t1.: a"'
 check "leave refuses notes not pushed yet" 'rm -f "$V/m1/projects/a/.library"; K m1 central leave t1 | grep -q "not pushed to the team yet"'
 check "leave disconnects the team and keeps the local copy" 'K m3 central leave t1 | grep -q "Disconnected .t1." && ! grep -q "^team: t1 " "$V/m3/.chief-of-staff" && ls -d "$V/m3/libraries"/t1.left-* >/dev/null && K m3 central libs | grep -vq "^t1	"'
+git clone -q "$V/t1.git" "$V/raw" && ln -s /etc/hosts "$V/raw/notes/evil.md" && git -C "$V/raw" add notes/evil.md && git -C "$V/raw" -c user.name=t -c user.email=t@t commit -qm evil && git -C "$V/raw" push -q
+sh "$here/setup.sh" create "$V/m4" >/dev/null
+check "a symlink a teammate pushed arrives as a plain file at join" 'K m4 central join "$V/t1.git" t1 >/dev/null; [ -f "$V/m4/libraries/t1/notes/evil.md" ] && [ ! -L "$V/m4/libraries/t1/notes/evil.md" ]'
+ln -s /etc/hosts "$V/raw/notes/evil2.md" && git -C "$V/raw" add notes/evil2.md && git -C "$V/raw" -c user.name=t -c user.email=t@t commit -qm evil2 && git -C "$V/raw" push -q
+check "and at sync pull" 'sh "$here/sync.sh" pull "$V/m4/libraries/t1"; [ -f "$V/m4/libraries/t1/notes/evil2.md" ] && [ ! -L "$V/m4/libraries/t1/notes/evil2.md" ]'
+check "a lock held by a running sync says busy" 'mkdir "$V/m4/libraries/t1/.git/cos-sync.lock" && echo $$ > "$V/m4/libraries/t1/.git/cos-sync.lock/pid" && sh "$here/sync.sh" pull "$V/m4/libraries/t1"; grep -q "sync busy" "$V/m4/libraries/t1/.git/cos-sync"; r=$?; rm -f "$V/m4/libraries/t1/.git/cos-sync.lock/pid"; rmdir "$V/m4/libraries/t1/.git/cos-sync.lock"; [ $r = 0 ]'
+mkdir "$V/m4/libraries/t1/.git/cos-sync.lock"; touch -t 202601010000 "$V/m4/libraries/t1/.git/cos-sync.lock"
+check "a lock left by a killed sync expires" 'rm -f "$V/m4/libraries/t1/.git/cos-sync"; sh "$here/sync.sh" pull "$V/m4/libraries/t1"; grep -q "pulled ok" "$V/m4/libraries/t1/.git/cos-sync"'
+git init -q --bare "$V/t5.git"; printf '#!/bin/sh\nexit 1\n' > "$V/t5.git/hooks/pre-receive"; chmod +x "$V/t5.git/hooks/pre-receive"
+K m4 central join "$V/t5.git" t5 >/dev/null; rm -f "$V/t5.git/hooks/pre-receive"
+check "leave refuses a team library that was never pushed" 'K m4 central leave t5 | grep -q "not pushed to the team yet"'
+N0=$N; N=$V/m4/libraries/t5/notes; note t5-1 "First team note" 2026-01-06 "Hello." "none similar"; N=$N0
+check "a library whose first push failed is pushed by the next sync" 'sh "$here/sync.sh" push "$V/m4/libraries/t5" a "$V/m4" notes/t5-1.md; git -C "$V/t5.git" ls-tree -r --name-only HEAD | grep -qx notes/t5-1.md && grep -q "pushed ok" "$V/m4/libraries/t5/.git/cos-sync"'
 rm -rf "$V"
 
 # speed: 2,000 notes, every library step stays inside the hook budget

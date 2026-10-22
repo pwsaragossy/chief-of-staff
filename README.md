@@ -31,6 +31,15 @@ What it gives you:
   merged, or they coexist as valid options. Every prompt brings the notes that bear on it, briefs
   carry a `Library:` line, web search waits for a library search, and DELIVERY.md cites its sources.
   The library can live on an external disk, a cloud folder or a private repo (`library.sh offload`).
+- **Team libraries, kept apart from yours.** Join a team's library by its git link, at setup or later
+  from central (`library.sh join <link>`; an empty private repo starts one); leave it with
+  `library.sh leave`. Each project picks one library (`library.sh use <team>`, asked in
+  `new-project`); central and the other projects use your personal library. A session searches and
+  writes only its own library (`search --all` shows the others, labelled); a team note cannot link
+  a personal note or another team's, and a personal note that links a team note gets a warning.
+  Team notes are pulled at session start and pushed after a turn whose notes pass the checks; a
+  conflict with a teammate becomes a card for that project's session. Join, leave and use ask you
+  first.
 - **A routing table** (`ROUTING.md`) so nobody has to remember whom to call.
 - **A local panel**: green, yellow or red per project with the reason, a live map of each track
   (stages, deliverables by state, prerequisites, the delivery line, items added since opening), decisions
@@ -50,10 +59,11 @@ Claude Code clones with your existing git credentials
 `/plugin marketplace add` and `/plugin install` instead.
 
 Then open Claude Code in any folder and run `/chief-of-staff:setup`. It looks at your computer first,
-then asks three questions in one block, each with a recommendation: where the workspace goes (default
-`~/chief-of-staff`); where the company library goes (inside the workspace, your Obsidian vault, iCloud
-Drive, Dropbox, Google Drive, OneDrive or an external disk); and, when the GitHub CLI is signed in,
-whether to back up to private GitHub repositories. Then it creates:
+then asks up to four questions in one block, each with a recommendation: where the workspace goes
+(default `~/chief-of-staff`); where the company library goes (inside the workspace, your Obsidian
+vault, iCloud Drive, Dropbox, Google Drive, OneDrive or an external disk); when the GitHub CLI is
+signed in, whether to back up to private GitHub repositories; and whether to join a team library
+(paste its git link). Then it creates:
 
 ```
 <workspace>/
@@ -62,6 +72,7 @@ whether to back up to private GitHub repositories. Then it creates:
   board/                 one card per open item (status, project, owner, due)
   projects/<slug>/       CLAUDE.md + STATE.md + TRACK.md per project
   knowledge/             inbox/, notes/, templates/ (or the folder you picked; move later: library.sh offload)
+  libraries/<team>/      one git clone per team library you joined (ignored by the workspace repo)
   specialists/           one role card per specialist (edit freely)
   ROUTING.md             who to call for what
 ```
@@ -203,6 +214,11 @@ What is ours, with no equivalent found in ECC:
   check that the decision was made and recorded.
 - Notes written by shell commands are caught when the command names the library path; other
   bypasses are caught by `library.sh doctor` and the panel, not by the turn gate.
+- Team libraries: the hooks block links and writes across libraries, but not an agent retyping
+  personal content in its own words into a team note; the reviewer and the team read what is shared.
+  Confirmation for join, leave and use matches the command text, so a renamed copy of library.sh
+  is not seen, and neither is a protected file name (`.chief-of-staff`, `.library`) built inside a
+  shell variable; those files are read-only on disk.
 - An offloaded library: no automatic sync; Windows paths are not supported; in iCloud, keep the
   folder downloaded on the computer (placeholder files are not seen).
 

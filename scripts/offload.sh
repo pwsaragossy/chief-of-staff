@@ -70,6 +70,7 @@ grep -v '^library:' "$m" > "$m.tmp.$$" || : > "$m.tmp.$$"
 [ "$dest" = "$home" ] || printf 'library: %s\n' "$dest" >> "$m.tmp.$$"
 chmod 444 "$m.tmp.$$"; mv -f "$m.tmp.$$" "$m"   # read-only: agents do not edit it by accident
 
+cos_cfgsave "$root"
 old=
 if [ "$lib" = "$home" ]; then
   old=$root/knowledge.offloaded-$(date +%Y%m%d-%H%M%S)

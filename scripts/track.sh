@@ -51,7 +51,9 @@ undelivered=$(printf '%s\n' "$rows" | awk -F "$US" -v d="$del" '$1 == "I" && $2 
 # A personal project may also cite a team's note; a team project cites only its own library (no leak).
 cites() {
   _r=$(cos_root "$dir") || return 0
-  _ln=$(cos_libname "$_r" "$dir"); _l=$(cos_libpath "$_r" "$_ln") || return 0
+  _ln=$(cos_libname "$_r" "$dir"); _l=$(cos_libpath "$_r" "$_ln") || {
+    [ "$_ln" = personal ] && return 0   # offline personal library: the briefing says so; nothing to compare against
+    echo "${2:-}$(basename "$1"): its sources cannot be checked, the team library '$_ln' is not reachable (library.sh where)"; return 0; }
   grep -o '\[\[[^]|#]*' "$1" 2>/dev/null | sed 's/^\[\[//' | sort -u | while IFS= read -r _i; do
     _n="$_l/notes/$_i.md"; _o=
     [ -f "$_n" ] || _o=$(cos_libs "$_r" | while IFS="$(printf '\t')" read -r _a _p; do [ -f "$_p/notes/$_i.md" ] && { printf '%s\t%s\n' "$_a" "$_p"; break; }; done)
