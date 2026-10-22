@@ -5,8 +5,9 @@ works for one owner. Version 0.1.
 
 What it gives you:
 
-- **One door to the owner.** Only the `central` session asks you anything. Project sessions write
-  their questions on a card in `board/` and keep working; central asks them all at once.
+- **One door to the owner.** Only the `central` session asks you for decisions. Project sessions
+  write them on a card in `board/` and keep working; central asks them all at once. The one
+  exception: any session may confirm the origin of an order before an irreversible step.
 - **A fixed project playbook.** Opening questions, a coherence check of the success criteria,
   registration, stages with gates (continue, stop, pause, redo).
 - **Standard handoffs.** Every project has a `STATE.md` in one format (adapted from the I-PASS
