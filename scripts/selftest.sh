@@ -473,6 +473,9 @@ sh "$here/setup.sh" create "$V/m4" >/dev/null
 check "a symlink a teammate pushed arrives as a plain file at join" 'K m4 central join "$V/t1.git" t1 >/dev/null; [ -f "$V/m4/libraries/t1/notes/evil.md" ] && [ ! -L "$V/m4/libraries/t1/notes/evil.md" ]'
 ln -s /etc/hosts "$V/raw/notes/evil2.md" && git -C "$V/raw" add notes/evil2.md && git -C "$V/raw" -c user.name=t -c user.email=t@t commit -qm evil2 && git -C "$V/raw" push -q
 check "and at sync pull" 'sh "$here/sync.sh" pull "$V/m4/libraries/t1"; [ -f "$V/m4/libraries/t1/notes/evil2.md" ] && [ ! -L "$V/m4/libraries/t1/notes/evil2.md" ]'
+git init -q --bare "$V/px.git"; sh "$here/setup.sh" create "$V/m5" >/dev/null 2>&1; K m5 central join "$V/px.git" personal-x >/dev/null 2>&1
+mkdir -p "$V/m5/projects/z"; c5=$(CLAUDE_PROJECT_DIR="$V/m5/central" sh -c '. "$1/lib.sh"; cos_cfgrec "$2"' x "$here" "$V/m5"); rm -f "$c5"
+check "a team named personal-x still counts as a team" 'grep -q "^team: personal-x " "$V/m5/.chief-of-staff" && hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$V/m5/projects/z" >/dev/null; [ ! -f "$c5" ]'
 check "a lock held by a running sync says busy" 'mkdir "$V/m4/libraries/t1/.git/cos-sync.lock" && echo $$ > "$V/m4/libraries/t1/.git/cos-sync.lock/pid" && sh "$here/sync.sh" pull "$V/m4/libraries/t1"; grep -q "sync busy" "$V/m4/libraries/t1/.git/cos-sync"; r=$?; rm -f "$V/m4/libraries/t1/.git/cos-sync.lock/pid"; rmdir "$V/m4/libraries/t1/.git/cos-sync.lock"; [ $r = 0 ]'
 mkdir "$V/m4/libraries/t1/.git/cos-sync.lock"; touch -t 202601010000 "$V/m4/libraries/t1/.git/cos-sync.lock"
 check "a lock left by a killed sync expires" 'rm -f "$V/m4/libraries/t1/.git/cos-sync"; sh "$here/sync.sh" pull "$V/m4/libraries/t1"; grep -q "pulled ok" "$V/m4/libraries/t1/.git/cos-sync"'

@@ -58,7 +58,7 @@ case $(jget hook_event_name) in
     rm -f "$st"/*
     : > "$st/start"   # notes modified after this are the turn's notes (whatever tool or path wrote them)
     # first use: trust the settings as they are, but only while there is no team to share with
-    [ -f "$(cos_cfgrec "$root")" ] || cos_libs "$root" | grep -qv '^personal' || cos_cfgsave "$root"
+    [ -f "$(cos_cfgrec "$root")" ] || cos_libs "$root" | cut -f1 | grep -qvx personal || cos_cfgsave "$root"
     # what each other team library holds now, so the turn end blames this session only for what it changed there
     cos_libs "$root" | while IFS="$TAB" read -r n q; do [ "$n" = personal ] || [ "$n" = "$lname" ] || [ ! -d "$q/.git" ] && continue
       { git -C "$q" rev-parse -q --verify HEAD; git -C "$q" status --porcelain -uall --no-renames; } > "$st/snap-$n" 2>/dev/null; done
@@ -282,7 +282,7 @@ LIBS
         sh "$(dirname "$0")/sync.sh" push "$q" "${project:-central}" "$root" "$@" </dev/null >/dev/null 2>&1 & )
     fi
     r=$(cos_cfgrec "$root")
-    [ ! -f "$r" ] && cos_libs "$root" | grep -qv '^personal' && gap "The record of the library settings is missing. Ask the owner to check library.sh libs from central and confirm library.sh trust."
+    [ ! -f "$r" ] && cos_libs "$root" | cut -f1 | grep -qvx personal && gap "The record of the library settings is missing. Ask the owner to check library.sh libs from central and confirm library.sh trust."
     [ -f "$r" ] && [ "$(cat "$r")" != "$(cos_cfg "$root")" ] && gap "The library settings (.chief-of-staff or a project's .library) changed without library.sh join, use or leave, which the owner approves. Restore them: git -C \"$root\" checkout -- .chief-of-staff projects (or delete a new .library)."
     [ -n "$lgaps" ] && reason="${reason:+$reason }Library notes written this turn have problems:
 $lgaps
