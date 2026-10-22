@@ -169,6 +169,7 @@ printf 'quick note about tax\n' > "$N/hurried.md"
 check "a hurried note is rejected at once by the save hook" '[ "$(rc "$(wev "$N/hurried.md")" "$P")" = 2 ] && wrote "$N/hurried.md" 2>&1 | grep -q "has no front matter"'
 check "a rejected note does not count as saved" '! [ -f "$CLAUDE_PLUGIN_DATA/turns/s1/saved" ]'
 check "and the turn cannot end while it is broken" 'stop | grep -q "hurried.md: has no front matter"'
+check "each rejected save is counted in the turn log" 'tail -n 1 "$W/.protocol.log" | grep -q "rejected=[1-9]"'
 rm -f "$N/hurried.md"
 
 note tax-1 "Tax rate on services" 2026-01-01 "Services pay 10 percent. Basics in [[vat-0001]]." "none similar"

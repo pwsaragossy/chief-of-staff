@@ -61,7 +61,7 @@ case $(jget hook_event_name) in
           1:"$lib/notes/"*.md)   # a note: checked now, while the agent still has it in context
             printf '%s\n' "$fp" >> "$st/notes"
             if p=$(sh "$L" check "$fp"); then mark saved; [ -n "$p" ] && echo "$p"
-            else echo "Library note rejected: fix it now, in $fp:
+            else echo x >> "$st/rejected.count"; echo "Library note rejected: fix it now, in $fp:
 $p" >&2; exit 2; fi ;;
           1:"$lib/"*|1:"$root/knowledge/"*) ;;   # inbox and templates: not a note, not a deliverable
           *) case $in in
@@ -143,10 +143,10 @@ $gaps
 Close each item with its proof file (evidence: path relative to the project folder), mark it [-] with why: when it does not apply, or move stage: back. A stage passes only when every item is closed."
     pushed=$(jget stop_hook_active)
     violation=0; [ "$pushed" = true ] && [ -n "$reason" ] && violation=1
-    printf '%s t=%s turn=%s project=%s substantive=%s agents=%s specialists=%s reviewers=%s library=%s web=%s saved=%s track=%s pushed=%s violation=%s notes=%s offline=%s\n' \
+    printf '%s t=%s turn=%s project=%s substantive=%s agents=%s specialists=%s reviewers=%s library=%s web=%s saved=%s track=%s pushed=%s violation=%s notes=%s offline=%s rejected=%s\n' \
       "$(date '+%F %T')" "$(date +%s)" "$sid" "${project:--}" "$substantive" "$agents" "$specialists" "$reviewers" \
       "$([ -f "$st/library" ] && echo 1 || echo 0)" "$([ -f "$st/web" ] && echo 1 || echo 0)" "$([ -f "$st/saved" ] && echo 1 || echo 0)" \
-      "$(printf '%s' "$gaps" | grep -c .)" "${pushed:-false}" "$violation" "$(printf '%s' "$lgaps" | grep -c .)" "$([ $lst = 0 ] && echo 0 || echo 1)" >> "$root/.protocol.log"
+      "$(printf '%s' "$gaps" | grep -c .)" "${pushed:-false}" "$violation" "$(printf '%s' "$lgaps" | grep -c .)" "$([ $lst = 0 ] && echo 0 || echo 1)" "$(count rejected)" >> "$root/.protocol.log"
     [ "$pushed" = true ] && exit 0
     [ -n "$reason" ] || exit 0
     echo "$reason" >&2
