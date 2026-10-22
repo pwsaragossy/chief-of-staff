@@ -12,8 +12,11 @@ tools and when to use each, and what it never skips. Edit cards and rows freely:
 | money: price, cost, revenue, cash, tax exposure | `finance` | `reviewer` |
 | law, contracts, IP, privacy, regulation | `legal` (AI prepares, a licensed human signs) | `reviewer` |
 | marketing, positioning, channels, launch | `marketing` | `reviewer` |
+| design: brand identity, logo, interface, deck | `designer` | `reviewer` |
 | risk, security, privacy, operational failure | `security` | `reviewer` |
-| opening a new project | `new-project` skill (from `central/`) | coherence check of the success criteria |
+| opening a new project | `new-project` skill (from `central/`), which copies a track to TRACK.md | coherence check of the success criteria |
+| the next deliverable of a project | the role card named on its line in TRACK.md | the stage's `review-<n>` item |
+| how everything is going | `panel` skill (green, yellow, red per project) | — |
 | something the owner sent to study (link, video, file) | `knowledge` skill | — |
 | closing a session | `handoff` skill | the next session's arrival synthesis |
 | a decision only the owner can make | a line on the project card, `status: waiting-owner` | — |

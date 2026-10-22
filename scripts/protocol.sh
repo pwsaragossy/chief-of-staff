@@ -5,13 +5,16 @@
 #   PreToolUse        on WebSearch/WebFetch: blocked until the library was searched this turn;
 #                     on Agent: blocked unless the brief names an existing role card (specialists/<role>.md)
 #   SubagentStop      a specialist cannot finish without its never-skip checklist
-#   Stop              blocks the end of a substantive turn that skipped specialists or the reviewer, or researched
-#                     without saving to the library. One push per turn (stop_hook_active), then it lets go.
+#   Stop              blocks the end of a substantive turn that skipped specialists or the reviewer, researched
+#                     without saving to the library, or left the project's TRACK.md with a gate problem
+#                     (track.sh check). One push per turn (stop_hook_active), then it lets go and logs a violation.
 # Silent outside a workspace. Every turn is logged to <workspace>/.protocol.log (the adherence metric).
 . "$(dirname "$0")/lib.sh"
 
 in=$(cat)
 root=$(cos_root "${CLAUDE_PROJECT_DIR:-$PWD}") || exit 0
+rel=${CLAUDE_PROJECT_DIR:-$PWD}; rel=${rel#"$root"}; rel=${rel#/}
+case $rel in projects/?*) project=${rel#projects/}; project=${project%%/*} ;; *) project= ;; esac
 
 # Flat JSON field (hook input is compact JSON); good enough for ids, names and booleans.
 jget() { printf '%s' "$in" | sed -n "s/.*\"$1\" *: *\"\{0,1\}\([^\",}]*\).*/\1/p" | head -n 1; }
@@ -75,13 +78,21 @@ case $(jget hook_event_name) in
     substantive=0
     { [ -f "$st/deliverable" ] || [ -f "$st/web" ] || [ "$size" -gt 2500 ]; } && substantive=1
     agents=$(count agent); specialists=$(count specialist); reviewers=$(count reviewer)
-    printf '%s turn=%s substantive=%s agents=%s specialists=%s reviewers=%s library=%s web=%s saved=%s pushed=%s\n' "$(date '+%F %T')" "$sid" \
-      "$substantive" "$agents" "$specialists" "$reviewers" "$([ -f "$st/library" ] && echo 1 || echo 0)" "$([ -f "$st/web" ] && echo 1 || echo 0)" \
-      "$([ -f "$st/saved" ] && echo 1 || echo 0)" "$(jget stop_hook_active)" >> "$root/.protocol.log"
-    [ "$(jget stop_hook_active)" = true ] && exit 0
     reason=
     [ "$substantive" = 1 ] && { [ "$specialists" -lt 1 ] || [ "$reviewers" -lt 1 ]; } && reason="This turn produced a deliverable, research or a long answer with $specialists specialist(s) and $reviewers reviewer(s). Before finishing, run the specialists skill: at least one senior specialist and the independent reviewer as subagents, each briefed with its role card from $root/specialists/, then revise the answer with what they found."
     [ -f "$st/web" ] && [ ! -f "$st/saved" ] && reason="${reason:+$reason }This turn searched the web but saved nothing to the library. Save each new finding as a note in $root/knowledge/notes/ (template in knowledge/templates/note.md) before finishing."
+    gaps=
+    [ -n "$project" ] && gaps=$(sh "$(dirname "$0")/track.sh" check "$root/projects/$project" | head -n 20)
+    [ -n "$gaps" ] && reason="${reason:+$reason }Track gate (projects/$project/TRACK.md) not met:
+$gaps
+Close each item with its proof file (evidence: path relative to the project folder), mark it [-] with why: when it does not apply, or move stage: back. A stage passes only when every item is closed."
+    pushed=$(jget stop_hook_active)
+    violation=0; [ "$pushed" = true ] && [ -n "$reason" ] && violation=1
+    printf '%s t=%s turn=%s project=%s substantive=%s agents=%s specialists=%s reviewers=%s library=%s web=%s saved=%s track=%s pushed=%s violation=%s\n' \
+      "$(date '+%F %T')" "$(date +%s)" "$sid" "${project:--}" "$substantive" "$agents" "$specialists" "$reviewers" \
+      "$([ -f "$st/library" ] && echo 1 || echo 0)" "$([ -f "$st/web" ] && echo 1 || echo 0)" "$([ -f "$st/saved" ] && echo 1 || echo 0)" \
+      "$(printf '%s' "$gaps" | grep -c .)" "${pushed:-false}" "$violation" >> "$root/.protocol.log"
+    [ "$pushed" = true ] && exit 0
     [ -n "$reason" ] || exit 0
     echo "$reason" >&2
     exit 2

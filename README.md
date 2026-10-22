@@ -8,13 +8,16 @@ What it gives you:
 - **One door to the owner.** Only the `central` session asks you for decisions. Project sessions
   write them on a card in `board/` and keep working; central asks them all at once. The one
   exception: any session may confirm the origin of an order before an irreversible step.
-- **A fixed project playbook.** Opening questions, a coherence check of the success criteria,
-  registration, stages with gates (continue, stop, pause, redo).
+- **A fixed project playbook with tracks.** Opening questions, a coherence check of the success
+  criteria, then a track for the kind of project (hackathon, software, brand, launch, research):
+  stages of minimum deliverables, each naming the specialist who makes it, what it needs first and
+  the file that proves it. A hook stops any session that moves past a stage with an open item, a
+  missing proof file, or no reviewer verdict.
 - **Standard handoffs.** Every project has a `STATE.md` in one format (adapted from the I-PASS
   clinical handoff). The next session writes an arrival synthesis and checks one fact before acting.
-- **Specialists with a written method, and an independent reviewer, enforced by hooks.** Eight
-  role cards (`specialists/`: researcher, product, engineer, finance, legal, marketing, security,
-  reviewer) say what each senior specialist gathers first, its method, its toolbox and when to use
+- **Specialists with a written method, and an independent reviewer, enforced by hooks.** Nine
+  role cards (`specialists/`: researcher, product, engineer, designer, finance, legal, marketing,
+  security, reviewer) say what each senior specialist gathers first, its method, its toolbox and when to use
   each tool, what it never skips, its evidence standard and output format. A substantive turn
   cannot end without at least one specialist and the reviewer.
 - **A library consulted before research.** Notes in `knowledge/notes/` link to each other
@@ -22,6 +25,8 @@ What it gives you:
   deleted and every reference repointed). Web search is blocked until the library was searched,
   and a turn that searched the web cannot end until it saved what it found.
 - **A routing table** (`ROUTING.md`) so nobody has to remember whom to call.
+- **A local panel**: green, yellow or red per project with the reason, track progress, decisions
+  waiting on the owner, the last turns, and a box to drop files or links into the knowledge inbox.
 - **An optional dispatcher** that starts the next session on its own. Off by default.
 
 ## Install
@@ -44,7 +49,7 @@ workspace (default `~/chief-of-staff`) and creates:
   .chief-of-staff        marker the hooks look for
   central/CLAUDE.md      the one door to the owner
   board/                 one card per open item (status, project, owner, due)
-  projects/<slug>/       CLAUDE.md + STATE.md per project
+  projects/<slug>/       CLAUDE.md + STATE.md + TRACK.md per project
   knowledge/             inbox/, notes/, templates/
   specialists/           one role card per specialist (edit freely)
   ROUTING.md             who to call for what
@@ -58,7 +63,22 @@ workspace (default `~/chief-of-staff`) and creates:
 3. To work on a project, open Claude Code in `projects/<slug>`. The briefing shows the next action.
 4. Close every session with `/chief-of-staff:handoff`.
 
-Skills: `setup`, `new-project`, `handoff`, `specialists`, `knowledge`.
+Skills: `setup`, `new-project`, `handoff`, `specialists`, `knowledge`, `panel`.
+
+## Panel
+
+`/chief-of-staff:panel` starts `scripts/panel.py` (needs `python3`, standard library only) and opens
+a link like `http://127.0.0.1:<port>/?t=<token>`. It listens on this computer only and refuses any
+request without the token. Colors come from `scripts/health.sh`, which also works as text:
+
+- **red**: a track gate problem, STATE.md says red, a turn in the last 24 h ended without the
+  specialists, the reviewer or the track gate, or a dispatcher alert;
+- **yellow**: a decision waiting on the owner, no handoff for longer than the track's
+  `stale_hours` (3 h for a hackathon, 48 h otherwise), or paused;
+- **green**: none of these.
+
+Files or links dropped in the import box land in `knowledge/inbox/`; central turns them into
+library notes with the `knowledge` skill.
 
 ## Hooks
 
@@ -74,6 +94,11 @@ Every hook does nothing outside a workspace, so the plugin does not affect your 
   a substantive turn (a deliverable file, web research, or a long answer) cannot end without a
   specialist and the reviewer, nor research end without a saved note. Each push happens once per
   turn. Every turn is logged to `<workspace>/.protocol.log`, the adherence record.
+- The same Stop hook runs `scripts/track.sh check` in a project session: a stage below `stage:` with
+  an open item, an item marked done whose proof file does not exist or whose prerequisites are
+  open, a not-applicable item without a reason, a reviewer item marked not applicable, a stage
+  without a reviewer item, or STATE.md set to done with open items. The briefing lists what is open
+  now in the current stage.
 
 ## The dispatcher (off by default)
 
@@ -145,6 +170,8 @@ What is ours, with no equivalent found in ECC:
 - "Substantive" is a heuristic (deliverable file, web research, or an answer over about 2500
   characters). A short answer to a real decision is not forced through specialists.
 - The hooks check that specialists and the reviewer ran, not that they were good.
+- A track gate checks that a proof file exists, not what it says. An agent can still write a
+  thin file; the stage's reviewer item, which can never be skipped, is where that is caught.
 - The role cards' sources were checked once by a reviewer on 2026-10-22; a few dates and versions
   (RICE post, Nielsen heuristics revision, EDPB guideline versions) are left without a year on
   purpose. Thresholds marked "default, adjust to the case" are conventions, not standards.

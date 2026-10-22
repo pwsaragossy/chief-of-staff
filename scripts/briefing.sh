@@ -46,6 +46,8 @@ waiting() { # list cards waiting on the owner; $1 = project slug filter (empty =
         out "Next action recorded: $(fm "$s" next)"
         out "Protocol: the arrival synthesis in STATE.md is written before any other action."
       fi
+      tb=$(sh "$(dirname "$0")/track.sh" brief "$root/projects/$p" | tr -d '\000-\011\013-\037' | cut -c1-600)
+      [ -n "$tb" ] && out "$tb (TRACK.md: a stage passes only when every item is closed with its proof file.)"
       w=$(waiting "$p"); [ -n "$w" ] && { out "Cards of this project waiting on the owner:"; out "$w"; }
       notes=$(for f in "$root"/knowledge/notes/*.md; do
         [ -f "$f" ] && [ "$(fm "$f" status)" = "new" ] || continue

@@ -13,7 +13,8 @@ Ask them together, in as few rounds as the question tool allows (it takes at mos
 this is two calls back to back). Offer likely answers as options; free text goes through "Other".
 1. **What** is it, in one sentence?
 2. **Kind**: real project, experiment, or a test of the method? (A test stays a test: no real
-   accounts, money, or legal steps.)
+   accounts, money, or legal steps.) And which track: hackathon, software, brand, launch or
+   research (the files in `${CLAUDE_PLUGIN_ROOT}/templates/tracks/`); recommend the one that fits.
 3. **Success**: what result, by when?
 4. **Investment**: hours per week and money the owner accepts to spend.
 5. **Stop criterion**: what number or event makes us stop or change course?
@@ -32,11 +33,15 @@ the owner to pick, in the same round of buttons if possible.
 2. Create `../projects/<slug>/` with `CLAUDE.md` and `STATE.md` from
    `${CLAUDE_PLUGIN_ROOT}/templates/project/` (copy the literal path shown here), filling the
    `{{...}}` fields from the answers. Put the answers in STATE.md section 2.
+   Copy the chosen track to `../projects/<slug>/TRACK.md`. If an item truly cannot apply, mark it
+   `[-]` with `why:` instead of deleting it, so the reviewer sees it.
 3. Create the card `../board/<Project name>.md` from `${CLAUDE_PLUGIN_ROOT}/templates/board/card.md`,
    with `owner` set to the project session (for example `session-<slug>`), never the owner.
 4. Add one line to the project table in `central/CLAUDE.md`.
 5. Commit only these files.
 
 ## 4. Start
-Write in STATE.md section 5 the stages, each with its gate and its "done" criterion. At each gate
-the decision is one of: continue, stop, pause, redo. Then tell the owner which folder to open next.
+The stages and their minimum deliverables are in TRACK.md; a hook stops any session that moves
+`stage:` forward, or sets STATE.md to done, while an item of an earlier stage is open or lacks its
+proof file. Add project-specific deliverables to TRACK.md in the same format. At each gate the
+decision is one of: continue, stop, pause, redo. Then tell the owner which folder to open next.

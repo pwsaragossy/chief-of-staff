@@ -148,4 +148,99 @@ check "replace deletes the old note" '[ ! -f "$N/tax-old.md" ]'
 check "replace repoints links and STATE references" 'grep -q "links: \[tax-new\]" "$N/vat.md" && grep -q "tax-new.md" "$P/STATE.md"'
 check "replace records supersedes and drops the self-link" '[ "$(fm_get "$N/tax-new.md" supersedes)" = "[tax-old]" ] && [ "$(fm_get "$N/tax-new.md" links)" = "[vat]" ]'
 
+# tracks: minimum deliverables per stage, the Stop gate, and health colors
+G="$W/projects/gamma"; mkdir -p "$G/out" "$W/t2"
+sed -e "s/{{PROJECT_NAME}}/gamma/" "$here/../templates/project/STATE.md" > "$G/STATE.md"
+cat > "$G/TRACK.md" <<'TRK'
+---
+track: brand
+stage: 2
+stale_hours: 48
+---
+## Stage 1: Strategy
+- [ ] positioning | Positioning | card: marketing | needs: - | evidence:
+- [-] tm | Trademark | card: legal | needs: - | why: internal codename
+## Stage 2: Identity
+- [ ] name | Name | card: marketing | needs: positioning | evidence:
+- [ ] logo | Logo | card: designer | needs: name | evidence:
+TRK
+T() { sh "$here/track.sh" "$@"; }
+H() { sh "$here/health.sh" "$W" | awk -F "$(printf '\037')" -v p="$1" '$1 == p { print $2 ": " $3 }'; }
+check "a passed stage with an open item fails the track" '! T check "$G" >/dev/null && T check "$G" | grep -q "stage 1 is behind the current stage 2, but positioning is open"'
+check "health is red on a track gap" 'H gamma | grep -q "^red: track: "'
+sed -i.bak 's/^- \[ \] positioning | Positioning | card: marketing | needs: - | evidence:$/- [x] positioning | Positioning | card: marketing | needs: - | evidence: out\/pos.md/' "$G/TRACK.md"
+check "done without its proof file fails" 'T check "$G" | grep -q "positioning is marked done, but its evidence out/pos.md does not exist"'
+echo proof > "$G/out/pos.md"; echo proof > "$G/out/pos2.md"
+check "a stage without a reviewer item fails" 'T check "$G" | grep -q "stage 1 has no item with card: reviewer"'
+sed -i.bak 's/^## Stage 2: Identity$/- [x] review-1 | Review | card: reviewer | needs: positioning, tm | evidence: out\/pos2.md\
+## Stage 2: Identity\
+- [ ] review-2 | Review | card: reviewer | needs: name, logo | evidence:/' "$G/TRACK.md"
+check "a closed stage passes" 'T check "$G"'
+check "a reviewer item cannot be marked not applicable" 'sed "s/^- \[x\] review-1 | Review | card: reviewer | needs: positioning, tm | evidence: out\/pos2.md$/- [-] review-1 | Review | card: reviewer | needs: positioning, tm | why: owner said skip/" "$G/TRACK.md" > "$W/t2/TRACK.md" && T check "$W/t2" | grep -q "review-1 is a reviewer item and cannot be marked not applicable"'
+check "n/a needs a reason" 'sed "s/ | why: internal codename//" "$G/TRACK.md" > "$G/T2" && mkdir -p "$W/t2" && cp "$G/T2" "$W/t2/TRACK.md" && T check "$W/t2" | grep -q "tm is marked not applicable without why"'
+check "done before its prerequisite fails" 'sed "s/^- \[ \] logo | Logo | card: designer | needs: name | evidence:$/- [x] logo | Logo | card: designer | needs: name | evidence: out\/pos.md/" "$G/TRACK.md" > "$W/t2/TRACK.md" && T check "$W/t2" | grep -q "logo is marked done, but it needs name, which is open"'
+check "the brief lists what is open now and what waits" 'T brief "$G" | grep -q "stage 2 of 2 (Identity). Open now: name (marketing). Waiting on prerequisites: review-2 needs name, logo; logo needs name."'
+# track gates cannot be passed by shortcuts
+bad() { [ -e "$W/t2/out" ] || ln -s "$G/out" "$W/t2/out"; sed "$1" "$G/TRACK.md" > "$W/t2/TRACK.md" && T check "$W/t2" | grep -q "$2"; }
+check "evidence cannot be an absolute path" 'bad "s#evidence: out/pos.md#evidence: /etc/hosts#" "evidence /etc/hosts must be a proof file"'
+check "evidence cannot climb out of the project" 'bad "s#evidence: out/pos.md#evidence: ../../x#" "must be a proof file inside the project"'
+check "evidence cannot be TRACK.md" 'bad "s#evidence: out/pos.md#evidence: TRACK.md#" "not a control file"'
+check "evidence cannot be a folder" 'bad "s#evidence: out/pos.md#evidence: out#" "must be a regular file"'
+: > "$G/out/empty.md"
+check "evidence cannot be an empty file" 'bad "s#evidence: out/pos.md#evidence: out/empty.md#" "out/empty.md is empty"'
+check "two items cannot share one proof file" 'bad "s#evidence: out/pos2.md#evidence: out/pos.md#" "share the proof file out/pos.md"'
+check "a stage that is not a number fails" 'bad "s/^stage: 2/stage: soon/" "stage: in the TRACK.md front matter must be a whole number"'
+check "a stage missing from the front matter fails" 'bad "/^stage:/d" "front matter must be a whole number"'
+check "a duplicate id fails" 'bad "s/^- \[ \] logo | /- [ ] name | /" "item id name appears twice"'
+check "a mangled item line fails" 'bad "s/^- \[ \] name /-  [ ] name /" "not a valid item"'
+check "an item hidden in a comment fails" 'bad "s/^- \[ \] name \(.*\)$/<!-- - [ ] name \1 -->/" "HTML comments hide items"'
+check "a mangled stage header fails" 'bad "s/^## Stage 2: Identity/### Stage 2: Identity/" "not a valid stage header"'
+check "stages must be numbered in order" 'bad "s/^## Stage 2: Identity/## Stage 3: Identity/" "numbered 1, 2, 3 in order"'
+check "an item before the first stage fails" 'bad "1,/^## Stage 1/{/^## Stage 1/i\\
+- [ ] orphan | Orphan | card: marketing | needs: - | evidence:
+}" "orphan is before the first stage header"'
+check "a need that points forward fails" 'bad "s/^- \[x\] positioning | Positioning | card: marketing | needs: -/- [x] positioning | Positioning | card: marketing | needs: logo/" "needs logo from the later stage 2"'
+check "a need on an unknown id fails" 'bad "s/needs: name, logo/needs: name, ghost/" "review-2 needs ghost, which is not an item of the track"'
+check "a loop in needs fails" 'bad "s/^- \[ \] name | Name | card: marketing | needs: positioning/- [ ] name | Name | card: marketing | needs: logo/" "wait on each other in a loop"'
+check "an item without a card fails" 'bad "s/^- \[ \] logo | Logo | card: designer/- [ ] logo | Logo | card:/" "logo has no card"'
+rm -f "$W/t2/TRACK.md"; echo "Read TRACK.md" > "$W/t2/CLAUDE.md"
+check "a deleted TRACK.md fails when CLAUDE.md requires it" 'T check "$W/t2" | grep -q "TRACK.md is missing"'
+check "no TRACK.md and no requirement stays silent" 'rm "$W/t2/CLAUDE.md"; [ -z "$(T check "$W/t2")" ]'
+check "STATE done with open items fails" 'fm_set "$G/STATE.md" status done && T check "$G" | grep -q "STATE.md status is done, but name is open"; r=$?; fm_set "$G/STATE.md" status in-progress; [ $r = 0 ]'
+check "health ignores an ALERT about another project" '! H beta | grep -q "ALERT"'
+echo "2026-01-01 00:00:00 ALERT: .git/config or .git/hooks changed during the run of beta; dispatcher stopped" >> "$W/.dispatch.log"
+check "health is red on a dispatcher ALERT for the project" 'H beta | grep -q "^red: dispatcher ALERT"'
+check "health is green when the track is clean" 'H gamma | grep -q "^green: on track"'
+printf -- '---\nstatus: waiting-owner\nproject: gamma\n---\n' > "$W/board/Gamma.md"
+check "health is yellow on a card waiting on the owner" 'H gamma | grep -q "^yellow: waiting on the owner: Gamma"'
+rm "$W/board/Gamma.md"
+touch -t 202001010000 "$G/STATE.md"
+check "health is yellow without a handoff for longer than stale_hours" 'H gamma | grep -q "^yellow: no handoff for more than 48 h"'
+touch "$G/STATE.md"
+check "the project briefing shows the track" 'CLAUDE_PROJECT_DIR="$G" sh "$here/briefing.sh" </dev/null | grep -q "Track brand, stage 2 of 2"'
+fm_set "$G/TRACK.md" stage 3
+check "the Stop hook blocks a track gap" 'h "$(ev Stop ",\"stop_hook_active\":false")" "$G" 2>&1 | grep -q "Track gate (projects/gamma/TRACK.md) not met"'
+check "after the push the gap is logged as a violation" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":true")" "$G")" = 0 ] && grep -q "project=gamma .*violation=1" "$W/.protocol.log"'
+fm_set "$G/TRACK.md" stage 2
+check "health is red after a violation" 'H gamma | grep -q "^red: a turn ended without"'
+
+# panel: token, Host check, api, import (only where python3 and curl exist)
+if command -v python3 >/dev/null && command -v curl >/dev/null; then
+  python3 "$here/panel.py" "$W" > "$W/panel.out" 2>&1 &
+  pp=$!
+  i=0; while [ $i -lt 50 ] && ! grep -q "^Panel:" "$W/panel.out"; do i=$((i + 1)); sleep 0.1; done
+  U=$(sed -n 's/^Panel: //p' "$W/panel.out"); B=${U%%/?t=*}; TK=${U##*t=}
+  check "panel refuses a request without the token" '[ "$(curl -s -o /dev/null -w %{http_code} "$B/api")" = 403 ]'
+  check "panel refuses another Host" '[ "$(curl -s -o /dev/null -w %{http_code} -H "Host: evil.example" "$B/api?t=$TK")" = 403 ]'
+  check "panel api reports projects and colors" 'curl -s "$B/api?t=$TK" | grep -q "\"slug\": \"gamma\", \"color\": \"red\""'
+  check "panel imports a file into the inbox" 'printf hello | curl -s -X POST --data-binary @- -H "X-Name: ../../evil name.txt" -H "X-Kind: file" "$B/import?t=$TK" | grep -q saved && ls "$W/knowledge/inbox" | grep -q "evil_name.txt$" && [ ! -e "$W/evil name.txt" ]'
+  check "panel saves a pasted link as a note" 'printf "https://example.com/a" | curl -s -X POST --data-binary @- -H "X-Name: link.md" -H "X-Kind: text" "$B/import?t=$TK" >/dev/null && grep -q "^source: https://example.com/a" "$W"/knowledge/inbox/*link.md'
+  check "panel answers a non-ASCII token with 403" '[ "$(curl -s -o /dev/null -w %{http_code} "$B/api?t=%C3%A9")" = 403 ]'
+  check "panel rejects an empty pasted text" '[ "$(printf "  " | curl -s -o /dev/null -w %{http_code} -X POST --data-binary @- -H "X-Kind: text" "$B/import?t=$TK")" = 400 ]'
+  check "panel never sends the token on as a referrer" 'curl -s -D - -o /dev/null "$B/?t=$TK" | grep -qi "^referrer-policy: no-referrer"'
+  kill $pp 2>/dev/null; wait $pp 2>/dev/null
+else
+  echo "skip panel checks: python3 or curl missing"
+fi
+
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }
