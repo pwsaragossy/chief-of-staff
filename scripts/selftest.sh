@@ -297,4 +297,10 @@ fm_set "$Z/STATE.md" status active
 M="$W/projects/mu"; mkdir -p "$M"; sed -e "s/{{PROJECT_NAME}}/mu/" "$here/../templates/project/STATE.md" > "$M/STATE.md"; fm_set "$M/STATE.md" status delivered; touch -t 202001010000 "$M/STATE.md"
 check "without a track, the word delivered does not silence the stale check" 'H mu | grep -q "^yellow: no handoff"'
 
+# a path cut short by the flat JSON reader must not pass as a control file
+wr() { h "$(ev UserPromptSubmit)" "$P" >/dev/null; h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$1\"}")" "$P" >/dev/null; rc "$(ev Stop ",\"stop_hook_active\":false")" "$P"; }
+check "a path with a comma after TRACK.md still counts as a deliverable" '[ "$(wr "$W/projects/alpha/TRACK.md,x/deck.md")" = 2 ]'
+check "a dot-dot slug is not a control file" '[ "$(wr "$W/projects/../TRACK.md")" = 2 ]'
+check "the real TRACK.md is still a control file" '[ "$(wr "$W/projects/alpha/TRACK.md")" = 0 ]'
+
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }

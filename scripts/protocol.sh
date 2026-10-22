@@ -46,7 +46,9 @@ case $(jget hook_event_name) in
           *"$root/knowledge/"*) mark saved ;;
           *.md\"*|*.html\"*|*.pptx\"*|*.docx\"*|*.pdf\"*) case $in in *STATE.md\"*|*"/board/"*) ;; *) ctl=; fp=$(jget file_path); r=${fp#"$root/projects/"}
               # only a project's own TRACK.md / DELIVERY.md (projects/<slug>/FILE) is a control file; the path comes from file_path, not from the content
-              case $r in */*/*) ;; */TRACK.md|*/DELIVERY.md) [ "$r" != "$fp" ] && ctl=1 ;; esac
+              # jget stops at , } or a quote: trust fp only if the raw input closes the string right after it
+              case $in in *"\"file_path\":\"$fp\""*|*"\"file_path\": \"$fp\""*) ;; *) r= ;; esac
+              case $r in */*/*|.*) ;; */TRACK.md|*/DELIVERY.md) [ "$r" != "$fp" ] && ctl=1 ;; esac
               [ -n "$ctl" ] || mark deliverable ;; esac ;;
         esac ;;
     esac
