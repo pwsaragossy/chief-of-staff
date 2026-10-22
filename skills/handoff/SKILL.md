@@ -25,3 +25,4 @@ The next session is a stranger with no memory of this one. Everything it needs i
 4. **Knowledge**: for each note you integrated, set `status: integrated` and list where in
    `integrated_in`.
 5. **Commit only the files this session touched**, with a message that says what changed and why.
+   A session started by the dispatcher has no shell: skip this step, the dispatcher commits.

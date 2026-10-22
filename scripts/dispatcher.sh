@@ -12,7 +12,7 @@
 #        CLAUDE_BIN (default claude)         absolute path recommended under launchd or cron
 . "$(dirname "$0")/lib.sh"
 
-root=${1:?usage: dispatcher.sh /path/to/workspace}
+root=$(cd "${1:?usage: dispatcher.sh /path/to/workspace}" && pwd) || exit 1
 [ -f "$root/.chief-of-staff" ] || { echo "not a workspace: $root" >&2; exit 1; }
 max=${COS_MAX_RUNS_PER_DAY:-3}
 budget=${COS_MAX_BUDGET_USD:-2}
@@ -23,6 +23,7 @@ today=$(date +%F)
 note() { printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$log"; }
 # Everything in .git that can make git run code: config and hooks.
 git_fingerprint() { cat "$root/.git/config" "$root"/.git/hooks/* 2>/dev/null | cksum; }
+safegit() { git -C "$root" -c core.hooksPath=/dev/null -c core.fsmonitor= -c diff.external= "$@"; }
 
 command -v "$bin" >/dev/null 2>&1 || { note "refused: '$bin' not found; set CLAUDE_BIN to its absolute path"; exit 1; }
 
@@ -51,7 +52,7 @@ for s in "$root"/projects/*/STATE.md; do
   fm_set "$s" dispatch off; note "parked $(basename "$(dirname "$s")"): previous run was interrupted"
 done
 
-prompt='You were started by the chief-of-staff dispatcher, with nobody watching. Follow this folder'"'"'s CLAUDE.md. Do the next action recorded in STATE.md and nothing beyond it. Do not ask anyone anything: write questions on the project card with status waiting-owner. Finish with the handoff skill.'
+prompt='You were started by the chief-of-staff dispatcher, with nobody watching. Follow this folder'"'"'s CLAUDE.md. Do the next action recorded in STATE.md and nothing beyond it. Do not ask anyone anything: write questions on the project card with status waiting-owner. Finish with the handoff skill, but do not run git: the dispatcher commits after you.'
 
 for s in "$root"/projects/*/STATE.md; do
   [ -f "$s" ] || continue
@@ -61,18 +62,17 @@ for s in "$root"/projects/*/STATE.md; do
   p=$(basename "$(dirname "$s")")
   fm_set "$s" dispatch running
   note "run $p: $(fm_get "$s" next)"
-  # Guard rails: a closed list of tools (no free shell, so no sed/cp around the Edit denies). The
-  # whole workspace is reachable (board, ROUTING.md); agent rules, settings, git internals, the
-  # dispatcher's own log and lock, Keychain, push and questions are not. Permission rules, not a sandbox.
+  # Guard rails: read and edit tools only, no shell at all (so no git, no sed/cp around the denies).
+  # The whole workspace is reachable (board, ROUTING.md); agent rules, settings, git internals and
+  # the dispatcher's own files are denied by absolute paths ("//" + root). Permission rules, not a sandbox.
   before=$(git_fingerprint)
   (cd "$root/projects/$p" && exec "$bin" -p "$prompt" \
     --add-dir "$root" \
     --permission-mode default \
     --max-budget-usd "$budget" \
     --allowedTools Read Glob Grep Edit Write \
-      "Bash(git add:*)" "Bash(git commit:*)" "Bash(git status:*)" "Bash(git diff:*)" \
-    --disallowedTools "Edit(**/CLAUDE.md)" "Edit(**/.claude/**)" "Edit(**/.git/**)" "Edit(**/.dispatch*)" \
-      "Bash(security:*)" "Bash(git push:*)" "AskUserQuestion" \
+    --disallowedTools Bash AskUserQuestion \
+      "Edit(/$root/**/CLAUDE.md)" "Edit(/$root/**/.claude/**)" "Edit(/$root/.git/**)" "Edit(/$root/.dispatch*)" \
     >> "$root/.dispatch-$p.out" 2>&1) &
   run=$!
   rm -f "$lock/timeout"
@@ -89,11 +89,13 @@ for s in "$root"/projects/*/STATE.md; do
     note "ALERT: .git/config or .git/hooks changed during the run of $p; dispatcher stopped, nothing pushed"
     exit 1
   fi
+  # The dispatcher commits, with git's code-running config switched off.
+  safegit add -A && safegit commit -qm "dispatch: $p" --no-verify >/dev/null 2>&1 && note "committed $p"
   # A run that ended without a handoff must not loop: park it for a human look.
   if [ "$(fm_get "$s" dispatch)" = "running" ]; then fm_set "$s" dispatch off; note "done $p rc=$rc, no handoff: dispatch set to off"
   else note "done $p rc=$rc, dispatch now $(fm_get "$s" dispatch)"; fi
 done
 
 if [ "${COS_PUSH:-0}" = 1 ]; then
-  git -C "$root" -c core.hooksPath=/dev/null push -q --no-verify 2>>"$log" && note "pushed" || note "push failed"
+  safegit push -q --no-verify 2>>"$log" && note "pushed" || note "push failed"
 fi

@@ -56,14 +56,14 @@ echo "stub called in \$PWD with: \$*"
 case "\$PWD" in */alpha) . "$here/lib.sh"; fm_set STATE.md dispatch off ;; esac
 EOF
 chmod +x "$stub"
-git -C "$W" init -q
+git -C "$W" init -q; git -C "$W" config user.name t; git -C "$W" config user.email t@t
 check "dispatcher refuses without a remote" '! CLAUDE_BIN="$stub" sh "$here/dispatcher.sh" "$W" && grep -q "refused: workspace has no git remote" "$W/.dispatch.log"'
 fm_set "$W/projects/beta/STATE.md" dispatch ready
 CLAUDE_BIN="$stub" COS_ALLOW_NO_BACKUP=1 sh "$here/dispatcher.sh" "$W"
 check "dispatcher ran both ready projects" '[ "$(grep -c " run " "$W/.dispatch.log")" = 2 ]'
 check "handoff result is kept" 'grep -q "done alpha rc=0, dispatch now off" "$W/.dispatch.log"'
 check "run without handoff is parked" '[ "$(fm_get "$W/projects/beta/STATE.md" dispatch)" = off ] && grep -q "done beta rc=0, no handoff" "$W/.dispatch.log"'
-check "guard rails are passed to the CLI" 'grep -q "Edit(\*\*/CLAUDE.md)" "$W/.dispatch-alpha.out" && grep -q "AskUserQuestion" "$W/.dispatch-alpha.out" && grep -q -- "--max-budget-usd 2" "$W/.dispatch-alpha.out"'
+check "guard rails are passed to the CLI" 'grep -q "Edit(/$W/\*\*/CLAUDE.md)" "$W/.dispatch-alpha.out" && grep -q "Bash AskUserQuestion" "$W/.dispatch-alpha.out" && grep -q -- "--max-budget-usd 2" "$W/.dispatch-alpha.out"'
 check "the run can reach the whole workspace" 'grep -q -- "--add-dir $W" "$W/.dispatch-alpha.out"'
 check "lock is released" '[ ! -d "$W/.dispatch.lock" ]'
 fm_set "$W/projects/alpha/STATE.md" dispatch ready
@@ -86,7 +86,8 @@ CLAUDE_BIN="$stub" COS_ALLOW_NO_BACKUP=1 sh "$here/dispatcher.sh" "$W"
 check "an interrupted run is parked by the next dispatcher" 'grep -q "parked alpha: previous run was interrupted" "$W/.dispatch.log" && [ "$(fm_get "$W/projects/alpha/STATE.md" dispatch)" = off ]'
 fm_set "$W/projects/alpha/STATE.md" next "$(printf 'evil\033[2Jline')"
 check "briefing strips control characters" '! b "$W/projects/alpha" | grep -q "$(printf "\033")" && b "$W/projects/alpha" | grep -q "evil\[2Jline"'
-check "permission mode is default with a closed tool list" 'grep -q -- "--permission-mode default" "$W/.dispatch-alpha.out" && grep -q "Edit(\*\*/.git/\*\*)" "$W/.dispatch-alpha.out" && grep -q "Edit(\*\*/.dispatch\*)" "$W/.dispatch-alpha.out"'
+check "permission mode is default with a closed tool list" 'grep -q -- "--permission-mode default" "$W/.dispatch-alpha.out" && grep -q "Edit(/$W/.git/\*\*)" "$W/.dispatch-alpha.out" && grep -q "Edit(/$W/.dispatch\*)" "$W/.dispatch-alpha.out" && ! grep -q "Bash(git" "$W/.dispatch-alpha.out"'
+check "the dispatcher commits the run itself" 'git -C "$W" log --format=%s | grep -q "^dispatch: alpha$"'
 cat > "$W/evil.sh" <<EOF
 #!/bin/sh
 printf '#!/bin/sh\n' > "$W/.git/hooks/pre-commit"
