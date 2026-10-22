@@ -86,6 +86,39 @@ Schedulers start with a short PATH, so give the absolute path of the CLI (`comma
 On macOS, fill in `templates/dispatcher/com.chief-of-staff.dispatcher.plist`. On Linux, a cron line:
 `0 */2 * * * CLAUDE_BIN=/abs/path/claude /bin/sh /path/to/scripts/dispatcher.sh /path/to/workspace`.
 
+## Relation to Everything Claude Code (ECC)
+
+[ECC](https://github.com/affaan-m/everything-claude-code) (MIT, v2.2.3 checked on 2026-10-22) is a
+large general toolkit: 71 agents, 311 skills, Node.js hooks. We compared it piece by piece; it
+fully replaces none of ours, so nothing here was cut. No ECC code is copied into this package.
+
+What we reference or reuse as an idea:
+
+- **Session summary hooks.** ECC's `scripts/hooks/session-end.js` runs on every Stop event and asks
+  `claude -p` to summarize the transcript into `~/.claude/session-data/`; `session-start.js` injects
+  the latest summary (up to 8000 characters). We keep a deliberate handoff instead: the `handoff`
+  skill writes a fixed-format `STATE.md` inside the project folder, readable by any session and
+  versioned in git, with no extra model call per response. The two can coexist; if you run both,
+  every session start gets two briefings.
+- **Minimal profile.** ECC's `minimal` install profile (`manifests/install-profiles.json`) leaves out
+  its hook runtime. This package follows the same idea by default: 5 skills, 2 shell hooks that do
+  nothing outside a workspace, and the dispatcher off.
+- **Security scan.** ECC's AgentShield (`npx ecc-agentshield scan`, separate MIT package) scans
+  `CLAUDE.md`, settings, MCP servers, hooks and agents for risky configuration. We do not bundle it.
+  It is a useful check before turning the dispatcher on. For this repository we scan for secrets
+  with gitleaks before each push.
+
+What is ours, with no equivalent found in ECC:
+
+- one door to the owner, enforced by a hook (`ask-guard`);
+- a project playbook with a coherence check of the success criteria and gates;
+- a per-project state snapshot with an arrival synthesis by the next session;
+- an unattended dispatcher with a run ceiling, budget, timeout, no shell, and git hook checks;
+- specialists who mark each claim FACT or INFERENCE, attacked by an independent reviewer
+  (ECC's `santa-method` and `council` skills are the closest, for code and content review);
+- a knowledge base where each note is linked to a project and must be integrated or discarded;
+- a routing table of whom to call for what.
+
 ## Known limits
 
 - **Cloud sessions** (Claude Code on the web) do not load plugins installed on your machine, so
