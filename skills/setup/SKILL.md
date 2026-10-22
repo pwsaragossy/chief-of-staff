@@ -18,12 +18,12 @@ in your shell, so copy the literal path shown here into your commands.
 
    ```sh
    W="/absolute/path/to/workspace"; T="${CLAUDE_PLUGIN_ROOT}/templates"
-   mkdir -p "$W/central" "$W/board" "$W/projects" "$W/knowledge/inbox" "$W/knowledge/notes" "$W/knowledge/topics" "$W/knowledge/templates"
-   for d in board projects knowledge/inbox knowledge/notes knowledge/topics; do : > "$W/$d/.gitkeep"; done
+   mkdir -p "$W/central" "$W/board" "$W/projects" "$W/knowledge/inbox" "$W/knowledge/notes" "$W/knowledge/templates"
+   for d in board projects knowledge/inbox knowledge/notes; do : > "$W/$d/.gitkeep"; done
    cp "$T/central/CLAUDE.md" "$W/central/CLAUDE.md"
    cp "$T/ROUTING.md" "$W/ROUTING.md"
    cp "$T/knowledge/note.md" "$W/knowledge/templates/note.md"
-   printf '.dispatch.lock/\n.dispatch.log\n.dispatch-*.out\n' > "$W/.gitignore"
+   printf '.dispatch.lock/\n.dispatch.log\n.dispatch-*.out\n.protocol.log\n' > "$W/.gitignore"
    git -C "$W" init -q
    git -C "$W" config user.name >/dev/null || git -C "$W" config user.name "chief-of-staff"
    git -C "$W" config user.email >/dev/null || git -C "$W" config user.email "chief-of-staff@localhost"

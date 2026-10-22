@@ -12,6 +12,8 @@ confidence: low
 valid_until:
 status: new
 integrated_in: []
+links: []
+supersedes: []
 ---
 
 # {{TITLE}}

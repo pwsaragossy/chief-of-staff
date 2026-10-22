@@ -10,7 +10,10 @@ A generalist agreeing with a generalist owner produces "more or less" answers. D
 1. **Pick** from the workspace `ROUTING.md` the specialists the subject needs. If none fits, define
    one: title, seniority, what they would check first. Keep it to the few the question needs.
 2. **Brief each specialist as a subagent**, with the full mission: the question, the files to read,
-   what to deliver, and the format below. Run independent specialists in parallel.
+   what to deliver, and the format below. Run independent specialists in parallel. Every brief
+   starts with the library: run the `knowledge` skill's search first, paste what it returned into
+   the brief, and tell the specialist to research only what is missing and to save every new
+   finding as a linked note (or replace the note it makes obsolete).
 3. **Format every specialist writes** (saved to a file in the project, not only in chat):
    - one-line answer first;
    - each claim marked **[FACT]** (with its source: link, file, command output) or **[INFERENCE]**;

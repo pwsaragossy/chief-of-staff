@@ -98,4 +98,44 @@ fm_set "$W/projects/alpha/STATE.md" dispatch ready
 CLAUDE_BIN="$W/evil.sh" COS_ALLOW_NO_BACKUP=1 COS_MAX_RUNS_PER_DAY=99 sh "$here/dispatcher.sh" "$W"
 check "a git hook written during a run stops the dispatcher" 'grep -q "ALERT: .git/config or .git/hooks changed during the run of alpha" "$W/.dispatch.log" && [ "$(fm_get "$W/projects/beta/STATE.md" dispatch)" = ready ]'
 
+# protocol gates: inputs shaped like the JSON Claude Code sends to hooks
+export CLAUDE_PLUGIN_DATA="$W/plugin-data"
+P="$W/projects/alpha"
+h() { printf '%s' "$1" | CLAUDE_PROJECT_DIR="$2" sh "$here/protocol.sh"; }
+ev() { printf '{"session_id":"s1","hook_event_name":"%s"%s}' "$1" "${2:-}"; }
+rc() { h "$1" "$2" >/dev/null 2>&1; echo $?; }
+check "prompt hook restates the protocol" 'h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "at least one specialist and one independent reviewer"'
+check "prompt hook is silent outside a workspace" '[ -z "$(h "$(ev UserPromptSubmit)" /tmp)" ]'
+check "a short turn ends freely" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
+check "web search is blocked before the library" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
+h "$(ev PostToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh /x/library.sh search tax\"}")" "$P"
+check "web search is allowed after the library" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 0 ]'
+h "$(ev PostToolUse ",\"tool_name\":\"WebSearch\"")" "$P"
+check "research without specialists or saving cannot end" 'h "$(ev Stop ",\"stop_hook_active\":false")" "$P" 2>&1 | grep -q "specialists skill" && h "$(ev Stop ",\"stop_hook_active\":false")" "$P" 2>&1 | grep -q "saved nothing to the library"'
+check "the gate lets go on the second stop" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":true")" "$P")" = 0 ]'
+h "$(ev PostToolUse ",\"tool_name\":\"Agent\"")" "$P"; h "$(ev PostToolUse ",\"tool_name\":\"Agent\"")" "$P"
+h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/knowledge/notes/n9.md\"}")" "$P"
+check "specialists plus a saved note end freely" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
+h "$(ev UserPromptSubmit)" "$P" >/dev/null
+h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/pitch.md\"}")" "$P"
+check "a deliverable without specialists cannot end" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
+h "$(ev UserPromptSubmit)" "$P" >/dev/null
+h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/STATE.md\"}")" "$P"
+check "updating STATE.md is not a deliverable" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
+check "every turn is logged for the adherence metric" 'grep -q "substantive=1 agents=2 library=1 web=1 saved=1" "$W/.protocol.log"'
+
+# library: search follows links; replace deletes the old note and repoints references
+N="$W/knowledge/notes"
+printf -- '---\nid: tax-old\nconfidence: low\nlinks: [vat]\n---\nTax rate is 10%%.\n' > "$N/tax-old.md"
+printf -- '---\nid: vat\nconfidence: high\nlinks: [tax-old]\n---\nVAT basics.\n' > "$N/vat.md"
+printf -- '---\nid: tax-new\nconfidence: high\nlinks: [tax-old, vat]\nsupersedes: []\n---\nTax rate is 12%%.\n' > "$N/tax-new.md"
+echo "see knowledge/notes/tax-old.md" >> "$P/STATE.md"
+L() { CLAUDE_PROJECT_DIR="$P" sh "$here/library.sh" "$@"; }
+check "library search finds a note and its links" 'L search "tax rate" | grep -q "tax-old.md" && L search "tax rate" | grep -q "linked: .*vat.md"'
+check "library search says when there is nothing" 'L search zebra | grep -q "nothing on"'
+L replace tax-old tax-new >/dev/null
+check "replace deletes the old note" '[ ! -f "$N/tax-old.md" ]'
+check "replace repoints links and STATE references" 'grep -q "links: \[tax-new\]" "$N/vat.md" && grep -q "tax-new.md" "$P/STATE.md"'
+check "replace records supersedes and drops the self-link" '[ "$(fm_get "$N/tax-new.md" supersedes)" = "[tax-old]" ] && [ "$(fm_get "$N/tax-new.md" links)" = "[vat]" ]'
+
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }
