@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- macOS only. Replace the three paths, copy to ~/Library/LaunchAgents/, then:
+     launchctl load ~/Library/LaunchAgents/com.chief-of-staff.dispatcher.plist
+     Off again: launchctl unload (same path). Runs every 2 hours while you are logged in. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.chief-of-staff.dispatcher</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>/ABSOLUTE/PATH/TO/chief-of-staff/scripts/dispatcher.sh</string>
+    <string>/ABSOLUTE/PATH/TO/WORKSPACE</string>
+  </array>
+  <key>StartInterval</key><integer>7200</integer>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>COS_MAX_RUNS_PER_DAY</key><string>3</string>
+    <key>CLAUDE_BIN</key><string>/ABSOLUTE/PATH/TO/claude</string>
+  </dict>
+</dict>
+</plist>

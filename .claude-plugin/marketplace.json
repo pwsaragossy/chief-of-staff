@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "chief-of-staff",
+  "description": "AI chief of staff for Claude Code.",
+  "owner": { "name": "chief-of-staff maintainers" },
+  "plugins": [
+    {
+      "name": "chief-of-staff",
+      "description": "One door to the owner, project playbook, handoffs, specialists and reviewer, knowledge base.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

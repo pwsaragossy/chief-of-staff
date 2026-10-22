@@ -1,0 +1,104 @@
+# chief-of-staff
+
+An AI chief of staff for [Claude Code](https://code.claude.com): a small company of agents that
+works for one owner. Version 0.1.
+
+What it gives you:
+
+- **One door to the owner.** Only the `central` session asks you anything. Project sessions write
+  their questions on a card in `board/` and keep working; central asks them all at once.
+- **A fixed project playbook.** Opening questions, a coherence check of the success criteria,
+  registration, stages with gates (continue, stop, pause, redo).
+- **Standard handoffs.** Every project has a `STATE.md` in one format (adapted from the I-PASS
+  clinical handoff). The next session writes an arrival synthesis and checks one fact before acting.
+- **Specialists and an independent reviewer.** No generalist answers: senior specialists as
+  subagents, each claim marked FACT or INFERENCE, and someone who did not do the work attacks it.
+- **A knowledge base that gets used.** What you send to study becomes a note linked to a project;
+  the project briefing lists it until the project session integrates or discards it.
+- **A routing table** (`ROUTING.md`) so nobody has to remember whom to call.
+- **An optional dispatcher** that starts the next session on its own. Off by default.
+
+## Install
+
+```sh
+claude plugin marketplace add <owner>/chief-of-staff
+claude plugin install chief-of-staff@chief-of-staff
+```
+
+Replace `<owner>` with the GitHub account that hosts the repository. For a private repository,
+Claude Code clones with your existing git credentials
+(`gh auth login` then `gh auth setup-git`). Inside Claude Code you can use
+`/plugin marketplace add` and `/plugin install` instead.
+
+Then open Claude Code in any folder and run `/chief-of-staff:setup`. It asks where to create the
+workspace (default `~/chief-of-staff`) and creates:
+
+```
+<workspace>/
+  .chief-of-staff        marker the hooks look for
+  central/CLAUDE.md      the one door to the owner
+  board/                 one card per open item (status, project, owner, due)
+  projects/<slug>/       CLAUDE.md + STATE.md per project
+  knowledge/             inbox/, notes/, topics/, templates/
+  ROUTING.md             who to call for what
+```
+
+## Daily use
+
+1. Open Claude Code in `<workspace>/central`. It briefs you in at most 5 lines and asks whatever
+   is waiting on you, as buttons.
+2. To start something, tell central. It runs `/chief-of-staff:new-project`.
+3. To work on a project, open Claude Code in `projects/<slug>`. The briefing shows the next action.
+4. Close every session with `/chief-of-staff:handoff`.
+
+Skills: `setup`, `new-project`, `handoff`, `specialists`, `knowledge`.
+
+## Hooks
+
+Both hooks do nothing outside a workspace, so the plugin does not affect your other projects.
+
+- `SessionStart` prints a factual briefing (at most 2000 characters): cards waiting on the owner,
+  the project's status and next action, new knowledge notes to integrate.
+- `PreToolUse` on `AskUserQuestion` blocks button questions in any session that is not `central/`.
+
+## The dispatcher (off by default)
+
+`scripts/dispatcher.sh <workspace>` runs `claude -p` in each project whose `STATE.md` says
+`status: in-progress` and `dispatch: ready`. The `handoff` skill sets `ready` only when the next
+action needs nobody. Guard rails:
+
+- refuses to run if the workspace git repo has no remote, unless `COS_ALLOW_NO_BACKUP=1`. The
+  sessions cannot push; set `COS_PUSH=1` for the dispatcher to push after its runs, or push yourself;
+- at most `COS_MAX_RUNS_PER_DAY` runs (default 3), `COS_MAX_BUDGET_USD` per run (default 2),
+  `COS_RUN_TIMEOUT` seconds per run (default 1800); one dispatcher at a time, a stale lock is
+  taken over;
+- the unattended session cannot edit `CLAUDE.md` or `.claude/`, call `security` (Keychain),
+  `git push`, or ask questions;
+- every run is logged in `<workspace>/.dispatch.log`, output in `.dispatch-<slug>.out`;
+- a run that ends without a handoff, times out, or is interrupted is parked (`dispatch: off`)
+  instead of looping.
+
+Schedulers start with a short PATH, so give the absolute path of the CLI (`command -v claude`).
+On macOS, fill in `templates/dispatcher/com.chief-of-staff.dispatcher.plist`. On Linux, a cron line:
+`0 */2 * * * CLAUDE_BIN=/abs/path/claude /bin/sh /path/to/scripts/dispatcher.sh /path/to/workspace`.
+
+## Known limits
+
+- **Cloud sessions** (Claude Code on the web) do not load plugins installed on your machine, so
+  neither hook runs there. The rules still reach a cloud session only through the `CLAUDE.md` files,
+  and only if the workspace is that session's repository.
+- The ask guard stops button questions only. A question written as plain text is not blocked; the
+  `CLAUDE.md` rules are what prevent it.
+- The ask guard has been tested by script, not yet in an interactive session.
+- The reviewer is the same model with a different brief. It catches incoherence, not authority.
+- The dispatcher's guard rails rely on Claude Code permission rules; they are not a sandbox. The
+  CLAUDE.md deny covers the Edit tool; a shell command (`sed`, `mv`) could still change the file.
+- Notes still `new` after 21 days are to be discarded by the project session (a rule in the
+  `knowledge` skill); no script enforces it yet.
+
+## Check
+
+```sh
+sh scripts/selftest.sh
+claude plugin validate .
+```

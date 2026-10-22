@@ -1,0 +1,42 @@
+---
+name: new-project
+description: Open a new project with the fixed playbook (opening questions, coherence check, registration, start with gates). Use in the central session when the owner says "new project", "I'm starting X", "what do we need for X?", or runs /chief-of-staff:new-project.
+---
+
+# Open a new project (the playbook)
+
+Run this from `central/` only: central is the one session that asks the owner, and the only one that
+creates projects.
+
+## 1. Opening: one round of questions, as buttons, recommendation first
+Ask them together, in as few rounds as the question tool allows (it takes at most 4 per call, so
+this is two calls back to back). Offer likely answers as options; free text goes through "Other".
+1. **What** is it, in one sentence?
+2. **Kind**: real project, experiment, or a test of the method? (A test stays a test: no real
+   accounts, money, or legal steps.)
+3. **Success**: what result, by when?
+4. **Investment**: hours per week and money the owner accepts to spend.
+5. **Stop criterion**: what number or event makes us stop or change course?
+
+Decide yourself anything technical, legal, or that follows from the answers. Only ask what is
+irreversible or touches the owner's values, money, or criteria.
+
+## 2. Coherence check, before any specialist
+Write down whether the success criteria fit together and fit the investment (example of a misfit:
+"first revenue in 30 days" with "zero manual hours"). If they do not fit, say so in one line and ask
+the owner to pick, in the same round of buttons if possible.
+
+## 3. Registration
+1. Check for an existing project with the same subject or a similar name in `../projects/` and in
+   the central table. If one exists, stop and say so.
+2. Create `../projects/<slug>/` with `CLAUDE.md` and `STATE.md` from
+   `${CLAUDE_PLUGIN_ROOT}/templates/project/` (copy the literal path shown here), filling the
+   `{{...}}` fields from the answers. Put the answers in STATE.md section 2.
+3. Create the card `../board/<Project name>.md` from `${CLAUDE_PLUGIN_ROOT}/templates/board/card.md`,
+   with `owner` set to the project session (for example `session-<slug>`), never the owner.
+4. Add one line to the project table in `central/CLAUDE.md`.
+5. Commit only these files.
+
+## 4. Start
+Write in STATE.md section 5 the stages, each with its gate and its "done" criterion. At each gate
+the decision is one of: continue, stop, pause, redo. Then tell the owner which folder to open next.
