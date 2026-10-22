@@ -18,6 +18,8 @@ dir=${CLAUDE_PROJECT_DIR:-$PWD}
 root=$(cos_root "$dir") || die "not inside a chief-of-staff workspace"
 case ${dir#"$root"} in /central|/central/*) ;; *) die "only central moves the library, after the owner agrees (this session is in ${dir#"$root"/})" ;; esac
 lib=$(cos_lib "$root"); [ $? = 0 ] || die "the current library ($lib) is not reachable: plug the disk in first"
+[ "$(printf '%s' "$dest$remote" | tr -d '\000-\037\177')" = "$dest$remote" ] || die "the folder and the URL must be one line, without control characters"
+case $remote in -*) die "the git URL must not start with -" ;; esac
 case $dest in /*) ;; *) die "give an absolute folder path" ;; esac
 case $dest in */../*|*/..|*/./*) die "the path must not contain . or .. parts" ;; esac
 dest=${dest%/}

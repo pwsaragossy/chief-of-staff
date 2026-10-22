@@ -277,6 +277,8 @@ cp "$W/marker.bak" "$W/.chief-of-staff"
 O() { CLAUDE_PROJECT_DIR="$W/central" sh "$here/library.sh" offload "$@" 2>&1; }
 n0=$(ls "$N"/*.md | wc -l | tr -d ' '); X=$(cd "$(mktemp -d)" && pwd -P)
 check "offload refuses a folder inside the workspace" 'O "$W/sub/lib" | grep -q "inside the workspace"'
+check "offload refuses a path that would add lines to the marker" 'O "$(printf "$X/a\nlibrary: /etc")" | grep -q "one line" && ! grep -q "/etc" "$W/.chief-of-staff"'
+check "offload refuses a git URL that git would read as an option" 'O "$X/b" --remote "--upload-pack=x" | grep -q "must not start with -"'
 check "only central moves the library" 'L offload "$X/disk/lib" 2>&1 | grep -q "only central moves the library"'
 mkdir -p "$X/full"; : > "$X/full/x"
 check "offload refuses a folder that is not empty" 'O "$X/full" | grep -q "exists and is not empty"'
