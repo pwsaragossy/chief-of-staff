@@ -45,6 +45,7 @@ Establish that a specific user has a specific, frequent, costly problem, then de
 | HEART / North Star metric framework | Choosing what to measure | Metric tree with leading and lagging indicators and baselines |
 
 ## Never skip
+- [ ] Every claim taken from the library cites its [[id]]; every new finding was saved with library.sh new, and similar notes were retired, merged or marked coexists.
 - [ ] The target user is named in behavioral terms, and a count or access path to them exists.
 - [ ] The problem has at least one evidence type that is behavior (not just stated opinion).
 - [ ] The existing alternative, including "do nothing", is described with its cost.
@@ -84,8 +85,9 @@ Answer: <one line: build / don't build / test first, for whom, with confidence>
 ## Open questions for the owner
 <items for the project card>
 
-## Saved to library
-<paths of new findings, or "none">
+## Library
+cited: <[[id]] of each note used, or none>
+saved: <[[id]] of each note written with library.sh new, or none>
 ```
 
 ## What the reviewer should attack

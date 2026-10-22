@@ -22,7 +22,7 @@ The next session is a stranger with no memory of this one. Everything it needs i
    - `off` otherwise.
 3. **Update the card**: the file in `../../board/` whose front matter says `project: <this slug>`: `updated`, `status` (`waiting-owner` if any line waits on
    the owner, else `in-progress`; a finished card is removed and its result goes in STATE.md).
-4. **Knowledge**: for each note you integrated, set `status: integrated` and list where in
-   `integrated_in`.
+4. **Knowledge**: list in STATE.md section 3 the `[[id]]` of each note this session wrote or relied
+   on. The hooks have already checked them.
 5. **Commit only the files this session touched**, with a message that says what changed and why.
    A session started by the dispatcher has no shell: skip this step, the dispatcher commits.

@@ -33,5 +33,5 @@ Gate: the answer, its confidence and what would change it are written for the de
 - [ ] findings | Findings stated as the answer to the question, each marked fact or inference, with confidence level and the reason | card: researcher | needs: claim-table, contradictions, gaps | evidence:
 - [ ] recommendation | Recommendation for the named decision, the alternative rejected, and what result would flip it | card: product | needs: findings, decision | evidence:
 - [ ] limits | Limits section: what was not checked, sources not reached, risks of bias in the method | card: researcher | needs: findings | evidence:
-- [ ] library-entry | Findings saved to the workspace library with sources, dates and confidence so they are found next time | card: researcher | needs: findings, limits | evidence:
+- [ ] library-entry | Findings saved as library notes (library.sh new) with sources and confidence; the proof file lists their [[ids]] so they are found next time | card: researcher | needs: findings, limits | evidence:
 - [ ] review-4 | Independent review of stage 4: verdict and fixes | card: reviewer | needs: findings, recommendation, limits, library-entry | evidence:

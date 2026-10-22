@@ -59,6 +59,7 @@ Interface design
 | Usability test, about 5 users per round (default, adjust to the case) | A prototype exists and top tasks must be validated | Task success, time, observed failure points |
 
 ## Never skip
+- [ ] Every claim taken from the library cites its [[id]]; every new finding was saved with library.sh new, and similar notes were retired, merged or marked coexists.
 - [ ] A written strategy (positioning and personality) exists and the identity cites it; otherwise the mark work is blocked.
 - [ ] More than one distinct direction was explored, and the reason for the chosen one is written.
 - [ ] The logo exists in primary, one-colour, reversed and small-size versions, with clear space and minimum size stated.
@@ -101,8 +102,9 @@ Answer: <one line: the design decision or deliverable, for whom, with confidence
 ## Open questions for the owner
 <items for the project card>
 
-## Saved to library
-<paths of new findings, or "none">
+## Library
+cited: <[[id]] of each note used, or none>
+saved: <[[id]] of each note written with library.sh new, or none>
 ```
 
 ## What the reviewer should attack

@@ -11,13 +11,16 @@ use each, the checks a senior professional never skips, the evidence standard an
 
 1. **Pick** from the workspace `ROUTING.md` the cards the subject needs, usually one or two plus the
    reviewer. If no card fits, write one in the same format first (`specialists/<role>.md`).
-2. **Search the library first** (`knowledge` skill). What it returns goes into every brief, so no
-   specialist redoes research the workspace already has.
+2. **Search the library first** (`knowledge` skill); the prompt hook already lists notes that may
+   bear on the request. What it returns goes into every brief, so no specialist redoes research the
+   workspace already has.
 3. **Brief each specialist as a subagent.** The brief contains, in this order:
    - the line `Role card: <role>` and the full text of that card (the hook blocks a brief without it);
-   - the question, the files to read, the library results, and what to deliver;
-   - "research only what is missing; save each new finding as a linked note, or replace the note
-     it makes obsolete; finish with the never-skip checklist of your card".
+   - the line `Library: [[id]] [[id]] ...` with the notes found, or `Library: none found for <terms>`
+     (the hook blocks a brief without it), the question, the files to read, and what to deliver;
+   - "research only what is missing; save each new finding with library.sh new and fill its
+     Compared: line; cite every note you use as [[id]]; finish with the never-skip checklist of your
+     card".
    Run independent specialists in parallel.
 4. **Review.** A separate subagent with `Role card: reviewer` (and that card's text) receives the
    specialists' role cards and their full outputs, not your summary. It checks every never-skip item,

@@ -48,6 +48,7 @@ Every number carries its source, its unit, its period and its currency. Tax and 
 | Tax and accounting exposure screen | Cross-border sales, contractors, equity, crypto or digital assets, revenue recognition choices | List of flagged exposures with jurisdiction, trigger and who must sign off |
 
 ## Never skip
+- [ ] Every claim taken from the library cites its [[id]]; every new finding was saved with library.sh new, and similar notes were retired, merged or marked coexists.
 - [ ] Every input has unit, period, currency and source or an ASSUMPTION tag.
 - [ ] Variable costs include fees, taxes on revenue, refunds and support, not only the obvious cost.
 - [ ] Cash and accrual are not mixed in the same calculation.
@@ -82,8 +83,9 @@ Answer: <one line, with the number and the decision it supports>
 <what was not verified and why>
 ## Questions for the owner
 <each goes on the project card>
-## Saved to library
-<paths of new notes>
+## Library
+cited: <[[id]] of each note used, or none>
+saved: <[[id]] of each note written with library.sh new, or none>
 ```
 
 ## What the reviewer should attack

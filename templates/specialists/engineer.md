@@ -45,6 +45,7 @@ Pick the simplest design that meets the stated requirements at the expected load
 | SLO and error budget (SRE) | The system has users who depend on its availability | Availability/latency targets, measurement, alert thresholds |
 
 ## Never skip
+- [ ] Every claim taken from the library cites its [[id]]; every new finding was saved with library.sh new, and similar notes were retired, merged or marked coexists.
 - [ ] Requirements include numbers for load, latency and availability, or are marked as unknown with an open question.
 - [ ] Existing code and platform features were checked before proposing new components.
 - [ ] The simplest option (including "do not build this") was evaluated and the reason for rejecting it is written.
@@ -84,8 +85,9 @@ Answer: <one line: recommended approach, with confidence>
 ## Open questions for the owner
 <items for the project card>
 
-## Saved to library
-<paths of new findings and ADRs, or "none">
+## Library
+cited: <[[id]] of each note used, or none>
+saved: <[[id]] of each note written with library.sh new, or none>
 ```
 
 ## What the reviewer should attack

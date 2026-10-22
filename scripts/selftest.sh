@@ -273,6 +273,24 @@ check "agents cannot delete the library id file" '[ "$(rc "$(ev PreToolUse ",\"t
 cp "$W/marker.bak" "$W/.chief-of-staff"
 
 
+# offload: to another folder (disk, cloud folder, repo) and back, verified; unplugged = offline
+O() { CLAUDE_PROJECT_DIR="$W/central" sh "$here/library.sh" offload "$@" 2>&1; }
+n0=$(ls "$N"/*.md | wc -l | tr -d ' '); X=$(cd "$(mktemp -d)" && pwd -P)
+check "offload refuses a folder inside the workspace" 'O "$W/sub/lib" | grep -q "inside the workspace"'
+check "only central moves the library" 'L offload "$X/disk/lib" 2>&1 | grep -q "only central moves the library"'
+mkdir -p "$X/full"; : > "$X/full/x"
+check "offload refuses a folder that is not empty" 'O "$X/full" | grep -q "exists and is not empty"'
+check "a git remote inside a synced cloud folder is refused" 'O "$X/Library/Mobile Documents/lib" --remote "$X/r.git" | grep -q "corrupted by the sync"'
+git init -q --bare "$X/r.git"
+check "offload copies, verifies and pushes to a private repo" 'O "$X/disk/lib" --remote "$X/r.git" | grep -q "Library moved to $X/disk/lib: $n0 notes, every file verified" && git -C "$X/r.git" log --oneline | grep -q "library: moved here"'
+check "the workspace now reads the moved library" '[ "$(L where)" = "$X/disk/lib" ] && L search rate services | grep -q "^1\. \[\[tax-2\]\]"'
+check "the old folder is kept, renamed and ignored by git" 'ls -d "$W"/knowledge.offloaded-* >/dev/null && grep -qx "knowledge.offloaded-\*/" "$W/.gitignore"'
+mv "$X/disk" "$X/disk-unplugged"
+check "an unplugged disk turns the library offline, not broken" 'L where | grep -q "Library offline"'
+mv "$X/disk-unplugged" "$X/disk"
+check "offload brings the library back into the workspace" 'O "$W/knowledge" | grep -q "back inside the workspace" && [ "$(L where)" = "$W/knowledge" ] && [ ! -d "$W/knowledge/.git" ] && [ "$(ls "$N"/*.md | wc -l | tr -d " ")" = "$n0" ]'
+rm -rf "$X" "$W"/knowledge.offloaded-*
+
 # speed: 2,000 notes, every library step stays inside the hook budget
 Z=$(mktemp -d); mkdir -p "$Z/knowledge/notes" "$Z/projects/p"; : > "$Z/.chief-of-staff"
 awk -v d="$Z/knowledge/notes" 'BEGIN { srand(7); for (i = 1; i <= 2000; i++) { f = d "/n" i ".md"

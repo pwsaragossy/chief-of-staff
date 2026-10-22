@@ -44,6 +44,7 @@ Turn a decision question into a sourced, dated answer with explicit confidence. 
 | Source reliability grading (Admiralty/NATO A-F, 1-6) | Sources conflict or quality varies | Each source rated for reliability and information credibility |
 
 ## Never skip
+- [ ] Every claim taken from the library cites its [[id]]; every new finding was saved with library.sh new, and similar notes were retired, merged or marked coexists.
 - [ ] Decision and threshold written down before searching.
 - [ ] Every decision-driving number has two independent sources or is labeled single-source.
 - [ ] Every source carries a publication date; nothing undated supports a conclusion.
@@ -83,8 +84,9 @@ Answer: <one line, with confidence level>
 ## Open questions for the owner
 <items for the project card>
 
-## Saved to library
-<paths of new findings, or "none">
+## Library
+cited: <[[id]] of each note used, or none>
+saved: <[[id]] of each note written with library.sh new, or none>
 ```
 
 ## What the reviewer should attack

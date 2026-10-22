@@ -48,6 +48,7 @@ Read-only by default: this role reports findings and never changes code, access 
 | Incident runbook | An incident would require fast, calm action by one person | Steps: detect, contain, revoke, restore, notify, record |
 
 ## Never skip
+- [ ] Every claim taken from the library cites its [[id]]; every new finding was saved with library.sh new, and similar notes were retired, merged or marked coexists.
 - [ ] Assets and the attacker's goal are named before threats are listed.
 - [ ] A system diagram or flow list with trust boundaries exists in the output.
 - [ ] Secrets: where they live, who can read them, how they are rotated and revoked.
@@ -83,8 +84,9 @@ Answer: <one line: overall posture, top risk, the one action to do first>
 <components, accounts or code paths not examined, and why>
 ## Questions for the owner
 <each goes on the project card>
-## Saved to library
-<paths of new notes>
+## Library
+cited: <[[id]] of each note used, or none>
+saved: <[[id]] of each note written with library.sh new, or none>
 ```
 
 ## What the reviewer should attack

@@ -22,10 +22,15 @@ What it gives you:
   security, reviewer) say what each senior specialist gathers first, its method, its toolbox and when to use
   each tool, what it never skips, its evidence standard and output format. A substantive turn
   cannot end without at least one specialist and the reviewer.
-- **A library consulted before research.** Notes in `knowledge/notes/` link to each other
-  (`links:`), and a newer note replaces the one it makes obsolete (`supersedes:`; the old file is
-  deleted and every reference repointed). Web search is blocked until the library was searched,
-  and a turn that searched the web cannot end until it saved what it found.
+- **A company library (second brain), enforced by hooks.** One note per file in `knowledge/notes/`,
+  readable in Obsidian: findings, decisions, how-tos and formats, options, topics. Each note carries
+  its origin (project or research) but every project uses every note. Links are inline `[[id]]`;
+  backlinks, index and graph are computed on the fly, never stored. A note is checked the moment it
+  is saved (format, sources for its confidence, no secrets, no hidden text, third-party text fenced as
+  data). When a new note meets a similar one it must say how: the worse is retired, the two are
+  merged, or they coexist as valid options. Every prompt brings the notes that bear on it, briefs
+  carry a `Library:` line, web search waits for a library search, and DELIVERY.md cites its sources.
+  The library can live on an external disk, a cloud folder or a private repo (`library.sh offload`).
 - **A routing table** (`ROUTING.md`) so nobody has to remember whom to call.
 - **A local panel**: green, yellow or red per project with the reason, a live map of each track
   (stages, deliverables by state, prerequisites, the delivery line, items added since opening), decisions
@@ -53,7 +58,7 @@ workspace (default `~/chief-of-staff`) and creates:
   central/CLAUDE.md      the one door to the owner
   board/                 one card per open item (status, project, owner, due)
   projects/<slug>/       CLAUDE.md + STATE.md + TRACK.md per project
-  knowledge/             inbox/, notes/, templates/
+  knowledge/             inbox/, notes/, templates/ (or elsewhere: library.sh offload)
   specialists/           one role card per specialist (edit freely)
   ROUTING.md             who to call for what
 ```
@@ -80,20 +85,26 @@ request without the token. Colors come from `scripts/health.sh`, which also work
   `stale_hours` (3 h for a hackathon, 48 h otherwise), or paused;
 - **green**: none of these.
 
-Files or links dropped in the import box land in `knowledge/inbox/`; central turns them into
-library notes with the `knowledge` skill.
+Files or links dropped in the import box land in the library's `inbox/` (the panel warns when one
+looks like it holds a key or token); central turns them into library notes with the `knowledge`
+skill. The Library section shows the notes as a graph (green active, yellow past review, grey
+retired, red ring with problems; the 300 most linked when there are more), with the notes that have
+problems, broken links, notes past their review date and possible duplicates nobody compared.
 
 ## Hooks
 
 Every hook does nothing outside a workspace, so the plugin does not affect your other projects.
 
 - `SessionStart` prints a factual briefing (at most 2000 characters): cards waiting on the owner,
-  the project's status and next action, new knowledge notes to integrate.
+  the project's status and next action, the library's counts and the project's latest notes.
 - `PreToolUse` on `AskUserQuestion` blocks button questions in any session that is not `central/`.
 - `scripts/protocol.sh` (UserPromptSubmit, PreToolUse, PostToolUse, SubagentStop, Stop) restates
   the protocol every turn and enforces it: a subagent brief must name an existing role card
   (`Role card: <role>`, or `Role card: utility` for a helper); a specialist cannot finish without
-  its never-skip checklist; web search waits for a library search (`scripts/library.sh search`);
+  its never-skip checklist and needs a `Library:` line; web search waits for a library search
+  (`scripts/library.sh search`); a note is checked on save and at the end of the turn (links,
+  `Compared:`, retirements, notes written by shell commands too); agents cannot edit the workspace
+  marker;
   a substantive turn (a deliverable file, web research, or a long answer) cannot end without a
   specialist and the reviewer, nor research end without a saved note. Each push happens once per
   turn. Every turn is logged to `<workspace>/.protocol.log`, the adherence record.
@@ -159,7 +170,8 @@ What is ours, with no equivalent found in ECC:
 - specialists who work from written role cards and are checked by hooks, attacked by an
   independent reviewer (ECC's `santa-method` and `council` skills are the closest, for code and
   content review, and they are skills the model may not call);
-- a linked library, searched before the web, where a newer note replaces the old one;
+- a company library checked by hooks on every save, where the worse of two conflicting notes is
+  retired or the two are merged, and valid alternatives coexist;
 - a routing table of whom to call for what.
 
 ## Known limits
@@ -181,8 +193,15 @@ What is ours, with no equivalent found in ECC:
   purpose. Thresholds marked "default, adjust to the case" are conventions, not standards.
 - The dispatcher's guard rails rely on Claude Code permission rules; they are not a sandbox. For a
   stronger boundary, run the dispatcher inside a container or a separate user account.
-- Notes still `new` after 21 days are to be discarded by the project session (a rule in the
-  `knowledge` skill); no script enforces it yet.
+- Library search is lexical (BM25F over titles, aliases, tags and body). A duplicate written with a
+  different title, or in another language, is found only by the reviewer, not by the hooks.
+  Semantic search would be an optional adapter, worth it past about 5,000 notes.
+- A note's truth, and whether "the worse" was really retired, are judged by the reviewer; the hooks
+  check that the decision was made and recorded.
+- Notes written by shell commands are caught when the command names the library path; other
+  bypasses are caught by `library.sh doctor` and the panel, not by the turn gate.
+- An offloaded library: no automatic sync; Windows paths are not supported; in iCloud, keep the
+  folder downloaded on the computer (placeholder files are not seen).
 
 ## Check
 

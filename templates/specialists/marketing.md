@@ -47,6 +47,7 @@ Find the narrowest customer group that urgently needs the offer, say why it is b
 | Competitive messaging audit | Three or more rivals already sell to the same segment | Table of rivals' claims, proof, tone, gaps and openings |
 
 ## Never skip
+- [ ] Every claim taken from the library cites its [[id]]; every new finding was saved with library.sh new, and similar notes were retired, merged or marked coexists.
 - [ ] Goal is numeric with a date, and the funnel needed to reach it is computed.
 - [ ] One first segment is chosen, with exclusions stated.
 - [ ] Positioning names the real alternative, including doing nothing.
@@ -86,8 +87,9 @@ Answer: <one line: who to target, with what message, through which channel, with
 ## Open questions for the owner
 <items for the project card>
 
-## Saved to library
-<paths of new findings, or "none">
+## Library
+cited: <[[id]] of each note used, or none>
+saved: <[[id]] of each note written with library.sh new, or none>
 ```
 
 ## What the reviewer should attack

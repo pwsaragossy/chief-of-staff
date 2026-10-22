@@ -48,6 +48,7 @@ The output states the jurisdiction and the date of every rule, separates what th
 | Escalation brief for counsel | A licensed human must review or sign | One page: facts, questions, documents, deadline, draft attached |
 
 ## Never skip
+- [ ] Every claim taken from the library cites its [[id]]; every new finding was saved with library.sh new, and similar notes were retired, merged or marked coexists.
 - [ ] Jurisdiction and governing law are stated, or listed as an open question.
 - [ ] Every rule cited has its date and the text was opened, not recalled.
 - [ ] The strongest counter-argument to the conclusion is written.
@@ -83,8 +84,9 @@ Answer: <one line: conclusion, jurisdiction, confidence>
 <documents not read, rules not opened, jurisdictions not covered>
 ## Questions for the owner
 <each goes on the project card>
-## Saved to library
-<paths of new notes>
+## Library
+cited: <[[id]] of each note used, or none>
+saved: <[[id]] of each note written with library.sh new, or none>
 ```
 
 ## What the reviewer should attack

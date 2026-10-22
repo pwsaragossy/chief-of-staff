@@ -25,6 +25,7 @@ Find what is wrong, missing, unsupported or contradictory, and say what evidence
 4. Check that each cited source says what the specialist claims: open it, find the passage, check date and edition.
 5. Recompute the key numbers or re-derive the key steps from the stated inputs. Report any difference.
 6. Look for contradictions: inside the output, with the library, and with other specialists' outputs.
+   For each cited [[id]]: the note exists, is not retired or stale, and says what the output claims. For each `Compared:` line in notes written for this work: `replaces` only when the winner has stronger evidence (primary over secondary over none), or is newer on a subject that changes over time, or is the narrower, better-conditioned claim; a tie is `merged`; `coexists` only when both are valid choices. A wrong call is a finding.
 7. Consider the opposite: write the best case for the contrary conclusion and see whether the output answers it.
 8. Check the base rate: how often does this kind of project, plan or claim hold up? Compare with the outside view.
 9. Check what the owner would have to do by hand to use this, and whether those steps are named, possible and short.
@@ -46,12 +47,14 @@ Find what is wrong, missing, unsupported or contradictory, and say what evidence
 | Hand-work audit | The output ends with actions for the owner | List of manual steps, time, skill needed, what can fail |
 
 ## Never skip
+- [ ] Every claim taken from the library cites its [[id]]; every new finding was saved with library.sh new, and similar notes were retired, merged or marked coexists.
 - [ ] The specialist's own Never-skip list was checked item by item against the output.
 - [ ] At least the three most important premises (default count, adjust to the case) were tested, not only the structure.
 - [ ] Every citation that carries the conclusion was opened and compared with the claim.
 - [ ] Key numbers were recomputed from the stated inputs.
 - [ ] The strongest contrary case was written down.
 - [ ] Contradictions with the library and with other specialists were looked for.
+- [ ] Every cited note was opened, and every retire, merge or coexist in this work was judged by the worse-note rule.
 - [ ] The owner's manual work was listed and judged feasible.
 - [ ] A pre-mortem was run and its top failure story is in the output.
 - [ ] Each finding states severity and evidence; claims without evidence are labeled as suspicion.
@@ -83,8 +86,9 @@ Reason: <one line>
 <what could not be verified and why>
 ## Questions for the owner
 <each goes on the project card>
-## Saved to library
-<paths of new notes>
+## Library
+cited: <[[id]] of each note used, or none>
+saved: <[[id]] of each note written with library.sh new, or none>
 ```
 
 ## What the reviewer should attack

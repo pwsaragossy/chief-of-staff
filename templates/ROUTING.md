@@ -17,7 +17,8 @@ tools and when to use each, and what it never skips. Edit cards and rows freely:
 | opening a new project | `new-project` skill (from `central/`), which copies a track to TRACK.md | coherence check of the success criteria |
 | the next deliverable of a project | the role card named on its line in TRACK.md | the stage's `review-<n>` item |
 | how everything is going | `panel` skill (green, yellow, red per project) | — |
-| something the owner sent to study (link, video, file) | `knowledge` skill | — |
+| something the owner sent to study (link, video, file); anything learned worth keeping | `knowledge` skill | — |
+| move the library to a disk, cloud folder or private repo | `knowledge` skill, from central, after the owner agrees | — |
 | closing a session | `handoff` skill | the next session's arrival synthesis |
 | a decision only the owner can make | a line on the project card, `status: waiting-owner` | — |
 

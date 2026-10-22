@@ -23,8 +23,9 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
 - **Commit each finished step** with only the files you touched; do not wait for the end.
 - **Do not answer as a generalist.** Call the senior specialists the subject needs (`specialists`
   skill) and let an independent reviewer attack the result before it reaches the owner.
-- **Use the knowledge base.** The session briefing lists new notes linked to this project; integrate
-  each one (card, STATE line, a linked note, or discard with a reason).
+- **Use the company library** (`knowledge` skill). It is shared by every project: search before
+  researching, cite notes as `[[id]]`, save what you learn with `library.sh new` (origin: this
+  project), and retire or merge what your new note makes worse. DELIVERY.md ends with `## Sources`.
 - **Close track items with proof.** An item is `[x]` only with `evidence:` pointing to a file in this
   folder (the deliverable or the reviewer's verdict); `[-]` needs `why:`. Move `stage:` forward only
   when the stage's items are closed; the hook checks this at the end of every turn.
