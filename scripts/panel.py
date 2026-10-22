@@ -56,16 +56,26 @@ def sh(script, *args, cwd=None, strict=False):
 MAX_NODES = 300  # an SVG graph of thousands of notes freezes the browser; the lists below stay complete
 
 
-def library(root):
+def libraries(root):
+    """Every library (personal and each team's): name, folder, state, notes, last sync."""
+    out = []
+    for line in sh("library.sh", "libs", cwd=os.path.join(root, "central")).splitlines():
+        f = line.split("\t")
+        if len(f) >= 5:
+            out.append({"name": f[0], "path": f[1], "state": f[2], "notes": f[3], "sync": f[4]})
+    return out
+
+
+def library(root, name="personal"):
     """The library view, computed on demand from library.sh (graph + where): never a stored index."""
-    where = sh("library.sh", "where", cwd=root).splitlines()
+    where = sh("library.sh", "--lib", name, "where", cwd=root).splitlines()
     path = where[0] if where else os.path.join(root, "knowledge")
     if len(where) > 1:
         return {"state": "offline" if "offline" in where[1] else "error", "path": path, "message": where[1],
                 "color": "yellow", "nodes": [], "edges": [], "problems": [], "dangling": [], "stale": [], "pairs": []}
     nodes, edges, dangling, pairs, retired = [], [], [], [], 0
     try:
-        graph = sh("library.sh", "graph", cwd=root, strict=True)
+        graph = sh("library.sh", "--lib", name, "graph", cwd=root, strict=True)
     except TimeoutError:
         return {"state": "error", "path": path, "message": "Checking the library took over 20 s; run library.sh doctor.",
                 "color": "yellow", "nodes": [], "edges": [], "problems": [], "dangling": [], "stale": [], "pairs": []}
@@ -93,7 +103,7 @@ def library(root):
             "origins": sorted({n["origin"] for n in nodes if n["origin"]})}
 
 
-def snapshot(root):
+def snapshot(root, libname="personal"):
     projects = []
     for line in sh("health.sh", root).splitlines():
         f = (line.split(US) + [""] * 11)[:11]
@@ -115,7 +125,11 @@ def snapshot(root):
             "brief": sh("track.sh", "brief", pdir).strip().split(" Waiting on prerequisites:")[0],
             "next": front_matter(os.path.join(pdir, "STATE.md")).get("next", ""),
         })
-    lib = library(root)
+    libs = libraries(root)
+    if libname not in [x["name"] for x in libs]:
+        libname = "personal"
+    lib = library(root, libname)
+    lib["name"] = libname
     rank = {"red": 2, "yellow": 1, "green": 0}
     overall = max([p["color"] for p in projects] + [lib["color"]], key=lambda c: rank.get(c, 0))
 
@@ -144,7 +158,7 @@ def snapshot(root):
     inbox = os.path.join(lib["path"], "inbox")
     n_inbox = len([n for n in os.listdir(inbox) if not n.startswith(".")]) if os.path.isdir(inbox) else 0
     n_notes = lib.get("total", 0)
-    return {"library": lib, "workspace": root, "overall": overall, "projects": projects, "cards": cards,
+    return {"library": lib, "libs": libs, "workspace": root, "overall": overall, "projects": projects, "cards": cards,
             "turns": [{k: t.get(k, "") for k in ("when", "project", "substantive", "specialists",
                                                   "reviewers", "track", "violation")} for t in turns],
             "inbox": n_inbox, "notes": n_notes, "time": time.strftime("%H:%M:%S")}
@@ -223,7 +237,7 @@ select{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--line);
 const T=new URLSearchParams(location.search).get("t");
 const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e};
 function empty(box,text){box.replaceChildren(el("div","empty",text))}
-const openMaps=new Set();let last=null,graphOpen=false,origin="";
+const openMaps=new Set();let last=null,graphOpen=false,origin="",libName="personal";
 const SVG=t=>document.createElementNS("http://www.w3.org/2000/svg",t);
 function drawGraph(L){
   const W=900,H=440,nodes=L.nodes.filter(n=>!origin||n.origin===origin),at=new Map();
@@ -261,7 +275,7 @@ function drawMap(p){
       path.setAttribute("d",d);const st=p.items.find(x=>x.id===nm);if(st&&st.state==="done")path.setAttribute("class","ok");svg.append(path)}))});
   return wrap}
 async function load(){
-  const r=await fetch("api?t="+encodeURIComponent(T));if(!r.ok){document.getElementById("msg").textContent="Panel stopped. Start it again.";return}
+  const r=await fetch("api?t="+encodeURIComponent(T)+"&lib="+encodeURIComponent(libName));if(!r.ok){document.getElementById("msg").textContent="Panel stopped. Start it again.";return}
   last=await r.json();render()}
 function render(){
   const d=last;if(!d)return;
@@ -286,6 +300,8 @@ function render(){
     const row=el("div","row");row.append(el("span","dot yellow"),el("div","grow",c.title+(c.project?" ("+c.project+")":"")),el("span","muted",c.since));return row}));
   document.getElementById("lib").textContent=d.inbox+" item(s) in the inbox, "+d.notes+" note(s) in the library.";
   const B=document.getElementById("library"),L=d.library,head=el("div","row"),hb=el("div","grow");head.append(el("span","dot "+L.color),hb);
+  if(d.libs.length>1){const s=el("select");s.setAttribute("aria-label","Library");d.libs.forEach(x=>{const o=el("option","",x.name+(x.name==="personal"?"":" (team)")+", "+x.notes+" notes");o.value=x.name;if(x.name===L.name)o.selected=true;s.append(o)});
+    s.onchange=()=>{libName=s.value;origin="";load()};hb.append(s);const cur=d.libs.find(x=>x.name===L.name);if(cur&&cur.sync!=="-")hb.append(el("div","muted","Last sync: "+cur.sync))}
   if(L.state!=="online"){hb.append(el("div","name",L.state==="offline"?"Library offline":"Library error"),el("div","muted",L.message));B.replaceChildren(head)}
   else{hb.append(el("div","name",L.total+" notes"+(L.retired?", "+L.retired+" retired":"")),el("div","muted",L.path));
     const t=el("button","toggle",graphOpen?"Hide graph":"Graph");t.onclick=()=>{graphOpen=!graphOpen;render()};hb.append(t);
@@ -362,7 +378,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             n = secrets.token_urlsafe(16)  # per response: an injected <script> without it does not run
             self.reply("text/html; charset=utf-8", PAGE.replace("<style>", '<style nonce="%s">' % n, 1).replace("<script>", '<script nonce="%s">' % n, 1).encode(), n)
         elif path == "/api":
-            self.reply("application/json", json.dumps(snapshot(self.root)).encode())
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            self.reply("application/json", json.dumps(snapshot(self.root, (q.get("lib") or ["personal"])[0])).encode())
         else:
             self.deny(404, "Not found.")
 

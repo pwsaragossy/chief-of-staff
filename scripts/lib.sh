@@ -60,3 +60,31 @@ cos_lib() {
   fi
   [ -f "$_l/.library-id" ] && [ -d "$_l/notes" ] || return 2
 }
+
+# Several libraries: "personal" (cos_lib) and one per team, marker line "team: <slug> /absolute/path".
+# cos_libs ROOT -> "name<TAB>path" for every library, personal first.
+cos_libs() {
+  printf 'personal\t%s\n' "$(cos_lib "$1")"
+  awk '$1 == "team:" && $2 ~ /^[a-z0-9][a-z0-9-]*$/ { n = $2; sub(/^team: +[^ ]+ +/, ""); print n "\t" $0 }' "$1/.chief-of-staff" 2>/dev/null
+}
+# cos_libname ROOT DIR -> the library a session in DIR uses: the team slug in projects/<p>/.library, else personal
+cos_libname() {
+  _r=${2#"$1"}; _r=${_r#/}; _n=
+  case $_r in projects/?*) _p=${_r#projects/}; _p=${_p%%/*}; _n=$(head -n 1 "$1/projects/$_p/.library" 2>/dev/null | tr -cd 'a-z0-9-') ;; esac
+  printf '%s\n' "${_n:-personal}"
+}
+# cos_libpath ROOT NAME -> the folder of library NAME; returns as cos_lib, and 4 when no library has that name
+cos_libpath() {
+  [ "$2" = personal ] && { cos_lib "$1"; return; }
+  _l=$(cos_libs "$1" | awk -F '\t' -v n="$2" '$1 == n { print $2; exit }')
+  [ -n "$_l" ] || { printf '%s\n' "$1/libraries/$2"; return 4; }
+  printf '%s\n' "$_l"
+  case $_l in /*) ;; *) return 3 ;; esac
+  [ -f "$_l/.library-id" ] && [ -d "$_l/notes" ] || return 2
+}
+# cos_libof ROOT FILE -> "name<TAB>path" of the library whose notes/ holds FILE (empty when none)
+cos_libof() {
+  cos_libs "$1" | while IFS="$(printf '\t')" read -r _n _p; do
+    case $2 in "$_p/notes/"*) printf '%s\t%s\n' "$_n" "$_p"; break ;; esac
+  done
+}

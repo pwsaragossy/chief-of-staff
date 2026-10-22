@@ -47,12 +47,18 @@ rawdel=$(fm_get "$t" delivery); del=$rawdel; case $del in ''|*[!0-9]*) del=$stag
 # items of stages 1..delivery still open; empty = the original request is delivered
 undelivered=$(printf '%s\n' "$rows" | awk -F "$US" -v d="$del" '$1 == "I" && $2 <= d && $3 != "x" && $3 != "-" { print $4 }')
 
-# cites FILE [PREFIX]: each [[id]] in FILE must be a library note that is not retired
+# cites FILE [PREFIX]: each [[id]] in FILE must be a note of the project's library that is not retired.
+# A personal project may also cite a team's note; a team project cites only its own library (no leak).
 cites() {
   _r=$(cos_root "$dir") || return 0
-  _l=$(cos_lib "$_r") || return 0
+  _ln=$(cos_libname "$_r" "$dir"); _l=$(cos_libpath "$_r" "$_ln") || return 0
   grep -o '\[\[[^]|#]*' "$1" 2>/dev/null | sed 's/^\[\[//' | sort -u | while IFS= read -r _i; do
-    _n="$_l/notes/$_i.md"
+    _n="$_l/notes/$_i.md"; _o=
+    [ -f "$_n" ] || _o=$(cos_libs "$_r" | while IFS="$(printf '\t')" read -r _a _p; do [ -f "$_p/notes/$_i.md" ] && { printf '%s\t%s\n' "$_a" "$_p"; break; }; done)
+    if [ -n "$_o" ] && [ "$_ln" != personal ]; then
+      echo "${2:-}$(basename "$1") cites [[$_i]] from the library '${_o%%	*}': this project shares with the team library '$_ln', so its work cannot rest on another library's note. Use a note of '$_ln', or the owner agrees to rewrite the fact there"; continue
+    fi
+    [ -n "$_o" ] && _n="${_o#*	}/notes/$_i.md"
     if [ ! -f "$_n" ]; then echo "${2:-}$(basename "$1") cites [[$_i]], which is not a note in the library ($_l/notes)"
     elif [ "$(fm_get "$_n" status)" = retired ]; then _s=$(fm_get "$_n" superseded_by)
       echo "${2:-}$(basename "$1") cites [[$_i]], which is retired${_s:+: cite [[$_s]] instead}"

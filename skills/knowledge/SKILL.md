@@ -51,6 +51,20 @@ A retired note stays in place, so old links still resolve; search shows it only 
 `sh library.sh doctor` lists every problem, broken link and possible duplicate; the panel shows the
 same as a graph. A note is never deleted by hand: retire it.
 
-## 5. Moving the library (disk, cloud folder, private repo)
+## 5. Several libraries: personal and one per team
+`sh library.sh libs` lists them. Your session uses its project's library (a team project uses its
+team's; everything else uses personal), and `search`, `new` and `retire` work there. `search --all`
+also shows the other libraries, each under a line that says where it comes from: learn from them, but
+do not copy their content into this library or its deliverables unless the owner agrees.
+- A note in a team library never links a note of another library (blocked: the team cannot open it,
+  and it would carry private or another team's knowledge). A personal note may link a team note
+  (a warning: keep that team's knowledge out of other teams' work).
+- A team project's deliverable cites only its team's notes.
+- Team libraries sync by themselves: pulled at session start, pushed after each turn whose notes
+  passed the checks. A conflict becomes a card for this session in `board/`, with the steps.
+- Only central connects or disconnects a team, after the owner agrees: `library.sh join <git-link>`,
+  `library.sh leave <name>`. A project switches library with `library.sh use <name>`; the owner confirms.
+
+## 6. Moving the library (disk, cloud folder, private repo)
 Only central does this, after the owner agrees: `sh library.sh offload <folder> [--remote <git-url>]`.
 If the disk is unplugged later, work continues and the panel turns yellow until it is back.

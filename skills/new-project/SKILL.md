@@ -18,6 +18,9 @@ this is two calls back to back). Offer likely answers as options; free text goes
 3. **Success**: what result, by when?
 4. **Investment**: hours per week and money the owner accepts to spend.
 5. **Stop criterion**: what number or event makes us stop or change course?
+6. **Library** — only when `sh "${CLAUDE_PLUGIN_ROOT}/scripts/library.sh" libs` lists a team library:
+   is this project personal or a team's? Recommend personal unless the owner named the team. A team
+   project writes to and searches that team's library only, so nothing personal reaches the team.
 
 Decide yourself anything technical, legal, or that follows from the answers. Only ask what is
 irreversible or touches the owner's values, money, or criteria.
@@ -38,6 +41,8 @@ the owner to pick, in the same round of buttons if possible.
    `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" baseline ../projects/<slug>` once, which records how
    many items the map had at opening, so the panel shows how much was added later. If an item truly cannot apply, mark it
    `[-]` with `why:` instead of deleting it, so the reviewer sees it.
+   For a team project, from its folder: `CLAUDE_PROJECT_DIR=<absolute path of ../projects/<slug>> sh
+   "${CLAUDE_PLUGIN_ROOT}/scripts/library.sh" use <team>` (the owner confirms; never write `.library` by hand).
 3. Create the card `../board/<Project name>.md` from `${CLAUDE_PLUGIN_ROOT}/templates/board/card.md`,
    with `owner` set to the project session (for example `session-<slug>`), never the owner.
 4. Add one line to the project table in `central/CLAUDE.md`.

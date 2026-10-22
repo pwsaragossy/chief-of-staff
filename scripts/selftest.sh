@@ -362,6 +362,55 @@ check "backup without a signed-in gh is skipped, not failed" 'U create "$Y/ws5" 
 check "offload refuses --remote for a library inside another repo" 'cd "$Y/ws3/central" && CLAUDE_PROJECT_DIR="$Y/ws3/central" sh "$here/library.sh" offload "$Y/Git Vault/lib2" --remote "$Y/r.git" 2>&1 | grep -q "inside the git repo"; r=$?; cd "$here"; [ $r = 0 ]'
 rm -rf "$Y"
 
+# team libraries: a personal library and one per team, two members on one local bare repo
+V=$(cd "$(mktemp -d)" && pwd -P); git init -q --bare "$V/t1.git"; git init -q --bare "$V/junk.git"
+git clone -q "$V/junk.git" "$V/junkc" 2>/dev/null; printf x > "$V/junkc/README"; git -C "$V/junkc" add -A; git -C "$V/junkc" -c user.name=a -c user.email=a@b commit -qm x; git -C "$V/junkc" push -q origin HEAD 2>/dev/null
+sh "$here/setup.sh" create "$V/m1" >/dev/null; sh "$here/setup.sh" create "$V/m2" >/dev/null
+K() { m=$1; d=$2; shift 2; CLAUDE_PROJECT_DIR="$V/$m/$d" sh "$here/library.sh" "$@" 2>&1; }
+hk() { printf '%s' "$1" | CLAUDE_PROJECT_DIR="$2" sh "$here/protocol.sh"; }
+rk() { hk "$1" "$2" >/dev/null 2>&1; echo $?; }
+check "only central joins a team library" 'mkdir -p "$V/m1/projects/a"; K m1 projects/a join "$V/t1.git" t1 | grep -q "only central"'
+check "a repo that is not a library is refused and leaves nothing" 'K m1 central join "$V/junk.git" | grep -q "not a chief-of-staff library" && [ ! -e "$V/m1/libraries/junk" ]'
+check "joining an empty repo starts the team library and pushes it" 'K m1 central join "$V/t1.git" t1 | grep -q "Connected the team library .t1." && git -C "$V/t1.git" ls-tree -r --name-only HEAD | grep -qx .library-id && K m1 central libs | grep -q "^t1	$V/m1/libraries/t1	0	"'
+check "the libraries folder stays out of the workspace repo" 'grep -qx "libraries/" "$V/m1/.gitignore"'
+check "setup can join a team library" 'sh "$here/setup.sh" create "$V/m3" --join "$V/t1.git" | grep -q "^Team library: Connected the team library .t1."'
+check "use only runs from a project folder" 'K m1 central use t1 | grep -q "from a project folder"'
+check "agents cannot write a project's .library" '[ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$V/m1/projects/a/.library\"}")" "$V/m1/projects/a")" = 2 ] && [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo t1 > .library\"}")" "$V/m1/projects/a")" = 2 ]'
+check "switching a project's library asks the owner" 'hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh library.sh use t1\"}")" "$V/m1/projects/a" | grep -q "\"permissionDecision\":\"ask\""'
+K m1 projects/a use t1 >/dev/null
+check "a team project writes and searches its team's library" '[ "$(K m1 projects/a where)" = "$V/m1/libraries/t1" ] && [ "$(K m1 central where)" = "$V/m1/knowledge" ]'
+TN="$V/m1/libraries/t1/notes"; PN="$V/m1/knowledge/notes"
+note2() { d=$1; shift; N="$d" note "$@"; }
+N0=$N; N=$PN; note pers-1 "Personal salary target" 2026-01-01 "My salary target." "none similar"
+N=$TN; note team-1 "Team pricing for pilots" 2026-01-01 "Pilots cost 500 a month." "none similar"; N=$N0
+check "search stays in the project's library" 'K m1 projects/a search salary target | grep -q "nothing on" && K m1 projects/a search pricing pilots | grep -q "^1\. \[\[team-1\]\]"'
+check "search --all shows the other libraries under a warning" 'K m1 projects/a search --all salary target | grep -q "^== Library .personal., not this session.s (.t1.): use it to learn, but do not copy" && K m1 projects/a search --all salary target | grep -q "\[\[pers-1\]\]"'
+N0=$N; N=$TN; note team-2 "Team onboarding steps" 2026-01-02 "See [[pers-1]]." "none similar"; N=$N0
+check "a team note that links a personal note is blocked" 'K m1 projects/a check "$TN/team-2.md" | grep -q "cannot link another library"'
+N0=$N; N=$PN; note pers-2 "Personal notes on onboarding" 2026-01-02 "From the team: [[team-1]]." "none similar"; N=$N0
+check "a personal note that links a team note passes, with a warning" 'K m1 central check "$PN/pers-2.md" | grep -q "warning: links to \[\[team-1\]\], a note of the team library .t1." && K m1 central check "$PN/pers-2.md" >/dev/null'
+hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$V/m1/projects/a" >/dev/null
+touch "$TN/team-2.md"
+check "the turn cannot end with a team note linking another library" 'hk "$(ev Stop ",\"stop_hook_active\":false")" "$V/m1/projects/a" 2>&1 | grep -q "team-2.md: links to \[\[pers-1\]\], a note of the library .personal."'
+rm -f "$TN/team-2.md"
+check "a team project's delivery cannot cite a personal note" 'printf -- "---\ntrack: t\nstage: 1\ndelivery: 1\n---\n## Stage 1: A\n- [x] a | A | card: product | needs: - | evidence: o\n- [x] r | R | card: reviewer | needs: a | evidence: o\n" > "$V/m1/projects/a/TRACK.md"; printf x > "$V/m1/projects/a/o"; printf "status: delivered\n" > /dev/null; printf "asked, delivered\n\nSources: [[pers-1]] [[team-1]]\n" > "$V/m1/projects/a/DELIVERY.md"; sed -e "s/{{PROJECT_NAME}}/a/; s/^status: .*/status: delivered/" "$here/../templates/project/STATE.md" > "$V/m1/projects/a/STATE.md"; sh "$here/track.sh" check "$V/m1/projects/a" | grep -q "cites \[\[pers-1\]\] from the library .personal." && ! sh "$here/track.sh" check "$V/m1/projects/a" | grep -q "team-1"'
+sh "$here/sync.sh" push "$V/m1/libraries/t1" a "$V/m1"
+check "sync pushes the team's notes" 'git -C "$V/t1.git" ls-tree -r --name-only HEAD | grep -qx notes/team-1.md && grep -q "pushed ok" "$V/m1/libraries/t1/.git/cos-sync"'
+check "the inbox never goes to the team repo" ': > "$V/m1/libraries/t1/inbox/raw.txt"; sh "$here/sync.sh" push "$V/m1/libraries/t1" a "$V/m1"; ! git -C "$V/t1.git" ls-tree -r --name-only HEAD | grep -q "^inbox/"'
+check "the other member gets them at session start" 'CLAUDE_PROJECT_DIR="$V/m3/central" sh "$here/briefing.sh" >/dev/null; i=0; while [ $i -lt 50 ] && [ ! -f "$V/m3/libraries/t1/notes/team-1.md" ]; do i=$((i+1)); sleep 0.1; done; [ -f "$V/m3/libraries/t1/notes/team-1.md" ]'
+hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$V/m1/projects/a" >/dev/null
+N0=$N; N=$TN; note team-3 "Team support hours" 2026-01-03 "9 to 5." "none similar"; N=$N0
+hk "$(ev Stop ",\"stop_hook_active\":false")" "$V/m1/projects/a" >/dev/null 2>&1
+check "a turn that saved a good team note pushes it by itself" 'i=0; while [ $i -lt 50 ] && ! git -C "$V/t1.git" ls-tree -r --name-only HEAD | grep -qx notes/team-3.md; do i=$((i+1)); sleep 0.1; done; git -C "$V/t1.git" ls-tree -r --name-only HEAD | grep -qx notes/team-3.md'
+sh "$here/sync.sh" pull "$V/m3/libraries/t1"
+sed -i.bak 's/9 to 5\./8 to 4./' "$V/m3/libraries/t1/notes/team-3.md"; sed -i.bak 's/9 to 5\./10 to 6./' "$TN/team-3.md"; rm -f "$TN"/*.bak "$V/m3/libraries/t1/notes"/*.bak
+sh "$here/sync.sh" push "$V/m3/libraries/t1" b "$V/m3"
+check "a conflict is undone and becomes a card for the session, not the owner" '! sh "$here/sync.sh" push "$V/m1/libraries/t1" a "$V/m1" && grep -q "^owner: session-a" "$V/m1/board/Library conflict - t1.md" && grep -q "conflict" "$V/m1/libraries/t1/.git/cos-sync" && [ ! -d "$V/m1/libraries/t1/.git/rebase-merge" ] && grep -q "10 to 6" "$TN/team-3.md"'
+check "leave refuses while a project uses the team" 'K m1 central leave t1 | grep -q "projects still use .t1.: a"'
+check "leave refuses notes not pushed yet" 'rm -f "$V/m1/projects/a/.library"; K m1 central leave t1 | grep -q "not pushed to the team yet"'
+check "leave disconnects the team and keeps the local copy" 'K m3 central leave t1 | grep -q "Disconnected .t1." && ! grep -q "^team: t1 " "$V/m3/.chief-of-staff" && ls -d "$V/m3/libraries"/t1.left-* >/dev/null && K m3 central libs | grep -vq "^t1	"'
+rm -rf "$V"
+
 # speed: 2,000 notes, every library step stays inside the hook budget
 Z=$(mktemp -d); mkdir -p "$Z/knowledge/notes" "$Z/projects/p"; : > "$Z/.chief-of-staff"
 awk -v d="$Z/knowledge/notes" 'BEGIN { srand(7); for (i = 1; i <= 2000; i++) { f = d "/n" i ".md"

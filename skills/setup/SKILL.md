@@ -29,11 +29,15 @@ everything else.
    - **Backup** — only when `gh-ok` was printed: "Back up to private GitHub repositories?" Options:
      "Yes, private repos (Recommended)" (description: creates private repos on your GitHub account and
      pushes; nothing is public) and "Not now".
+   - **Team** — "Join a team library (shared knowledge with a team)?" Options: "Not now (Recommended)"
+     (description: your library stays personal; join a team later from central) and "I have the link"
+     (description: choose Other and paste the team library's git link; an empty private repo starts a
+     new team library). The personal library stays private either way.
 
 3. Run, with the absolute paths (expand `~` yourself; the inside-the-workspace answer means no
-   `--library`; add `--backup` only on yes):
+   `--library`; add `--backup` only on yes; add `--join <link>` when a link was given):
    ```sh
-   sh setup.sh create "/absolute/workspace" --library "/absolute/library folder" --backup
+   sh setup.sh create "/absolute/workspace" --library "/absolute/library folder" --join "<team git link>" --backup
    ```
    It refuses a folder that is not empty and creates nothing then: ask again for that answer only.
 
@@ -41,6 +45,6 @@ everything else.
    - open Claude Code in `<workspace>/central` to talk to the chief of staff; start new projects there;
    - each project gets its own folder in `projects/`, and its own conversation is opened there;
    - only `central` asks them questions; the other sessions write cards in `board/`;
-   - where the library is, and the `Backup:` line of `create` as it was printed;
+   - where the library is, the `Team library:` and `Backup:` lines of `create` as they were printed;
    - in cloud sessions (Claude Code on the web) the plugin hooks do not run; the rules still hold
      through the CLAUDE.md files only if the workspace is the repository of that session.

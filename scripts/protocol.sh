@@ -14,8 +14,9 @@
 in=$(cat)
 root=$(cos_root "${CLAUDE_PROJECT_DIR:-$PWD}") || exit 0
 rel=${CLAUDE_PROJECT_DIR:-$PWD}; rel=${rel#"$root"}; rel=${rel#/}
-lib=$(cos_lib "$root"); lst=$?   # the library folder; lst != 0: offline or misconfigured (library.sh where)
-L="$(dirname "$0")/library.sh"
+# the session's library (its project's, or personal) and its state; lst != 0: offline or misconfigured (library.sh where)
+lname=$(cos_libname "$root" "${CLAUDE_PROJECT_DIR:-$PWD}"); lib=$(cos_libpath "$root" "$lname"); lst=$?
+L="$(dirname "$0")/library.sh"; TAB=$(printf '\t')
 case $rel in projects/?*) project=${rel#projects/}; project=${project%%/*} ;; *) project= ;; esac
 
 # Flat JSON field (hook input is compact JSON); good enough for ids, names and booleans.
@@ -60,17 +61,24 @@ case $(jget hook_event_name) in
         fp=$(printf '%s' "$in" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1); ok=
         case $in in *"\"file_path\":\"$fp\""*|*"\"file_path\": \"$fp\""*) ok=1 ;; esac
         nope() { echo x >> "$st/rejected.count"; echo "Library note rejected: $1" >&2; exit 2; }
+        # the library that holds the file, whichever it is (the session's, personal or another team's)
+        wl=/nonexistent-library; wn=
+        if [ "$ok" = 1 ]; then
+          o=$(cos_libs "$root" | while IFS="$TAB" read -r n q; do case $fp in ("$q"/*) printf '%s\t%s\n' "$n" "$q"; break ;; esac; done)
+          [ -n "$o" ] && { wn=${o%%"$TAB"*}; wl=${o#*"$TAB"}; }
+        fi
+        pers=$(cos_lib "$root")
         case "$ok:$fp" in
-          1:"$lib/notes/"*/./*|1:"$lib/notes/"*/../*|1:"$lib/notes/"*//*|1:"$lib/notes/"./*|1:"$lib/notes/"../*)
-            nope "write it by its plain path, $lib/notes/<id>.md (no ./, ../ or //)" ;;
-          1:"$lib/notes/"*/*) nope "notes live directly in $lib/notes/, not in subfolders (link related notes with [[id]] instead): move $fp there" ;;
-          1:"$lib/notes/"*.md)   # a note: checked now, while the agent still has it in context
-            if p=$(sh "$L" check "$fp"); then mark saved; [ -n "$p" ] && echo "$p"
+          1:"$wl/notes/"*/./*|1:"$wl/notes/"*/../*|1:"$wl/notes/"*//*|1:"$wl/notes/"./*|1:"$wl/notes/"../*)
+            nope "write it by its plain path, $wl/notes/<id>.md (no ./, ../ or //)" ;;
+          1:"$wl/notes/"*/*) nope "notes live directly in $wl/notes/, not in subfolders (link related notes with [[id]] instead): move $fp there" ;;
+          1:"$wl/notes/"*.md)   # a note: checked now, while the agent still has it in context
+            if p=$(sh "$L" --lib "$wn" check "$fp"); then mark saved; [ -n "$p" ] && echo "$p"
             else nope "fix it now, in $fp:
 $p"; fi ;;
-          1:"$lib/notes/"*) nope "a note is a .md file named <id>.md: rename $fp" ;;
-          1:"$lib/"*) ;;   # inbox and templates: not a note, not a deliverable
-          1:"$root/knowledge/"*) [ "$lib" = "$root/knowledge" ] || nope "the library moved to $lib; $root/knowledge is not read. Write the note in $lib/notes/ and delete $fp" ;;
+          1:"$wl/notes/"*) nope "a note is a .md file named <id>.md: rename $fp" ;;
+          1:"$wl/"*) ;;   # inbox and templates: not a note, not a deliverable
+          1:"$root/knowledge/"*) [ "$pers" = "$root/knowledge" ] || nope "the library moved to $pers; $root/knowledge is not read. Write the note in $pers/notes/ and delete $fp" ;;
           *) case $in in
           *.md\"*|*.html\"*|*.pptx\"*|*.docx\"*|*.pdf\"*) case $in in *STATE.md\"*|*"/board/"*) ;; *) ctl=; fp=$(jget file_path); r=${fp#"$root/projects/"}
               # only a project's own TRACK.md / DELIVERY.md (projects/<slug>/FILE) is a control file; the path comes from file_path, not from the content
@@ -109,16 +117,18 @@ $p"; fi ;;
             # ponytail: a word list, not a shell parser; the files are also read-only on disk (offload, setup).
             # A command that names them and could write them is blocked
             blk=
-            case $lc in *.chief*|*library-id*) case $lc in *">"*|*tee*|*sed*|*mv*|*cp*|*rm*|*perl*|*python*|*ln*|*dd*|*install*|*rsync*|*touch*|*awk*|*truncate*|*chmod*|*chflags*|*unlink*|*node*|*ruby*|*php*|*git*|*ed\ *|*ex\ *) blk=1 ;; esac ;; esac
+            case $lc in *.chief*|*.library*) case $lc in *">"*|*tee*|*sed*|*mv*|*cp*|*rm*|*perl*|*python*|*ln*|*dd*|*install*|*rsync*|*touch*|*awk*|*truncate*|*chmod*|*chflags*|*unlink*|*node*|*ruby*|*php*|*git*|*ed\ *|*ex\ *) blk=1 ;; esac ;; esac
             if [ -z "$blk" ]; then
               # moving the library sends every note somewhere: the owner confirms each time
               case $lc in *library.sh*off*|*offload*)
-                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this moves the whole library (and may push it to a git remote). Only approve if you asked for it."}}' ;; esac
+                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this moves the whole library (and may push it to a git remote). Only approve if you asked for it."}}' ;;
+              *library.sh*" use "*|*library.sh*" join "*|*library.sh*" leave "*)
+                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this changes which library a project uses, or connects or disconnects a team library: what is shared with whom. Only approve if you asked for it."}}' ;; esac
               exit 0
             fi ;;
-          *) case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.chief-of-staff/*) ;; *) exit 0 ;; esac ;;
+          *) case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.library|*/.chief-of-staff/*) ;; *) exit 0 ;; esac ;;
         esac
-        echo "Blocked by chief-of-staff: $root/.chief-of-staff marks the workspace and says where the library lives; agents do not change it. To move the library, central runs library.sh offload after the owner agrees." >&2
+        echo "Blocked by chief-of-staff: .chief-of-staff (where the libraries live), .library-id and a project's .library (which library it shares with) are changed only through library.sh offload, join, leave or use, which the owner confirms." >&2
         exit 2 ;;
     esac
     ;;
@@ -139,17 +149,30 @@ $p"; fi ;;
     reason=
     [ "$substantive" = 1 ] && { [ "$specialists" -lt 1 ] || [ "$reviewers" -lt 1 ]; } && reason="This turn produced a deliverable, research or a long answer with $specialists specialist(s) and $reviewers reviewer(s). Before finishing, run the specialists skill: at least one senior specialist and the independent reviewer as subagents, each briefed with its role card from $root/specialists/, then revise the answer with what they found."
     [ -f "$st/web" ] && [ ! -f "$st/saved" ] && [ $lst = 0 ] && reason="${reason:+$reason }This turn searched the web but saved nothing to the library. Save each new finding as a note in $lib/notes/ (sh \"$L\" new ...) before finishing."
-    lgaps=
-    if [ -f "$st/start" ] && [ $lst = 0 ]; then
-      set --
-      while IFS= read -r f; do [ -n "$f" ] && set -- "$@" "$f"; done <<NOTES
-$(find "$lib/notes" -name '*.md' -type f -cnewer "$st/start" 2>/dev/null | head -n 21)
+    lgaps=; push=
+    if [ -f "$st/start" ]; then
+      while IFS="$TAB" read -r n q; do
+        [ -n "$n" ] || continue
+        cos_libpath "$root" "$n" >/dev/null || continue   # offline or broken: nothing to gate there
+        # ctime, not mtime: mv, cp -p or touch -t keep or set an old mtime, never an old ctime
+        ch=$(find "$q/notes" -name '*.md' -type f -cnewer "$st/start" 2>/dev/null | head -n 21)
+        [ -n "$ch" ] || continue
+        more=; [ "$(printf '%s\n' "$ch" | wc -l)" -gt 20 ] && more="More than 20 notes changed this turn in '$n'; only 20 were checked: run library.sh --lib $n doctor."
+        set --; while IFS= read -r f; do [ -n "$f" ] && set -- "$@" "$f"; done <<NOTES
+$(printf '%s\n' "$ch" | head -n 20)
 NOTES
-      # ctime, not mtime: mv, cp -p or touch -t keep or set an old mtime, never an old ctime
-      [ $# -gt 20 ] && { more="More than 20 notes changed this turn; only 20 were checked: run library.sh doctor."; set -- $(printf '%s\n' "$@" | head -n 20); }
-      [ $# -gt 0 ] && lgaps=$(sh "$L" gate "$@" | grep -v ': warning: ' | head -n 20)${more:+
+        g=$(sh "$L" --lib "$n" gate "$@" | grep -v ': warning: ' | head -n 20)${more:+
 $more}
+        if [ -n "$g" ]; then lgaps="${lgaps:+$lgaps
+}$g"; elif [ "$n" != personal ]; then push="$push$q$TAB"; fi
+      done <<LIBS
+$(cos_libs "$root")
+LIBS
     fi
+    # team notes that passed go to the team now, in the background (the hook has 5 s); conflicts become a card
+    printf '%s' "$push" | tr "$TAB" '\n' | while IFS= read -r q; do
+      [ -n "$q" ] && sh "$(dirname "$0")/sync.sh" push "$q" "${project:-central}" "$root" </dev/null >/dev/null 2>&1 &
+    done
     [ -n "$lgaps" ] && reason="${reason:+$reason }Library notes written this turn have problems:
 $lgaps
 Fix each note (format: $lib/templates/note.md). When a new note is better than an old one, or merges several, retire the old: sh \"$L\" retire <old-id> <new-id> \"<why it lost>\". Valid alternatives stay: write [[id]] coexists (reason)."

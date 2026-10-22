@@ -3,8 +3,9 @@
 #   setup.sh detect
 #       where the company library could live on this computer, best first. One line per place:
 #       "<label><TAB><folder><TAB><why>"; the folder "(workspace)/knowledge" means inside the workspace.
-#   setup.sh create <workspace> [--library <folder>] [--backup]
-#       creates the workspace; --library puts the library in that folder instead of <workspace>/knowledge;
+#   setup.sh create <workspace> [--library <folder>] [--join <git-url>] [--backup]
+#       creates the workspace; --library puts the personal library in that folder instead of
+#       <workspace>/knowledge; --join connects a team library (library.sh join: an empty repo starts one);
 #       --backup creates private GitHub repos with gh (the workspace, and the library when it is a git repo
 #       outside the workspace) and pushes to them.
 here=$(cd "$(dirname "$0")" && pwd)
@@ -31,13 +32,14 @@ detect)
     [ -d "$d" ] && [ ! -L "$d" ] && [ -w "$d" ] && printf 'Disk "%s"\t%s/Company library\toff this computer; while it is unplugged the library is offline\n' "$(basename "$d")" "$d"; done
   exit 0 ;;
 create) ;;
-*) die "usage: setup.sh detect | setup.sh create <workspace> [--library <folder>] [--backup]" ;;
+*) die "usage: setup.sh detect | setup.sh create <workspace> [--library <folder>] [--join <git-url>] [--backup]" ;;
 esac
 
 W=${2:-}; shift 2 2>/dev/null || die "give the workspace folder"
-libdest=; backup=
+libdest=; backup=; join=
 while [ $# -gt 0 ]; do
-  case $1 in --library) libdest=${2:-}; shift 2 || die "--library needs a folder" ;; --backup) backup=1; shift ;; *) die "unknown option $1" ;; esac
+  case $1 in --library) libdest=${2:-}; shift 2 || die "--library needs a folder" ;; --join) join=${2:-}; shift 2 || die "--join needs a git link" ;;
+    --backup) backup=1; shift ;; *) die "unknown option $1" ;; esac
 done
 case $W in /*) ;; *) die "give the workspace as an absolute path" ;; esac
 W=${W%/}
@@ -70,6 +72,9 @@ if [ -n "$libdest" ]; then
   echo "Library: $libdest"
 else
   echo "Library: $W/knowledge"
+fi
+if [ -n "$join" ]; then   # a failed join leaves the workspace usable: the owner can join later from central
+  CLAUDE_PROJECT_DIR="$W/central" sh "$here/library.sh" join "$join" 2>&1 | sed 's/^library: //; s/^/Team library: /' | head -n 3
 fi
 git -C "$W" add -A && git -C "$W" commit -qm "chief-of-staff: new workspace"
 echo "Workspace: $W"

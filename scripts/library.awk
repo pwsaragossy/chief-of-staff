@@ -8,7 +8,9 @@
 #         brief   counts and the project's recent notes, for the session briefing (PROJ = project)
 #         graph   nodes, edges and problems as tab-separated lines, for the panel
 #         backlinks  notes that link to ID
-# TODAY = YYYY-MM-DD. Output: one line per problem, "<file>: <problem>".
+# TODAY = YYYY-MM-DD. LIBNAME, LIBKIND (personal|team): the library read. EXTF: file of "id<TAB>library" for the
+# ids of the other libraries (not also in this one), so a link across libraries is seen.
+# Output: one line per problem, "<file>: <problem>".
 
 function rep(s, k,   r) { r = ""; while (k-- > 0) r = r s; return r }
 function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
@@ -53,6 +55,7 @@ BEGIN {
   STOP["n\303\243o"] = 1; STOP["s\303\243o"] = 1; STOP["est\303\241"] = 1; STOP["\303\251"] = 1
   if (MODE == "search" || MODE == "similar") { nq = words(ENVIRON["Q"], qa); for (i = 1; i <= nq; i++) if (!(qa[i] in STOP) && !(qa[i] in QT)) { QT[qa[i]] = 1; QL[++nqt] = qa[i] } }
   nt = split(ENVIRON["TARGETS"], ta, "\n"); for (i = 1; i <= nt; i++) if (ta[i] != "") { sub(/.*\//, "", ta[i]); TGT["notes/" ta[i]] = 1 }
+  if (ENVIRON["EXTF"] != "") while ((getline xl < ENVIRON["EXTF"]) > 0) { split(xl, xe, "\t"); if (xe[1] != "" && !(xe[1] in EXTL)) EXTL[xe[1]] = xe[2] }
   N = 0
 }
 
@@ -122,9 +125,9 @@ END {
     k = split(OUT[n], oa, " ")
     for (i = 1; i <= k; i++) { BACK[oa[i]] = BACK[oa[i]] " " f(n, "id"); if (oa[i] in ID2N) IND[ID2N[oa[i]]]++ }
   }
-  if (MODE == "check") { for (n = 1; n <= N; n++) report(n); exit (bad ? 2 : 0) }
-  if (MODE == "gate") { for (n = 1; n <= N; n++) if (rel[n] in TGT) { xcheck(n); report(n) }; exit (bad ? 2 : 0) }
-  if (MODE == "doctor") { for (n = 1; n <= N; n++) xcheck(n); pairs()
+  if (MODE == "check") { for (n = 1; n <= N; n++) { xlib(n); report(n) }; exit (bad ? 2 : 0) }
+  if (MODE == "gate") { for (n = 1; n <= N; n++) if (rel[n] in TGT) { xcheck(n); xlib(n); report(n) }; exit (bad ? 2 : 0) }
+  if (MODE == "doctor") { for (n = 1; n <= N; n++) { xcheck(n); xlib(n) }; pairs()
     if (COUNT) { c = 0; for (n = 1; n <= N; n++) if (NP[n]) c++; print c "\t" npair "\t" N; exit 0 }
     for (n = 1; n <= N; n++) report(n); exit 0 }
   if (MODE == "search") search()
@@ -200,7 +203,7 @@ function xcheck(n,   k, i, a, t, m, id, b, j, x, cnt) {
   t = f(n, "superseded_by"); if (t != "" && !(t in ID2N)) prob(n, "superseded_by: [[" t "]] does not exist")
   if (!active(n)) return
   k = split(OUT[n], a, " ")
-  for (i = 1; i <= k; i++) if (!(a[i] in ID2N)) prob(n, "links to [[" a[i] "]], which does not exist: fix the id (ids are file names), create that note, or remove the link")
+  for (i = 1; i <= k; i++) if (!(a[i] in ID2N) && !(a[i] in EXTL)) prob(n, "links to [[" a[i] "]], which does not exist: fix the id (ids are file names), create that note, or remove the link")
   k = split(CVL[n], a, " ")
   for (i = 1; i <= k; i++) { t = a[i]; if (!(t in ID2N)) continue; m = ID2N[t]
     if (CV[n, t] != "coexists" && (active(m) || f(m, "superseded_by") != id)) prob(n, "Compared: [[" t "]] " CV[n, t] " but it is still active: run library.sh retire " t " " id " \"<why it lost>\"") }
@@ -214,6 +217,15 @@ function xcheck(n,   k, i, a, t, m, id, b, j, x, cnt) {
     # the newer note names the older one, not both ways; the turn-end gate checks both ways (a backdated created: does not escape)
     if (MODE != "gate" && f(m, "created") > f(n, "created")) continue
     if (cnt[m] >= 2 || (NORM[n] != "" && NORM[n] == NORM[m])) prob(n, "possible duplicate or conflict: [[" t "]] \"" clean(f(m, "title"), 80) "\". Add it to Compared: as replaces (this one is better), merged, or coexists (reason)")
+  }
+}
+# a link to another library: a team note never carries one (it would leak); a personal note may, with a warning
+function xlib(n,   k, a, i, t) {
+  if (!active(n)) return
+  k = split(OUT[n], a, " ")
+  for (i = 1; i <= k; i++) { t = a[i]; if (!(t in EXTL) || (t in ID2N)) continue
+    if (LIBKIND == "team") prob(n, "links to [[" t "]], a note of the library '" EXTL[t] "': a note in the team library '" LIBNAME "' cannot link another library (the team cannot open it, and it carries private or another team's knowledge here). Remove the link; write the fact here in your own words only if the owner agrees it may be shared with this team")
+    else warn(n, "links to [[" t "]], a note of the team library '" EXTL[t] "': keep that team's knowledge out of other teams' work; the link breaks if you leave the team")
   }
 }
 function shared(n,   t, c) { c = 0; for (t in QT) if ((n, t) in TW) c++; return c }
@@ -300,7 +312,7 @@ function graph(   n, k, i, a, x, st) {
   for (n = 1; n <= N; n++) {
     st = active(n) ? ((isdate(f(n, "review_by")) && f(n, "review_by") < TODAY) ? "stale" : "active") : "retired"
     printf "N\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\n", f(n, "id"), clean(f(n, "title"), 80), clean(f(n, "type"), 12), st, clean(f(n, "origin"), 40), clean(f(n, "group"), 40), NP[n] + 0, IND[n] + 0
-    k = split(OUT[n], a, " "); for (i = 1; i <= k; i++) printf "%s\t%s\t%s\n", (a[i] in ID2N) ? "E" : "D", f(n, "id"), clean(a[i], 80)
+    k = split(OUT[n], a, " "); for (i = 1; i <= k; i++) printf "%s\t%s\t%s\n", (a[i] in ID2N) ? "E" : (a[i] in EXTL) ? "X" : "D", f(n, "id"), clean(a[i], 80)
     if (f(n, "superseded_by") != "") printf "R\t%s\t%s\n", f(n, "id"), f(n, "superseded_by")
   }
   for (i = 1; i <= npair; i++) { split(DUPP[i], a, SUBSEP); printf "P\t%s\t%s\n", f(a[1], "id"), f(a[2], "id") }
