@@ -31,6 +31,7 @@ count() { [ -f "$st/$1.count" ] && wc -l < "$st/$1.count" | tr -d ' ' || echo 0;
 case $(jget hook_event_name) in
   UserPromptSubmit)
     rm -f "$st"/*
+    : > "$st/start"   # notes modified after this are the turn's notes (whatever tool or path wrote them)
     echo "Chief-of-staff protocol for this request (checked by hooks at the end of the turn):"
     echo "- A deliverable for other people, a decision that crosses areas, or research goes through the specialists skill: at least one specialist and the independent reviewer, as subagents, each briefed with its role card from $root/specialists/ (the brief contains the line 'Role card: <role>' and the card's text)."
     echo "- Research starts in the library: sh \"$L\" search <terms> (workspace: $root). Web search only for what the library lacks. Every new finding, decision, how-to or option becomes a note: sh \"$L\" new <finding|decision|howto|option|topic> <origin> <title>, then fill it. Hooks check every note."
@@ -55,15 +56,21 @@ case $(jget hook_event_name) in
         mark agent ;;
       WebSearch|WebFetch) mark web ;;
       Write|Edit|MultiEdit)
-        fp=$(jget file_path); ok=
+        # jget stops at a comma: read the whole string, and trust it only if the raw input closes it right after
+        fp=$(printf '%s' "$in" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1); ok=
         case $in in *"\"file_path\":\"$fp\""*|*"\"file_path\": \"$fp\""*) ok=1 ;; esac
+        nope() { echo x >> "$st/rejected.count"; echo "Library note rejected: $1" >&2; exit 2; }
         case "$ok:$fp" in
+          1:"$lib/notes/"*/./*|1:"$lib/notes/"*/../*|1:"$lib/notes/"*//*|1:"$lib/notes/"./*|1:"$lib/notes/"../*)
+            nope "write it by its plain path, $lib/notes/<id>.md (no ./, ../ or //)" ;;
+          1:"$lib/notes/"*/*) nope "notes live directly in $lib/notes/, not in subfolders (link related notes with [[id]] instead): move $fp there" ;;
           1:"$lib/notes/"*.md)   # a note: checked now, while the agent still has it in context
-            printf '%s\n' "$fp" >> "$st/notes"
             if p=$(sh "$L" check "$fp"); then mark saved; [ -n "$p" ] && echo "$p"
-            else echo x >> "$st/rejected.count"; echo "Library note rejected: fix it now, in $fp:
-$p" >&2; exit 2; fi ;;
-          1:"$lib/"*|1:"$root/knowledge/"*) ;;   # inbox and templates: not a note, not a deliverable
+            else nope "fix it now, in $fp:
+$p"; fi ;;
+          1:"$lib/notes/"*) nope "a note is a .md file named <id>.md: rename $fp" ;;
+          1:"$lib/"*) ;;   # inbox and templates: not a note, not a deliverable
+          1:"$root/knowledge/"*) [ "$lib" = "$root/knowledge" ] || nope "the library moved to $lib; $root/knowledge is not read. Write the note in $lib/notes/ and delete $fp" ;;
           *) case $in in
           *.md\"*|*.html\"*|*.pptx\"*|*.docx\"*|*.pdf\"*) case $in in *STATE.md\"*|*"/board/"*) ;; *) ctl=; fp=$(jget file_path); r=${fp#"$root/projects/"}
               # only a project's own TRACK.md / DELIVERY.md (projects/<slug>/FILE) is a control file; the path comes from file_path, not from the content
@@ -72,10 +79,6 @@ $p" >&2; exit 2; fi ;;
               case $r in */*/*|.*) ;; */TRACK.md|*/DELIVERY.md) [ "$r" != "$fp" ] && ctl=1 ;; esac
               [ -n "$ctl" ] || mark deliverable ;; esac ;;
         esac ;; esac ;;
-      Bash)   # notes written by a shell command bypass the check above; the turn-end gate catches them
-        printf '%s' "$in" | LIB="$lib/notes/" awk '{ s = s $0 } END { l = ENVIRON["LIB"]
-          while ((i = index(s, l))) { s = substr(s, i); match(s, /^[^"\047 <>|;&]*/); t = substr(s, 1, RLENGTH); s = substr(s, RLENGTH + 1)
-            sub(/\\$/, "", t); if (t ~ /\.md$/) print t } }' >> "$st/notes" ;;
     esac
     case $in in *library.sh*search*|*"$lib/"*|*"$root/knowledge"*) [ "$tool" = Write ] || [ "$tool" = Edit ] || mark library ;; esac
     ;;
@@ -101,8 +104,14 @@ $p" >&2; exit 2; fi ;;
         exit 2 ;;
       Write|Edit|MultiEdit|Bash)   # the marker says where the library lives: only the owner edits it
         case $(jget tool_name) in
-          Bash) case $in in *.chief-of-staff*|*.library-id*) case $in in *">"*|*"tee "*|*"sed -i"*|*"mv "*|*"cp "*|*"rm "*|*perl*|*python*|*"ln "*) ;; *) exit 0 ;; esac ;; *) exit 0 ;; esac ;;
-          *) case $(jget file_path) in "$root/.chief-of-staff"|*/.library-id) ;; *) exit 0 ;; esac ;;
+          Bash)
+            # moving the library sends every note somewhere: the owner confirms each time
+            case $in in *library.sh*offload*|*offload.sh*)
+              echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this moves the whole library (and may push it to a git remote). Only approve if you asked for it."}}'
+              exit 0 ;; esac
+            # ponytail: a word list, not a shell parser; a command that names the files and could write them is blocked
+            case $in in *.chief*|*library-id*) case $in in *">"*|*tee*|*sed*|*mv*|*cp*|*rm*|*perl*|*python*|*ln*|*dd*|*install*|*rsync*|*touch*|*awk*|*truncate*|*ed\ *|*ex\ *) ;; *) exit 0 ;; esac ;; *) exit 0 ;; esac ;;
+          *) case $(printf '%s' "$in" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.chief-of-staff/*) ;; *) exit 0 ;; esac ;;
         esac
         echo "Blocked by chief-of-staff: $root/.chief-of-staff marks the workspace and says where the library lives; agents do not change it. To move the library, central runs library.sh offload after the owner agrees." >&2
         exit 2 ;;
@@ -124,18 +133,18 @@ $p" >&2; exit 2; fi ;;
     agents=$(count agent); specialists=$(count specialist); reviewers=$(count reviewer)
     reason=
     [ "$substantive" = 1 ] && { [ "$specialists" -lt 1 ] || [ "$reviewers" -lt 1 ]; } && reason="This turn produced a deliverable, research or a long answer with $specialists specialist(s) and $reviewers reviewer(s). Before finishing, run the specialists skill: at least one senior specialist and the independent reviewer as subagents, each briefed with its role card from $root/specialists/, then revise the answer with what they found."
-    [ -f "$st/web" ] && [ ! -f "$st/saved" ] && [ $lst = 0 ] && reason="${reason:+$reason }This turn searched the web but saved nothing to the library. Save each new finding as a note in $root/knowledge/notes/ (template in knowledge/templates/note.md) before finishing."
+    [ -f "$st/web" ] && [ ! -f "$st/saved" ] && [ $lst = 0 ] && reason="${reason:+$reason }This turn searched the web but saved nothing to the library. Save each new finding as a note in $lib/notes/ (sh \"$L\" new ...) before finishing."
     lgaps=
-    if [ -s "$st/notes" ] && [ $lst = 0 ]; then
+    if [ -f "$st/start" ] && [ $lst = 0 ]; then
       set --
-      while IFS= read -r f; do [ -f "$f" ] && set -- "$@" "$f"; done <<NOTES
-$(sort -u "$st/notes" | head -n 20)
+      while IFS= read -r f; do [ -n "$f" ] && set -- "$@" "$f"; done <<NOTES
+$(find "$lib/notes" -name '*.md' -type f -newer "$st/start" 2>/dev/null | head -n 20)
 NOTES
       [ $# -gt 0 ] && lgaps=$(sh "$L" gate "$@" | grep -v ': warning: ' | head -n 20)
     fi
     [ -n "$lgaps" ] && reason="${reason:+$reason }Library notes written this turn have problems:
 $lgaps
-Fix each note (format: $root/knowledge/templates/note.md). When a new note is better than an old one, or merges several, retire the old: sh \"$L\" retire <old-id> <new-id> \"<why it lost>\". Valid alternatives stay: write [[id]] coexists (reason)."
+Fix each note (format: $lib/templates/note.md). When a new note is better than an old one, or merges several, retire the old: sh \"$L\" retire <old-id> <new-id> \"<why it lost>\". Valid alternatives stay: write [[id]] coexists (reason)."
     gaps=
     [ -n "$project" ] && gaps=$(sh "$(dirname "$0")/track.sh" check "$root/projects/$project" | head -n 20)
     [ -n "$gaps" ] && reason="${reason:+$reason }Track gate (projects/$project/TRACK.md) not met:

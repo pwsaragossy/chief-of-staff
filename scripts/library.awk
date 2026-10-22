@@ -43,16 +43,16 @@ function active(n) { return f(n, "status") != "retired" }
 BEGIN {
   CTRL = "[\001-\010\013\014\016-\037\177]"
   INVIS = "\342\200[\213-\217]|\342\200[\252-\256]|\342\201[\240-\244]|\342\201[\246-\251]|\357\273\277|\363\240[\200-\201]"
-  SECRET = "AKIA" rep("[0-9A-Z]", 16) "|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_" rep("[A-Za-z0-9]", 36) \
+  SECRET = "(^|[^A-Za-z0-9_-])(AKIA" rep("[0-9A-Z]", 16) "|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_" rep("[A-Za-z0-9]", 36) \
     "|github_pat_" rep("[A-Za-z0-9_]", 40) "|sk-" rep("[A-Za-z0-9_-]", 32) "|xox[baprs]-" rep("[A-Za-z0-9-]", 10) \
-    "|AIza" rep("[0-9A-Za-z_-]", 35) "|eyJ" rep("[A-Za-z0-9_-]", 10) "[.]eyJ" rep("[A-Za-z0-9_-]", 10) "[.]"
+    "|AIza" rep("[0-9A-Za-z_-]", 35) "|eyJ" rep("[A-Za-z0-9_-]", 10) "[.]eyJ" rep("[A-Za-z0-9_-]", 10) "[.])"
   INSTR = "ignore (all |any |the )?(previous|prior|above) (instructions|rules|messages)|disregard (the |all |your )?(system|previous|prior)|(system|developer) prompt|new instructions:|do not (tell|inform) the (user|owner)|[|] *(sh|bash)( |$)|curl [^ ]*http|base64 -d|rm -rf"
   # Portuguese and English words that say nothing about the subject
   ns = split("a o as os um uma uns umas de do da dos das em no na nos nas por para pra com sem sob sobre e ou que se nao sim mais menos muito muita como quando onde qual quais ser estar ter tem foi sao esta este esse essa isso aquilo ao aos the an of to in on for with without by at from and or not is are was be been it its this that these those as how what when where which who why can should must will vs via using use new", sw, " ")
   for (i in sw) STOP[sw[i]] = 1
   STOP["n\303\243o"] = 1; STOP["s\303\243o"] = 1; STOP["est\303\241"] = 1; STOP["\303\251"] = 1
   if (MODE == "search" || MODE == "similar") { nq = words(ENVIRON["Q"], qa); for (i = 1; i <= nq; i++) if (!(qa[i] in STOP) && !(qa[i] in QT)) { QT[qa[i]] = 1; QL[++nqt] = qa[i] } }
-  nt = split(ENVIRON["TARGETS"], ta, "\n"); for (i = 1; i <= nt; i++) if (ta[i] != "") TGT[ta[i]] = 1
+  nt = split(ENVIRON["TARGETS"], ta, "\n"); for (i = 1; i <= nt; i++) if (ta[i] != "") { sub(/.*\//, "", ta[i]); TGT["notes/" ta[i]] = 1 }
   N = 0
 }
 
@@ -70,6 +70,7 @@ FNR == 1 {
   if ($0 ~ SECRET) prob(N, "line " FNR " looks like a secret (key or token): replace it with <REDACTED>")
   if (infm) {
     if ($0 == "---") { infm = 0; next }
+    if (tolower($0) ~ INSTR) INSTRL[N] = INSTRL[N] " " FNR
     if (match($0, /^[A-Za-z_][A-Za-z0-9_]*:/)) {
       lastkey = substr($0, 1, RLENGTH - 1); v = trim(substr($0, RLENGTH + 1))
       if (v !~ /^\[/) v = unq(v)
@@ -107,6 +108,7 @@ FNR == 1 {
   while (match(s, /\[\[[^]]*\]\]/)) {
     t = substr(s, RSTART + 2, RLENGTH - 4); s = substr(s, RSTART + RLENGTH)
     sub(/[|#^].*/, "", t); t = trim(t)
+    if (t ~ /[ \t]/) { prob(N, "line " FNR ": the link [[" clean(t, 60) "]] has a space; ids are file names, without spaces"); continue }
     if (t != "" && !((N, t) in OUTS)) { OUTS[N, t] = 1; OUT[N] = OUT[N] " " t }
   }
   if (MODE == "search" && $0 !~ /^Compared:/) {
@@ -121,7 +123,7 @@ END {
     for (i = 1; i <= k; i++) { BACK[oa[i]] = BACK[oa[i]] " " f(n, "id"); if (oa[i] in ID2N) IND[ID2N[oa[i]]]++ }
   }
   if (MODE == "check") { for (n = 1; n <= N; n++) report(n); exit (bad ? 2 : 0) }
-  if (MODE == "gate") { for (n = 1; n <= N; n++) if (path[n] in TGT) { xcheck(n); report(n) }; exit (bad ? 2 : 0) }
+  if (MODE == "gate") { for (n = 1; n <= N; n++) if (rel[n] in TGT) { xcheck(n); report(n) }; exit (bad ? 2 : 0) }
   if (MODE == "doctor") { for (n = 1; n <= N; n++) xcheck(n); pairs()
     if (COUNT) { c = 0; for (n = 1; n <= N; n++) if (NP[n]) c++; print c "\t" npair "\t" N; exit 0 }
     for (n = 1; n <= N; n++) report(n); exit 0 }
@@ -150,7 +152,8 @@ function endfile(n,   k, i, a, id, t, x, al, j, m) {
 # what one file can tell on its own
 function sfcheck(n,   id, ty, st, c, k, i, e, a, v) {
   if (!hasfm[n]) { prob(n, "has no front matter: start the file with the fields of knowledge/templates/note.md between two --- lines (or run library.sh new)"); return }
-  if (f(n, "id") != stem[n]) prob(n, "id: '" f(n, "id") "' must equal the file name '" stem[n] "'")
+  if (!((n, "id") in HAS)) prob(n, "id: is missing (it must equal the file name '" stem[n] "')")
+  else if (f(n, "id") != stem[n]) prob(n, "id: '" f(n, "id") "' must equal the file name '" stem[n] "'")
   if (stem[n] !~ /^[a-z0-9][a-z0-9-]+$/ || length(stem[n]) > 80) prob(n, "the file name must be lowercase letters, digits and dashes (library.sh new makes one)")
   st = f(n, "status")
   if (st == "retired") {
@@ -182,6 +185,7 @@ function sfcheck(n,   id, ty, st, c, k, i, e, a, v) {
         e = trim(a[i]); if (e == "") continue
         if (!match(e, /^\[\[[^]]+\]\] *(replaces|merged|coexists)/)) { prob(n, "Compared: entry '" clean(e, 60) "' must read [[id]] replaces, [[id]] merged or [[id]] coexists (reason)"); continue }
         v = substr(e, 3, index(e, "]]") - 3); sub(/[|#].*/, "", v)
+        if (!((n, v) in CV)) CVL[n] = CVL[n] " " v
         CV[n, v] = (e ~ /replaces/) ? "replaces" : (e ~ /merged/) ? "merged" : "coexists"
         if (CV[n, v] == "coexists" && !match(e, /\([^)][^)][^)][^)][^)][^)][^)][^)][^)][^)][^)][^)]+\)/)) prob(n, "Compared: [[" v "]] coexists needs a reason in parentheses (12+ characters): why both are valid")
       }
@@ -190,32 +194,37 @@ function sfcheck(n,   id, ty, st, c, k, i, e, a, v) {
 }
 
 # what needs the other notes: links, retirements, similar notes
-function xcheck(n,   k, i, a, t, m, id) {
+function xcheck(n,   k, i, a, t, m, id, b, j, x, cnt) {
   id = f(n, "id")
   if (n in DUPID) prob(n, "has the same id as " rel[DUPID[n]] " (a sync conflict copy?): merge them and delete one")
   t = f(n, "superseded_by"); if (t != "" && !(t in ID2N)) prob(n, "superseded_by: [[" t "]] does not exist")
   if (!active(n)) return
   k = split(OUT[n], a, " ")
   for (i = 1; i <= k; i++) if (!(a[i] in ID2N)) prob(n, "links to [[" a[i] "]], which does not exist: fix the id (ids are file names), create that note, or remove the link")
-  for (t in ID2N) {
-    m = ID2N[t]
-    if ((n, t) in CV) {
-      if (CV[n, t] != "coexists" && (active(m) || f(m, "superseded_by") != id)) prob(n, "Compared: [[" t "]] " CV[n, t] " but it is still active: run library.sh retire " t " " id " \"<why it lost>\"")
-      continue
-    }
-    if (m == n || !active(m) || f(n, "type") == "topic" || f(m, "type") == "topic") continue
-    if ((m, id) in CV) continue
+  k = split(CVL[n], a, " ")
+  for (i = 1; i <= k; i++) { t = a[i]; if (!(t in ID2N)) continue; m = ID2N[t]
+    if (CV[n, t] != "coexists" && (active(m) || f(m, "superseded_by") != id)) prob(n, "Compared: [[" t "]] " CV[n, t] " but it is still active: run library.sh retire " t " " id " \"<why it lost>\"") }
+  if (f(n, "type") == "topic") return
+  post(); split("", cnt); k = split(TWL[n], a, " ")
+  for (i = 1; i <= k; i++) { j = split(POST[a[i]], b, " "); if (j > 200) continue; for (x = 1; x <= j; x++) cnt[b[x]]++ }
+  for (m in cnt) {
+    m += 0; t = f(m, "id")
+    if (m == n || ((n, t) in CV) || ((m, id) in CV)) continue
     if (f(n, "type") == "option" && f(m, "type") == "option" && f(n, "group") == f(m, "group")) continue
-    if (f(m, "created") > f(n, "created")) continue   # the newer note names the older one, not both ways
-    if (shared2(n, m) >= 2 || (NORM[n] != "" && NORM[n] == NORM[m])) prob(n, "possible duplicate or conflict: [[" t "]] \"" clean(f(m, "title"), 80) "\". Add it to Compared: as replaces (this one is better), merged, or coexists (reason)")
+    # the newer note names the older one, not both ways; the turn-end gate checks both ways (a backdated created: does not escape)
+    if (MODE != "gate" && f(m, "created") > f(n, "created")) continue
+    if (cnt[m] >= 2 || (NORM[n] != "" && NORM[n] == NORM[m])) prob(n, "possible duplicate or conflict: [[" t "]] \"" clean(f(m, "title"), 80) "\". Add it to Compared: as replaces (this one is better), merged, or coexists (reason)")
   }
 }
-function shared2(n, m,   k, i, a, c) { c = 0; k = split(TWL[n], a, " "); for (i = 1; i <= k; i++) if ((m, a[i]) in TW) c++; return c }
 function shared(n,   t, c) { c = 0; for (t in QT) if ((n, t) in TW) c++; return c }
 
 # possible duplicates nobody compared, through an inverted index of title words (doctor and graph)
-function pairs(   n, k, i, a, w, j, b, m, key) {
+function post(   n, k, i, a) {
+  if (POSTED++) return
   for (n = 1; n <= N; n++) if (active(n) && f(n, "type") != "topic") { k = split(TWL[n], a, " "); for (i = 1; i <= k; i++) POST[a[i]] = POST[a[i]] " " n }
+}
+function pairs(   n, k, i, a, w, j, b, m, key) {
+  post()
   for (w in POST) {
     k = split(POST[w], b, " "); if (k > 200) continue
     for (i = 1; i <= k; i++) for (j = i + 1; j <= k; j++) { key = (b[i] + 0 < b[j] + 0) ? b[i] SUBSEP b[j] : b[j] SUBSEP b[i]; PC[key]++ }

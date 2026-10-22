@@ -41,11 +41,14 @@ def front_matter(path):
     return out
 
 
-def sh(script, *args, cwd=None):
+def sh(script, *args, cwd=None, strict=False):
+    """stdout of a plugin script; "" on timeout, or TimeoutError with strict (an empty answer would look healthy)."""
     try:
         r = subprocess.run(["sh", os.path.join(HERE, script), *args], capture_output=True, text=True, timeout=20,
                            cwd=cwd, env=dict(os.environ, CLAUDE_PROJECT_DIR=cwd or os.getcwd()))
     except subprocess.TimeoutExpired:
+        if strict:
+            raise TimeoutError(script)
         return ""
     return r.stdout
 
@@ -61,7 +64,12 @@ def library(root):
         return {"state": "offline" if "offline" in where[1] else "error", "path": path, "message": where[1],
                 "color": "yellow", "nodes": [], "edges": [], "problems": [], "dangling": [], "stale": [], "pairs": []}
     nodes, edges, dangling, pairs, retired = [], [], [], [], 0
-    for line in sh("library.sh", "graph", cwd=root).splitlines():
+    try:
+        graph = sh("library.sh", "graph", cwd=root, strict=True)
+    except TimeoutError:
+        return {"state": "error", "path": path, "message": "Checking the library took over 20 s; run library.sh doctor.",
+                "color": "yellow", "nodes": [], "edges": [], "problems": [], "dangling": [], "stale": [], "pairs": []}
+    for line in graph.splitlines():
         f = line.split("\t")
         if f[0] == "N" and len(f) >= 9:
             nodes.append({"id": f[1], "title": f[2], "type": f[3], "state": f[4], "origin": f[5], "group": f[6],

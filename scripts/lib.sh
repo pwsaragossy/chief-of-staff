@@ -36,8 +36,9 @@ fm_set() {
 }
 
 # cos_lib ROOT -> prints the library folder: ROOT/knowledge, or the "library: /absolute/path" line of the
-# marker (set by library.sh offload). Returns 1 when that folder is not reachable (offline: disk unplugged),
-# 2 when it exists without the .library-id file offload writes (an empty mount point, or a wrong path),
+# marker (set by library.sh offload). Returns 1 when it is not reachable because its disk or parent folder
+# is gone (offline: disk unplugged), 2 when it is missing from a folder that exists, or exists without the
+# .library-id file offload writes (an empty mount point, or a wrong path),
 # 3 when the line is not one absolute path.
 cos_lib() {
   _l=$(sed -n 's/^library: *//p' "$1/.chief-of-staff" 2>/dev/null | head -n 1)
@@ -45,6 +46,12 @@ cos_lib() {
   printf '%s\n' "$_l"
   case $_l in /*) ;; *) return 3 ;; esac
   case $_l in */../*|*/..|*/./*) return 3 ;; esac
-  [ -d "$_l" ] || return 1
+  # offline only when what holds the folder is gone (the disk under /Volumes, or the parent folder);
+  # a library missing from a folder that is still there was moved or deleted: broken, not offline
+  if [ ! -d "$_l" ]; then
+    case $_l in /Volumes/?*) _m=${_l#/Volumes/}; _m=/Volumes/${_m%%/*} ;; *) _m=$(dirname "$_l") ;; esac
+    [ -d "$_m" ] && return 2
+    return 1
+  fi
   [ -f "$_l/.library-id" ] && [ -d "$_l/notes" ] || return 2
 }
