@@ -229,7 +229,7 @@ function drawGraph(L){
   E.forEach(([s,t])=>{const a=at.get(s),b=at.get(t),l=SVG("line");[["x1",a.x],["y1",a.y],["x2",b.x],["y2",b.y]].forEach(([k,v])=>l.setAttribute(k,v));svg.append(l)});
   at.forEach(p=>{const c=SVG("circle");c.setAttribute("cx",p.x);c.setAttribute("cy",p.y);c.setAttribute("r",4+Math.min(6,p.n.in));
     c.setAttribute("class",p.n.state+(p.n.problems?" bad":""));const tt=SVG("title");tt.textContent=p.n.title+" ["+p.n.id+"] "+p.n.state+(p.n.problems?", has problems":"");c.append(tt);svg.append(c);
-    if(nodes.length<=60){const t=SVG("text");t.setAttribute("x",p.x+8);t.setAttribute("y",p.y+3);t.textContent=p.n.title.slice(0,28);svg.append(t)}});
+    if(nodes.length<=60){const t=SVG("text");t.setAttribute("x",p.x+8);t.setAttribute("y",p.y+3);t.textContent=p.n.title.length>48?p.n.title.slice(0,47)+"…":p.n.title;svg.append(t)}});
   return svg}
 function list(title,items,fmt){const d=el("div");d.append(el("b","",title+" ("+items.length+")"));
   if(items.length){const u=el("ul");items.slice(0,8).forEach(x=>u.append(el("li","",fmt(x))));if(items.length>8)u.append(el("li","","and "+(items.length-8)+" more: library.sh doctor"));d.append(u)}
