@@ -100,7 +100,9 @@ CARD
       fi
       say "pull failed: $(first "$e")"; exit 1   # offline or no access: the commit waits for the next turn
     fi
-    own_commit   # after the rebase: the commit that goes out is this one
+    # after the rebase the commit that goes out is this one, unless the rebase dropped it (a teammate already
+    # pushed the same change): then HEAD is their commit, and it is never listed as this computer's
+    [ "$(g rev-list --count '@{u}..HEAD' 2>/dev/null)" = 1 ] && own_commit
     if e=$(g push -q 2>&1); then say "pushed ok"; else say "push failed: $(first "$e")"; fi ;;
   *) echo "usage: sync.sh pull <library> | sync.sh push <library> <session> <workspace>" >&2; exit 1 ;;
 esac

@@ -64,7 +64,7 @@ TB=$(printf '\t')
 OKF="$dir/.owner-ok"; OIF="$dir/.owner-items"; forged=
 if cos_shared "$(cos_root "$dir")" 2>/dev/null; then
   for _f in $(git -C "$dir" ls-files -- ':(icase).owner-ok' ':(icase).owner-items' 2>/dev/null); do
-    forged="$forged $_f"; [ -e "$dir/$_f" ] && { chmod u+w "$dir/$_f"; mv -f "$dir/$_f" "$dir/$_f.from-team"; } 2>/dev/null
+    forged="$forged $_f"; [ -e "$dir/$_f" ] && { [ -L "$dir/$_f" ] || chmod u+w "$dir/$_f"; mv -f "$dir/$_f" "$dir/$_f.from-team"; } 2>/dev/null
   done
   case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) OKF=/nonexistent/.owner-ok ;; esac
   case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-items*) OIF=/nonexistent/.owner-items ;; esac
