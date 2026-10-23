@@ -560,9 +560,39 @@ check "health ignores an ALERT about another project" '! H beta | grep -q "ALERT
 echo "2026-01-01 00:00:00 ALERT: .git/config or .git/hooks changed during the run of beta; dispatcher stopped" >> "$W/.dispatch.log"
 check "health is red on a dispatcher ALERT for the project" 'H beta | grep -q "^red: dispatcher ALERT"'
 check "health is green when the track is clean" 'H gamma | grep -q "^green: on track"'
+# hackathon pack: questions timed in minutes, their text, the deadline, due dates, the owner's OK
+fut() { t=$(( $(date +%s) + $1 )); date -r "$t" '+%F %H:%M' 2>/dev/null || date -d "@$t" '+%F %H:%M'; }
+gcard() { printf -- '---\nstatus: waiting-owner\nproject: gamma\nasked: %s\n---\n# Gamma\n\n## For the owner to decide (central asks, all at once)\n- (one line per question, recommendation first; empty when nothing waits on the owner)\n- Freeze the scope at login and export? Recommended: yes\n' "$1" > "$W/board/Gamma.md"; }
+gcard "$(fut 0)"
+check "health is yellow on a question under its limit, with its age" 'H gamma | grep -q "^yellow: waiting on the owner for 0 min: Gamma"'
+check "the central briefing shows the question itself, not the template line" 'o=$(b "$W/central"); printf "%s" "$o" | grep -q "^  - Freeze the scope at login and export? Recommended: yes" && ! printf "%s" "$o" | grep -q "one line per question"'
+fm_set "$G/TRACK.md" owner_wait_minutes 20; fm_set "$W/board/Gamma.md" asked "$(fut -1800)"
+check "a question past owner_wait_minutes turns red, with its age" 'H gamma | grep -q "^red: a question has waited on the owner for 30 min (limit 20 min): Gamma"'
+check "the briefing tells central to ask the late question first" 'b "$W/central" | grep -q "Gamma (project: gamma, waiting 30 min, past the 20 min limit: ask first)"'
 printf -- '---\nstatus: waiting-owner\nproject: gamma\n---\n' > "$W/board/Gamma.md"
-check "health is yellow on a card waiting on the owner" 'H gamma | grep -q "^yellow: waiting on the owner: Gamma"'
+check "the Stop hook stamps when a question was asked" 'h "$(ev Stop ",\"stop_hook_active\":false")" "$W/central" >/dev/null 2>&1; [ -n "$(fm_get "$W/board/Gamma.md" asked)" ]'
+fm_set "$W/board/Gamma.md" status in-progress
+check "an answered card loses its asked time" 'h "$(ev Stop ",\"stop_hook_active\":false")" "$W/central" >/dev/null 2>&1; [ -z "$(fm_get "$W/board/Gamma.md" asked)" ]'
+printf -- '---\nstatus: in-progress\nproject: gamma\ndue: 2026-01-02\n---\n' > "$W/board/Gamma.md"
+check "a card past its due date is yellow" 'H gamma | grep -q "^yellow: card past its due date 2026-01-02: Gamma"'
+check "central lists what is due or overdue" 'b "$W/central" | grep -q "^- Gamma: was due 2026-01-02"'
 rm "$W/board/Gamma.md"
+fm_set "$G/TRACK.md" deadline "$(fut 3600)"
+check "a deadline under 2 h with the delivery open is red, with the countdown" 'H gamma | grep -q "^red: deadline in [0-9]* min and the delivery is open"'
+fm_set "$G/TRACK.md" deadline "$(fut 14400)"
+check "a deadline under 6 h is yellow" 'H gamma | grep -Eq "^yellow: deadline in (3 h 59|4 h 0) min"'
+check "health gives the panel the deadline as a number" 'sh "$here/health.sh" "$W" | awk -F "$(printf "\037")" "\$1 == \"gamma\" { print \$12 }" | grep -q "^[0-9][0-9]*$"'
+fm_set "$G/TRACK.md" deadline "$(fut -120)"
+check "a passed deadline with the delivery open is red" 'H gamma | grep -q "^red: deadline passed 2 min ago"'
+fm_set "$G/TRACK.md" deadline "Friday 6pm"
+check "a deadline that is not a date says how to write it" 'H gamma | grep -q "^yellow: deadline .Friday 6pm. in TRACK.md is not a date"'
+fm_set "$G/TRACK.md" deadline ""
+mkdir -p "$W/t3"; printf -- '---\nstage: 1\n---\n## Stage 1: Plan\n- [x] scope | Scope | card: product | needs: - | owner: ok | evidence: scope.md\n- [ ] review-1 | Review | card: reviewer | needs: scope | evidence:\n' > "$W/t3/TRACK.md"
+echo "Scope: login and export" > "$W/t3/scope.md"
+check "an owner item cannot close without the owner OK in its proof" 'T check "$W/t3" | grep -q "^scope closes only with the owner.s OK"'
+echo "Owner OK: 2026-10-23 yes, freeze it" >> "$W/t3/scope.md"
+check "the Owner OK line closes it" '! T check "$W/t3" | grep -q "owner.s OK"'
+check "the hackathon track asks the owner at scope and submit only" '[ "$(grep -c "| owner: ok |" "$here/../templates/tracks/hackathon.md")" = 2 ] && grep -q "^- \[ \] scope .*owner: ok" "$here/../templates/tracks/hackathon.md" && grep -q "^- \[ \] submit .*owner: ok" "$here/../templates/tracks/hackathon.md"'
 touch -t 202001010000 "$G/STATE.md"
 check "health is yellow without a handoff for longer than stale_hours" 'H gamma | grep -q "^yellow: no handoff for more than 48 h"'
 touch "$G/STATE.md"
@@ -572,6 +602,7 @@ check "the Stop hook blocks a track gap" 'h "$(ev Stop ",\"stop_hook_active\":fa
 check "after the push the gap is logged as a violation" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":true")" "$G")" = 0 ] && grep -q "project=gamma .*violation=1" "$W/.protocol.log"'
 fm_set "$G/TRACK.md" stage 2
 check "health is red after a violation" 'H gamma | grep -q "^red: a turn ended without"'
+gcard "$(fut 0)"
 
 # panel: token, Host check, api, import (only where python3 and curl exist)
 if command -v python3 >/dev/null && command -v curl >/dev/null; then
@@ -582,6 +613,7 @@ if command -v python3 >/dev/null && command -v curl >/dev/null; then
   check "panel refuses a request without the token" '[ "$(curl -s -o /dev/null -w %{http_code} "$B/api")" = 403 ]'
   check "panel refuses another Host" '[ "$(curl -s -o /dev/null -w %{http_code} -H "Host: evil.example" "$B/api?t=$TK")" = 403 ]'
   check "panel api reports projects and colors" 'curl -s "$B/api?t=$TK" | grep -q "\"slug\": \"gamma\", \"color\": \"red\""'
+  check "panel api gives the question text, its age and the three counts" 'a=$(curl -s "$B/api?t=$TK"); printf "%s" "$a" | grep -q "\"questions\": \[\"Freeze the scope at login and export? Recommended: yes\"\]" && printf "%s" "$a" | grep -q "\"waited\": 0" && printf "%s" "$a" | grep -Eq "\"counts\": \{\"turns\": [1-9][0-9]*, \"violations\": [1-9]"'
   check "panel imports a file into the inbox" 'printf hello | curl -s -X POST --data-binary @- -H "X-Name: ../../evil name.txt" -H "X-Kind: file" "$B/import?t=$TK" | grep -q saved && ls "$W/knowledge/inbox" | grep -q "evil_name.txt$" && [ ! -e "$W/evil name.txt" ]'
   check "panel saves a pasted link as a note" 'printf "https://example.com/a" | curl -s -X POST --data-binary @- -H "X-Name: link.md" -H "X-Kind: text" "$B/import?t=$TK" >/dev/null && grep -q "^source: https://example.com/a" "$W"/knowledge/inbox/*link.md'
   check "panel answers a non-ASCII token with 403" '[ "$(curl -s -o /dev/null -w %{http_code} "$B/api?t=%C3%A9")" = 403 ]'

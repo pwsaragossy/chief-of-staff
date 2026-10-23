@@ -196,6 +196,12 @@ $p"; fi ;;
     exit 2
     ;;
   Stop)
+    # a question to the owner is timed from when it was asked (asked:), not from a file date that git resets
+    for c in "$root"/board/*.md; do
+      [ -f "$c" ] || continue; a=$(fm_get "$c" asked)
+      if [ "$(fm_get "$c" status)" = waiting-owner ]; then [ -n "$a" ] || fm_set "$c" asked "$(date '+%F %H:%M')"
+      elif [ -n "$a" ]; then fm_set "$c" asked ""; fi
+    done
     # ponytail: "substantive" is a heuristic (deliverable file, web research, or a long answer);
     # replace with a model-graded check if it misfires in real use.
     size=$(printf '%s' "$in" | wc -c | tr -d ' ')

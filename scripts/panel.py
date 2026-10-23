@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Local panel for a chief-of-staff workspace: health per project, track progress, cards waiting on
-the owner, the last turns' adherence, and an import box that drops files or links into
+the owner, the last 24 hours in three counts (turns, protocol breaks, rejected notes), and an import box that drops files or links into
 knowledge/inbox/. Standard library only. Listens on 127.0.0.1; every request needs the token in the URL.
 
 Usage: python3 panel.py <workspace> [port]     (port 0 or omitted = a free port)
@@ -62,7 +62,8 @@ def libraries(root):
     for line in sh("library.sh", "libs", cwd=os.path.join(root, "central")).splitlines():
         f = line.split("\t")
         if len(f) >= 5:
-            out.append({"name": f[0], "path": f[1], "state": f[2], "notes": f[3], "sync": f[4]})
+            out.append({"name": f[0], "path": f[1], "state": f[2], "notes": f[3], "sync": f[4],
+                        "sync_color": "green" if f[0] == "personal" else sync_color(f[4])})
     return out
 
 
@@ -103,11 +104,32 @@ def library(root, name="personal"):
             "origins": sorted({n["origin"] for n in nodes if n["origin"]})}
 
 
+def shared(root):
+    """In a shared workspace: this person's name and the last sync of the workspace with the team."""
+    try:
+        with open(os.path.join(root, ".chief-of-staff"), encoding="utf-8") as f:
+            if "shared: yes" not in f.read().splitlines():
+                return None
+    except OSError:
+        return None
+    try:
+        with open(os.path.join(root, ".git", "cos-sync"), encoding="utf-8", errors="replace") as f:
+            sync = f.readline().strip()[:160]
+    except OSError:
+        sync = ""
+    me = subprocess.run(["git", "-C", root, "config", "cos.member"], capture_output=True, text=True).stdout.strip()[:60]
+    return {"member": me, "sync": sync or "never", "color": sync_color(sync or "never")}
+
+
+def sync_color(text):
+    return "red" if ("conflict" in text or "failed" in text) else "yellow" if ("never" in text or "busy" in text) else "green"
+
+
 def snapshot(root, libname="personal"):
     projects = []
     for line in sh("health.sh", root).splitlines():
-        f = (line.split(US) + [""] * 11)[:11]
-        slug, color, reason, stage, stages, closed, total, delivery, delivered, baseline, baseline_delivery = f
+        f = (line.split(US) + [""] * 13)[:13]
+        slug, color, reason, stage, stages, closed, total, delivery, delivered, baseline, baseline_delivery, deadline, member = f
         pdir = os.path.join(root, "projects", slug)
         stage_names, items = [], []
         for row in sh("track.sh", "items", pdir).splitlines():
@@ -121,6 +143,7 @@ def snapshot(root, libname="personal"):
             "slug": slug, "color": color, "reason": reason,
             "stage": stage, "stages": stages, "closed": closed, "total": total,
             "delivery": delivery, "delivered": delivered == "1", "baseline": baseline, "baseline_delivery": baseline_delivery,
+            "deadline": int(deadline) if deadline.isdigit() else None, "member": member,
             "stage_names": stage_names, "items": items,
             "brief": sh("track.sh", "brief", pdir).strip().split(" Waiting on prerequisites:")[0],
             "next": front_matter(os.path.join(pdir, "STATE.md")).get("next", ""),
@@ -133,34 +156,35 @@ def snapshot(root, libname="personal"):
     rank = {"red": 2, "yellow": 1, "green": 0}
     overall = max([p["color"] for p in projects] + [lib["color"]], key=lambda c: rank.get(c, 0))
 
-    cards = []
-    board = os.path.join(root, "board")
-    for name in sorted(os.listdir(board)) if os.path.isdir(board) else []:
-        if name.endswith(".md"):
-            fm = front_matter(os.path.join(board, name))
-            if fm.get("status") == "waiting-owner":
-                cards.append({"title": name[:-3], "project": fm.get("project", ""), "since": fm.get("updated", "")})
+    cards = []  # what waits on the owner, from health.sh (the one place that times and colors it)
+    for line in sh("health.sh", "cards", root).splitlines():
+        f = (line.split(US) + [""] * 11)[:11]
+        if f[0] == "C" and f[3] == "waiting-owner":
+            cards.append({"title": f[1], "project": f[2], "member": f[4], "color": f[5], "waited": int(f[6] or 0),
+                          "limit": f[7], "questions": [q for q in f[10].split("\x1e") if q]})
 
-    turns = []
+    # the last 24 h of the protocol log, as three counts: turns, turns that broke the protocol, notes rejected
     try:
         with open(os.path.join(root, ".protocol.log"), encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()[-200:]
+            lines = f.readlines()[-2000:]
     except OSError:
         lines = []
-    last = {}
+    last, since = {}, time.time() - 86400
     for line in lines:  # keep the last line of each turn (after any push)
         kv = dict(p.split("=", 1) for p in line.split() if "=" in p)
-        if "turn" in kv:
-            kv["when"] = line[:19]
+        if "turn" in kv and kv.get("t", "0").isdigit() and int(kv["t"]) >= since:
             last[kv["turn"]] = kv
-    turns = sorted(last.values(), key=lambda k: k.get("t", ""), reverse=True)[:10]
+    counts = {"turns": len(last), "violations": sum(k.get("violation") == "1" for k in last.values()),
+              "rejected": sum(int(k.get("rejected", "0") or 0) for k in last.values() if k.get("rejected", "0").isdigit())}
 
     inbox = os.path.join(lib["path"], "inbox")
     n_inbox = len([n for n in os.listdir(inbox) if not n.startswith(".")]) if os.path.isdir(inbox) else 0
     n_notes = lib.get("total", 0)
+    sh_ws = shared(root)
+    rank_c = [c["color"] for c in cards] + [x["sync_color"] for x in libs] + ([sh_ws["color"]] if sh_ws else [])
+    overall = max([overall] + rank_c, key=lambda c: rank.get(c, 0))
     return {"library": lib, "libs": libs, "workspace": root, "overall": overall, "projects": projects, "cards": cards,
-            "turns": [{k: t.get(k, "") for k in ("when", "project", "substantive", "specialists",
-                                                  "reviewers", "track", "violation")} for t in turns],
+            "counts": counts, "shared": sh_ws,
             "inbox": n_inbox, "notes": n_notes, "time": time.strftime("%H:%M:%S")}
 
 
@@ -218,6 +242,8 @@ svg.lgraph circle{stroke:var(--card);stroke-width:1.5}
 svg.lgraph circle.active{fill:var(--green)}svg.lgraph circle.stale{fill:var(--yellow)}svg.lgraph circle.retired{fill:var(--muted);opacity:.5}
 svg.lgraph circle.bad{stroke:var(--red);stroke-width:3}
 svg.lgraph text{font-size:10px;fill:var(--muted)}
+.counts{display:grid;grid-template-columns:repeat(3,1fr)}.counts div{padding:14px 16px;border-left:1px solid var(--line)}.counts div:first-child{border-left:0}
+.counts b{display:block;font-size:24px;font-weight:600}.q{margin:4px 0 0;padding-left:18px;font-size:13px}
 .lists{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;border-top:1px solid var(--line)}
 .lists div{padding:12px 16px;font-size:13px}.lists b{display:block;margin-bottom:4px}.lists ul{margin:0;padding-left:16px;color:var(--muted)}
 select{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);margin-left:8px}
@@ -232,10 +258,11 @@ select{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--line);
 <div id="msg" class="muted" role="status"></div>
 <div id="lib" class="muted"></div>
 <h2>Library</h2><div id="library" class="box"></div>
-<h2>Last turns</h2><div id="turns" class="box"></div>
+<h2>Last 24 hours</h2><div id="turns" class="box counts"></div>
 </main><script>
 const T=new URLSearchParams(location.search).get("t");
 const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e};
+const ago=m=>m<60?m+" min":m<1440?Math.floor(m/60)+" h "+(m%60)+" min":Math.floor(m/1440)+" d";
 function empty(box,text){box.replaceChildren(el("div","empty",text))}
 const openMaps=new Set();let last=null,graphOpen=false,origin="",libName="personal";
 const SVG=t=>document.createElementNS("http://www.w3.org/2000/svg",t);
@@ -281,11 +308,14 @@ function render(){
   const d=last;if(!d)return;
   document.getElementById("overall").className="dot "+d.overall;
   document.getElementById("time").textContent="Updated "+d.time;
-  document.getElementById("ws").textContent=d.workspace;
+  document.getElementById("ws").textContent=d.workspace+(d.shared?" · shared, you are "+(d.shared.member||"unnamed")+" · last sync "+d.shared.sync:"");
+  document.getElementById("ws").style.color=d.shared&&d.shared.color!=="green"?"var(--"+d.shared.color+")":"";
   const P=document.getElementById("projects");
   if(!d.projects.length)empty(P,"No projects");else P.replaceChildren(...d.projects.map(p=>{
     const row=el("div","row"),body=el("div","grow");row.append(el("span","dot "+p.color),body);
-    body.append(el("div","name",p.slug),el("div","",p.reason));
+    body.append(el("div","name",p.slug+(p.member?" · "+p.member:"")),el("div","",p.reason));
+    if(p.deadline&&!p.delivered){const m=Math.round((p.deadline*1000-Date.now())/60000);
+      body.append(el("div","muted",m<0?"Deadline passed "+ago(-m)+" ago":"Deadline in "+ago(m)))}
     if(p.total){const b=el("div","bar"),i=el("i");i.style.width=(100*p.closed/p.total)+"%";b.append(i);
       const diff=p.baseline!==""?p.total-p.baseline:0,moved=p.baseline_delivery!==""&&p.baseline_delivery!==p.delivery;
       body.append(b,el("div","muted",p.closed+" of "+p.total+" deliverables closed"+(diff>0?", "+diff+" added since opening":"")+(diff<0?", "+(-diff)+" removed since opening":"")+(moved?", delivery line moved from stage "+p.baseline_delivery+" to "+p.delivery:"")+
@@ -297,11 +327,15 @@ function render(){
     return row}));
   const C=document.getElementById("cards");
   if(!d.cards.length)empty(C,"Nothing waiting");else C.replaceChildren(...d.cards.map(c=>{
-    const row=el("div","row");row.append(el("span","dot yellow"),el("div","grow",c.title+(c.project?" ("+c.project+")":"")),el("span","muted",c.since));return row}));
+    const row=el("div","row"),b=el("div","grow");row.append(el("span","dot "+c.color),b);
+    b.append(el("div","name",c.title+(c.project?" ("+c.project+")":"")+(c.member?" · "+c.member:"")));
+    if(c.questions.length){const u=el("ul","q");c.questions.forEach(x=>u.append(el("li","",x)));b.append(u)}
+    row.append(el("span",c.color==="red"?"":"muted","Waiting "+ago(c.waited)+(c.color==="red"?", past "+c.limit+" min":"")));return row}));
   document.getElementById("lib").textContent=d.inbox+" item(s) in the inbox, "+d.notes+" note(s) in the library.";
   const B=document.getElementById("library"),L=d.library,head=el("div","row"),hb=el("div","grow");head.append(el("span","dot "+L.color),hb);
   if(d.libs.length>1){const s=el("select");s.setAttribute("aria-label","Library");d.libs.forEach(x=>{const o=el("option","",x.name+(x.name==="personal"?"":" (team)")+", "+x.notes+" notes");o.value=x.name;if(x.name===L.name)o.selected=true;s.append(o)});
-    s.onchange=()=>{libName=s.value;origin="";load()};hb.append(s);const cur=d.libs.find(x=>x.name===L.name);if(cur&&cur.sync!=="-")hb.append(el("div","muted","Last sync: "+cur.sync))}
+    s.onchange=()=>{libName=s.value;origin="";load()};hb.append(s);const cur=d.libs.find(x=>x.name===L.name);
+    if(cur&&cur.sync!=="-"){const y=el("div","","Last sync: "+cur.sync);y.style.color=cur.sync_color==="green"?"var(--muted)":"var(--"+cur.sync_color+")";hb.append(y)}}
   if(L.state!=="online"){hb.append(el("div","name",L.state==="offline"?"Library offline":"Library error"),el("div","muted",L.message));B.replaceChildren(head)}
   else{hb.append(el("div","name",L.total+" notes"+(L.retired?", "+L.retired+" retired":"")),el("div","muted",L.path));
     const t=el("button","toggle",graphOpen?"Hide graph":"Graph");t.onclick=()=>{graphOpen=!graphOpen;render()};hb.append(t);
@@ -312,13 +346,8 @@ function render(){
     ls.append(list("With problems",L.problems,title),list("Broken links",L.dangling,x=>title(x[0])+" → "+x[1]),
       list("Past review date",L.stale,title),list("Possible duplicates",L.pairs,x=>title(x[0])+" / "+title(x[1])));
     parts.push(ls);B.replaceChildren(...parts)}
-  const U=document.getElementById("turns");
-  if(!d.turns.length)empty(U,"No turns yet");else{
-    const t=el("table"),h=el("tr");["When","Project","Specialists","Reviewers","Track gaps",""].forEach(x=>h.append(el("th","",x)));t.append(h);
-    d.turns.forEach(x=>{const r=el("tr");const bad=x.violation==="1";
-      [x.when,x.project,x.specialists,x.reviewers,x.track].forEach(v=>r.append(el("td","",v)));
-      const s=el("td");s.append(el("span","dot "+(bad?"red":(x.substantive==="1"?"green":"yellow"))));r.append(s);t.append(r)});
-    U.replaceChildren(t)}
+  const U=document.getElementById("turns"),n=(v,t,c)=>{const x=el("div");const b=el("b","",String(v));if(c&&v)b.style.color="var(--"+c+")";x.append(b,el("span","muted",t));return x};
+  U.replaceChildren(n(d.counts.turns,"turns"),n(d.counts.violations,"broke the protocol","red"),n(d.counts.rejected,"notes rejected","yellow"));
 }
 async function send(body,name,kind){
   const m=document.getElementById("msg");m.textContent="Saving…";

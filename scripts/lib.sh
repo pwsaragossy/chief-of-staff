@@ -93,3 +93,25 @@ cos_libof() {
     case $2 in "$_p/notes/"*) printf '%s\t%s\n' "$_n" "$_p"; break ;; esac
   done
 }
+# cos_epoch "YYYY-MM-DD HH:MM" (or a T between, or a date alone = the end of that day), local time -> seconds
+# since 1970; empty for anything else (a time zone suffix included: convert it to local time first)
+cos_epoch() {
+  _v=$(printf '%s' "$1" | tr T ' ')
+  case $_v in
+    [0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9]) _v="$_v 23:59" ;;
+    [0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9]' '[0-2][0-9]:[0-5][0-9]) ;;
+    *) return 0 ;;
+  esac
+  date -j -f '%Y-%m-%d %H:%M:%S' "$_v:00" +%s 2>/dev/null || date -d "$_v" +%s 2>/dev/null
+}
+# cos_ago MINUTES -> "12 min", "3 h 5 min", "2 d"
+cos_ago() { if [ "$1" -lt 60 ]; then echo "$1 min"; elif [ "$1" -lt 1440 ]; then echo "$(($1 / 60)) h $(($1 % 60)) min"; else echo "$(($1 / 1440)) d"; fi; }
+# cos_questions CARD -> the question lines under "## For the owner to decide", without the template's placeholder
+cos_questions() {
+  awk '{ sub(/\r$/, "") } /^## / { on = ($0 ~ /^## For the owner to decide/); next }
+    on { sub(/^[-*] +/, ""); if ($0 != "" && $0 !~ /^\(/) print }' "$1" 2>/dev/null | tr -d '\000-\010\013-\037' | cut -c1-300 | head -n 10
+}
+# cos_shared ROOT -> true when the workspace is shared by a team (setup.sh create --share, or join)
+cos_shared() { grep -qx 'shared: yes' "$1/.chief-of-staff" 2>/dev/null; }
+# cos_member ROOT -> this person's name in a shared workspace (git config cos.member, local to this computer)
+cos_member() { git -C "$1" config cos.member 2>/dev/null | tr -d '\000-\037' | cut -c1-60; }

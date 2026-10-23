@@ -3,6 +3,7 @@ status: in-progress
 updated: {{DATE}}
 next: {{NEXT_ACTION}}
 dispatch: off
+member:
 ---
 
 # {{PROJECT_NAME}} — state

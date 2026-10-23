@@ -12,12 +12,23 @@ out() { printf '%s\n' "$*"; }
 # Field values are written by agents; strip control characters and cap them at 160 characters.
 fm() { fm_get "$1" "$2" | tr -d '\000-\037' | cut -c1-160; }
 
-waiting() { # list cards waiting on the owner; $1 = project slug filter (empty = all)
-  for c in "$root"/board/*.md; do
-    [ -f "$c" ] || continue
-    [ "$(fm "$c" status)" = "waiting-owner" ] || continue
-    [ -z "$1" ] || [ "$(fm "$c" project)" = "$1" ] || continue
-    out "- $(basename "$c" .md) (project: $(fm "$c" project), since $(fm "$c" updated))"
+US=$(printf '\037'); RS=$(printf '\036')
+cards=$(sh "$(dirname "$0")/health.sh" cards "$root" 2>/dev/null)
+me=; cos_shared "$root" && me=$(cos_member "$root")
+waiting() { # cards waiting on the owner, with their questions; $1 = project slug filter (empty = all)
+  printf '%s\n' "$cards" | while IFS=$US read -r k n p s m c w l d dl q; do
+    [ "$k" = C ] && [ "$s" = waiting-owner ] || continue
+    [ -z "$1" ] || [ "$p" = "$1" ] || continue
+    [ -z "$1" ] && [ -n "$me" ] && [ -n "$m" ] && [ "$m" != "$me" ] && continue   # a teammate's central asks it
+    late=; [ "$c" = red ] && late=", past the $l min limit: ask first"
+    out "- $n (project: $p${m:+, member: $m}, waiting $(cos_ago "${w:-0}")$late)"
+    printf "%s\n" "$q" | tr "$RS" "\n" | while IFS= read -r x; do [ -n "$x" ] && out "  - $x"; done
+  done
+}
+due7() { # cards with a due date in the next 7 days or past it
+  printf '%s\n' "$cards" | while IFS=$US read -r k n p s m c w l d dl q; do
+    [ "$k" = C ] && [ -n "$dl" ] && [ "$dl" -le 10080 ] || continue
+    if [ "$dl" -lt 0 ]; then out "- $n: was due $d"; else out "- $n: due $d"; fi
   done
 }
 
@@ -39,11 +50,14 @@ syncline() { printf '%s\n' "$teams" | while IFS="$TAB" read -r n q; do
     central|central/*)
       out "This session is central: the only one that asks the owner. Cards waiting on the owner:"
       w=$(waiting ""); out "${w:-- none}"
+      [ -n "$me" ] && out "Shared workspace: you are '$me'. Cards of other members are listed on the panel; their central asks them."
+      dd=$(due7); [ -n "$dd" ] && { out "Due in the next 7 days:"; out "$dd"; }
       out "Projects:"
       for s in "$root"/projects/*/STATE.md; do
         [ -f "$s" ] || continue
         p=$(basename "$(dirname "$s")")
-        out "- $p: status $(fm "$s" status), updated $(fm "$s" updated), next: $(fm "$s" next)"
+        m=$(fm "$s" member)
+        out "- $p${m:+ ($m)}: status $(fm "$s" status), updated $(fm "$s" updated), next: $(fm "$s" next)"
       done
       n=$(ls "$(cos_lib "$root")"/inbox 2>/dev/null | wc -l | tr -d ' ')
       out "Knowledge inbox: $n item(s) waiting to be processed."

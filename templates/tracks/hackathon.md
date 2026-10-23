@@ -3,6 +3,8 @@ track: hackathon
 stage: 1
 delivery: 4
 stale_hours: 3
+owner_wait_minutes: 20
+deadline:
 ---
 # Track: hackathon
 For a 24-48 hour build event judged by a panel. Pick it when the deadline is hours away and the goal is a working demo plus a complete submission.
@@ -12,12 +14,12 @@ Gate: rules, criteria, submission requirements and deadline are written down, an
 - [ ] rules | Rules and eligibility read in full: allowed tools and code, team size, IP terms, prize conditions, disqualifiers | card: researcher | needs: - | evidence:
 - [ ] criteria | Judging criteria extracted with weights, each mapped to one planned moment in the demo | card: product | needs: rules | evidence:
 - [ ] submission-reqs | Submission package requirements listed: form fields, video length, repo, deck, links, file formats, platform | card: researcher | needs: rules | evidence:
-- [ ] deadline | Deadline in the organizer's timezone and a backward timeline with at least 2 hours of buffer before it (default, adjust to the case) | card: product | needs: submission-reqs | evidence:
+- [ ] deadline | Deadline written as `deadline: YYYY-MM-DD HH:MM` in this file's front matter, converted to local time from the organizer's timezone (the panel counts down to it), and a backward timeline with at least 2 hours of buffer before it (default, adjust to the case) | card: product | needs: submission-reqs | evidence:
 - [ ] idea | One-sentence idea, user and problem, scored against the criteria | card: product | needs: criteria | evidence:
 - [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: rules, criteria, submission-reqs, deadline, idea | evidence:
 ## Stage 2: Scope and build
 Gate: scope is frozen, the thinnest end-to-end path runs, and nothing in the build breaks the rules.
-- [ ] scope | Scope freeze: at most 3 must-have features for the demo, everything else listed as cut, time-boxed with a clock time | card: product | needs: idea, deadline | evidence:
+- [ ] scope | Scope freeze: at most 3 must-have features for the demo, everything else listed as cut, time-boxed with a clock time | card: product | needs: idea, deadline | owner: ok | evidence:
 - [ ] skeleton | Thinnest end-to-end path running (input to visible output) before any extra feature is built | card: engineer | needs: scope | evidence:
 - [ ] licences | Licences of dependencies, datasets and third-party assets checked against the rules and the intended licence | card: legal | needs: rules | evidence:
 - [ ] secrets | No keys or personal data in the repository or demo, keys in environment variables, keys rotated if exposed | card: security | needs: skeleton | evidence:
@@ -36,4 +38,4 @@ Gate: the submission is sent before the deadline, confirmed, and every link open
 - [ ] repo | Repository with README (what it does, how to run, team, licence), no secrets, set to the visibility the rules require | card: engineer | needs: fresh-run, secrets | evidence:
 - [ ] package | Every item in the submission requirements prepared: video, deck, description, links, team details | card: product | needs: submission-reqs, deck, demo-offline, repo | evidence:
 - [ ] review-4 | Independent review before sending: submission checklist walked item by item against the rules, every link opened in a logged-out browser, verdict and fixes | card: reviewer | needs: repo, package | evidence:
-- [ ] submit | Submission sent at least 2 hours before the deadline (default, adjust to the case) and the confirmation saved | card: product | needs: review-4 | evidence:
+- [ ] submit | Submission sent at least 2 hours before the deadline (default, adjust to the case) and the confirmation saved | card: product | needs: review-4 | owner: ok | evidence:

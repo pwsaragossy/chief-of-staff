@@ -39,12 +39,16 @@ the owner to pick, in the same round of buttons if possible.
    Copy the chosen track to `../projects/<slug>/TRACK.md`. Set `delivery:` to the stage that
    delivers what the owner asked for (the success answer): that is the planned end. Then run
    `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" baseline ../projects/<slug>` once, which records how
-   many items the map had at opening, so the panel shows how much was added later. If an item truly cannot apply, mark it
+   many items the map had at opening, so the panel shows how much was added later. When the project
+   has a deadline, write it in TRACK.md as `deadline: YYYY-MM-DD HH:MM` in local time: the panel
+   counts down, turns yellow under 6 hours and red under 2 hours while the delivery is open. If an item truly cannot apply, mark it
    `[-]` with `why:` instead of deleting it, so the reviewer sees it.
    For a team project, from its folder: `CLAUDE_PROJECT_DIR=<absolute path of ../projects/<slug>> sh
    "${CLAUDE_PLUGIN_ROOT}/scripts/library.sh" use <team>` (the owner confirms; never write `.library` by hand).
 3. Create the card `../board/<Project name>.md` from `${CLAUDE_PLUGIN_ROOT}/templates/board/card.md`,
    with `owner` set to the project session (for example `session-<slug>`), never the owner.
+   In a shared workspace (`shared: yes` in `.chief-of-staff`), set `member:` in the card and in
+   STATE.md to this person's name (`git config cos.member`), so the team board shows whose it is.
 4. Add one line to the project table in `central/CLAUDE.md`.
 5. Commit only these files.
 

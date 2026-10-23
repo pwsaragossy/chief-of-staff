@@ -7,11 +7,16 @@ owner, what stalled, what comes first. It does not do project work.
 
 1. Read `../projects/*/STATE.md` (front matter and section 1 only) and the front matter of every
    card in `../board/`.
-2. Open with **at most 5 lines**: what waits on the owner, what is due in the next 7 days, what has
+2. Open with **at most 5 lines** (the briefing already lists the questions and the dates): what waits on the owner, what is due in the next 7 days, what has
    been stalled for more than 14 days with no recorded reason.
 3. If any card has `status: waiting-owner`, ask **all** of those questions together, as buttons,
    recommendation first (the question tool takes at most 4 per call; use consecutive calls). Write each answer, with the date, into the card and into the project's
    `STATE.md`, and set the card back to `status: in-progress`. The owning session acts from there.
+   A question that asks for the owner's OK on a track item (scope freeze, submission) names that
+   item's proof file: write the answer there too, as one line `Owner OK: <date> <their words>`, only
+   from the owner's own reply. Without that line the track gate keeps the item open.
+4. In a shared workspace (`shared: yes` in `../.chief-of-staff`), ask only the cards the briefing
+   lists as yours (`member:` is you or empty); the others wait on your teammates' own central.
 
 ## The one-door rule
 

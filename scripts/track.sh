@@ -7,6 +7,7 @@
 #   baseline <project_dir>  records the item count when the project opens (new-project runs it once)
 # delivery: N in the front matter is the stage that delivers the original request (default: the last stage).
 # Item line: - [ ] id | deliverable | card: role | needs: a, b | evidence: path   ([x] done, [-] n/a + why:)
+# "| owner: ok" marks an item that closes only with the owner's OK: its proof file holds an "Owner OK:" line.
 # No TRACK.md: silent, exit 0 (old projects keep working).
 . "$(dirname "$0")/lib.sh"
 
@@ -19,19 +20,20 @@ US=$(printf '\037')
 rawstage=$(fm_get "$t" stage); cur=$rawstage; case $cur in ''|*[!0-9]*) cur=1 ;; esac
 state=$(fm_get "$dir/STATE.md" status | tr 'A-Z' 'a-z')
 
-# S<US>stage<US>name  and  I<US>stage<US>mark<US>id<US>card<US>needs<US>evidence<US>why
+# S<US>stage<US>name  and  I<US>stage<US>mark<US>id<US>card<US>needs<US>evidence<US>why<US>owner
 rows=$(awk '
   { sub(/\r$/, "") }
   /^## Stage [0-9]+:/ { s = $3; sub(/:$/, "", s); n = $0; sub(/^## Stage [0-9]+: */, "", n); print "S\037" s "\037" n; next }
   /^- \[.\] / {
     m = substr($0, 4, 1); k = split(substr($0, 7), f, / \| /)
-    id = f[1]; gsub(/^ +| +$/, "", id); card = needs = ev = why = ""
+    id = f[1]; gsub(/^ +| +$/, "", id); card = needs = ev = why = own = ""
     for (j = 2; j <= k; j++) { v = f[j]; gsub(/^ +| +$|`/, "", v)
       if (v ~ /^card:/) { card = v; sub(/^card: */, "", card) }
       else if (v ~ /^needs:/) { needs = v; sub(/^needs: */, "", needs) }
       else if (v ~ /^evidence:/) { ev = v; sub(/^evidence: */, "", ev) }
-      else if (v ~ /^why:/) { why = v; sub(/^why: */, "", why) } }
-    print "I\037" (s == "" ? 0 : s) "\037" m "\037" id "\037" card "\037" needs "\037" ev "\037" why
+      else if (v ~ /^why:/) { why = v; sub(/^why: */, "", why) }
+      else if (v ~ /^owner:/) { own = v; sub(/^owner: */, "", own) } }
+    print "I\037" (s == "" ? 0 : s) "\037" m "\037" id "\037" card "\037" needs "\037" ev "\037" why "\037" own
   }' "$t")
 
 mark_of() { printf '%s\n' "$rows" | awk -F "$US" -v i="$1" '$1 == "I" && $4 == i { print ($3 == " " ? "o" : $3); exit }'; }
@@ -112,13 +114,13 @@ check() {
     grep -Eq '^(## Sources|Sources:)' "$dir/DELIVERY.md" || echo "DELIVERY.md needs a '## Sources' section: the library notes ([[id]]) and files it rests on, or 'Sources: none (searched: <terms>)'"
     cites "$dir/DELIVERY.md"
   fi
-  printf '%s\n' "$rows" | while IFS=$US read -r kind s m id card needs ev why; do
+  printf '%s\n' "$rows" | while IFS=$US read -r kind s m id card needs ev why own; do
     [ "$kind" = I ] && [ "$m" = x ] && [ -n "$ev" ] && [ -f "$dir/$ev" ] && cites "$dir/$ev" "$id: "
   done
   # every stage needs a reviewer item, so no stage passes on the word of the agent that did the work
   printf '%s\n' "$rows" | awk -F "$US" '$1 == "S" { s[$2] = 1 } $1 == "I" && $5 == "reviewer" { r[$2] = 1 }
     END { for (k in s) if (!(k in r)) print "stage " k " has no item with card: reviewer" }'
-  printf '%s\n' "$rows" | while IFS=$US read -r kind s m id card needs ev why; do
+  printf '%s\n' "$rows" | while IFS=$US read -r kind s m id card needs ev why own; do
     [ "$kind" = I ] || continue
     case $m in
       ' ') [ "$s" -lt "$cur" ] && echo "stage $s is behind the current stage $cur, but $id is open"
@@ -129,7 +131,8 @@ check() {
              *) if [ ! -e "$dir/$ev" ] && [ -e "$dir/${ev%% *}" ]; then echo "$id: evidence must be the file path alone (found \"$ev\"); write evidence: ${ev%% *} and put any note in that file"
                 elif [ ! -e "$dir/$ev" ]; then echo "$id is marked done, but its evidence $ev does not exist"
                 elif [ -L "$dir/$ev" ] || [ ! -f "$dir/$ev" ]; then echo "$id: evidence $ev must be a regular file, not a folder or a link"
-                elif [ ! -s "$dir/$ev" ]; then echo "$id: evidence $ev is empty"; fi ;;
+                elif [ ! -s "$dir/$ev" ]; then echo "$id: evidence $ev is empty"
+                elif [ "$own" = ok ] && ! grep -q '^Owner OK: ' "$dir/$ev"; then echo "$id closes only with the owner's OK: put the question on the project card; central asks the owner and writes their answer in $ev as a line 'Owner OK: <date> <their words>'"; fi ;;
            esac; fi
            for n in $(printf '%s' "$needs" | tr ',' ' '); do
              [ "$n" = - ] && continue
@@ -170,10 +173,10 @@ case $cmd in
     fm_set "$t" baseline_delivery "$del" ;;
   brief)
     now=; wait=
-    while IFS=$US read -r kind s m id card needs ev why; do
+    while IFS=$US read -r kind s m id card needs ev why own; do
       [ "$kind" = I ] && [ "$s" = "$cur" ] && [ "$m" = ' ' ] || continue
       o=$(open_needs "$needs")
-      if [ -z "$o" ]; then now="$now${now:+, }$id ($card)"; else wait="$wait${wait:+; }$id needs ${o%, }"; fi
+      if [ -z "$o" ]; then now="$now${now:+, }$id ($card${own:+, closes with the owner OK through the card})"; else wait="$wait${wait:+; }$id needs ${o%, }"; fi
     done <<EOF
 $rows
 EOF

@@ -24,5 +24,8 @@ The next session is a stranger with no memory of this one. Everything it needs i
    the owner, else `in-progress`; a finished card is removed and its result goes in STATE.md).
 4. **Knowledge**: list in STATE.md section 3 the `[[id]]` of each note this session wrote or relied
    on. The hooks have already checked them.
-5. **Commit only the files this session touched**, with a message that says what changed and why.
+5. **Lesson, at the final handoff only** (STATE.md `status: delivered`): save one lesson for the next
+   project in the library, `sh "${CLAUDE_PLUGIN_ROOT}/scripts/library.sh" new howto <slug> "Lesson: <what to
+   repeat or avoid>"`, filled in with what happened and its proof file. One line of substance, not a retro.
+6. **Commit only the files this session touched**, with a message that says what changed and why.
    A session started by the dispatcher has no shell: skip this step, the dispatcher commits.

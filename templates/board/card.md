@@ -4,6 +4,7 @@ tags:
 status: in-progress
 project: {{PROJECT_SLUG}}
 owner: {{SESSION_NAME}}
+member:
 due:
 since: {{DATE}}
 updated: {{DATE}}
