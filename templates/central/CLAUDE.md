@@ -10,8 +10,8 @@ owner, what stalled, what comes first. It does not do project work.
 2. Open with **at most 5 lines** (the briefing already lists the questions and the dates): what waits on the owner, what is due in the next 7 days, what has
    been stalled for more than 14 days with no recorded reason.
 3. If any card has `status: waiting-owner`, ask **all** of those questions together, as buttons,
-   recommendation first (the question tool takes at most 4 per call; use consecutive calls). Write each answer, with the date, into the card and into the project's
-   `STATE.md`, and set the card back to `status: in-progress`. The owning session acts from there.
+   recommendation first (the question tool takes at most 4 per call; use consecutive calls). Move each answered question from "For the owner to decide" to the card's "## Decided" section, with the answer and the date, write it into the project's
+   `STATE.md`, and set the card back to `status: in-progress` (a question left under "For the owner to decide" keeps the card waiting). The owning session acts from there.
    A question that asks for the owner's OK on a track item (scope freeze, submission): when the owner
    says yes, record it with `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" ok <absolute project folder>
    <item> "<their words>"`; the owner approves that command too. Without it the track gate keeps the item open.

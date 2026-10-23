@@ -98,6 +98,8 @@ for s in "$root"/projects/*/STATE.md; do
   else note "done $p rc=$rc, dispatch now $(fm_get "$s" dispatch)"; fi
 done
 
-if [ "${COS_PUSH:-0}" = 1 ]; then
+# a shared workspace goes to the team only through the turn-end checks (sync.sh), never by a plain push
+if [ "${COS_PUSH:-0}" = 1 ] && cos_shared "$root"; then note "COS_PUSH ignored: a shared workspace is pushed by each turn end, after its checks"
+elif [ "${COS_PUSH:-0}" = 1 ]; then
   safegit push -q --no-verify 2>>"$log" && note "pushed" || note "push failed"
 fi

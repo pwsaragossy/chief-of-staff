@@ -34,14 +34,15 @@ sentences() { LC_ALL=C awk -v want="${want:-}" "$SENT" "$@"; }
 # (the library may be a folder of a bigger repo, the shared workspace: paths come back relative to the library)
 libchanges() {
   _pre=$(git -C "$1" rev-parse --show-prefix 2>/dev/null)
-  { git -C "$1" -c core.quotePath=false status --porcelain -uall --no-renames -- . 2>/dev/null | grep -Ev '^(D.|.D) ' | cut -c4-
-    if git -C "$1" rev-parse -q --verify '@{u}' >/dev/null; then git -C "$1" -c core.quotePath=false diff --name-only --diff-filter=d '@{u}...HEAD' -- .
-    else git -C "$1" -c core.quotePath=false diff --name-only --diff-filter=d "$(git -C "$1" rev-list --max-parents=0 HEAD 2>/dev/null | tail -n 1)" HEAD -- . 2>/dev/null; fi; } |
+  # -z: git never quotes a name (a space, an accent) there; a name with a line break is cut, and caught as bad
+  { git -C "$1" status --porcelain -z -uall --no-renames -- . 2>/dev/null | tr '\0' '\n' | grep -Ev '^(D.|.D) ' | cut -c4-
+    if git -C "$1" rev-parse -q --verify '@{u}' >/dev/null; then git -C "$1" diff -z --name-only --diff-filter=d '@{u}...HEAD' -- . | tr '\0' '\n'
+    else git -C "$1" diff -z --name-only --diff-filter=d "$(git -C "$1" rev-list --max-parents=0 HEAD 2>/dev/null | tail -n 1)" HEAD -- . 2>/dev/null | tr '\0' '\n'; fi; } |
     while IFS= read -r _f; do case $_f in "$_pre"*) printf '%s\n' "${_f#"$_pre"}" ;; esac; done | sort -u
 }
 shared=; cos_shared "$root" && shared=1
 # a key or token in a file that would go to the team (same list as the panel's import check, plus Stellar secret seeds)
-SECRETS='AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40}|sk-[A-Za-z0-9_-]{32}|xox[baprs]-[A-Za-z0-9-]{10}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10}[.]eyJ[A-Za-z0-9_-]{10}[.]|(^|[^A-Z0-9])S[A-Z2-7]{55}([^A-Z0-9]|$)'
+SECRETS='sk_live_[0-9A-Za-z]{20}|rk_live_[0-9A-Za-z]{20}|_authToken=[^ ]{20}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40}|sk-[A-Za-z0-9_-]{32}|xox[baprs]-[A-Za-z0-9-]{10}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10}[.]eyJ[A-Za-z0-9_-]{10}[.]|(^|[^A-Z0-9])S[A-Z2-7]{55}([^A-Z0-9]|$)'
 # a path with .., symlinks and letter case resolved (macOS ignores case); "" when a part that does not exist yet holds ..
 real() { d=$1 r=; k=0
   while [ -L "$d" ] && [ $k -lt 20 ]; do t=$(readlink "$d"); case $t in /*) d=$t ;; *) d=${d%/*}/$t ;; esac; k=$((k+1)); done   # a symlinked file
@@ -171,7 +172,8 @@ $p"; fi ;;
               nq=$(printf '%s' "$cq" | tr -d "\"'\\\\")
               # moving the library sends every note somewhere: the owner confirms each time
               # the owner's OK on a project step: the word ok after track.sh, or a subcommand from a variable
-              printf '%s\n' "$nq" | grep -Eq 'track\.sh(.*[^a-z0-9_.-]ok([^a-z0-9_.-]|$)|[^;&|]*[$`])' && {
+              # (and any script run with ok as its first argument: a renamed copy of track.sh)
+              printf '%s\n' "$nq" | grep -Eq 'track\.sh(.*[^a-z0-9_.-]ok([^a-z0-9_.-]|$)|[^;&|]*[$`])|[^ ]\.sh +ok([^a-z0-9_.-]|$)' && {
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this records YOUR OK on a project step (scope freeze or submission). Only approve if you gave that OK."}}'; exit 0; }
               case $nq in *library.sh*off*|*offload*)
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this moves the whole library (and may push it to a git remote). Only approve if you asked for it."}}' ;;
@@ -206,9 +208,18 @@ $p"; fi ;;
     ;;
   Stop)
     # a question to the owner is timed from when it was asked (asked:), not from a file date that git resets
+    # an open question (a line under "For the owner to decide") that a project session wrote this turn makes its
+    # card wait on the owner, even when the agent forgot the status: central moves answered lines to "## Decided"
     for c in "$root"/board/*.md; do
       [ -f "$c" ] || continue; a=$(fm_get "$c" asked)
-      if [ "$(fm_get "$c" status)" = waiting-owner ]; then [ -n "$a" ] || fm_set "$c" asked "$(date '+%F %H:%M')"
+      [ -n "$project" ] && [ -f "$st/start" ] && [ "$(fm_get "$c" project)" = "$project" ] && [ -n "$(find "$c" -cnewer "$st/start" 2>/dev/null)" ] &&
+        [ -n "$(cos_questions "$c")" ] && [ "$(fm_get "$c" status)" != waiting-owner ] && fm_set "$c" status waiting-owner
+      if [ -n "$shared" ]; then   # a shared board: each card is stamped by its own member's computer only
+        cm=$(fm_get "$c" member); me=$(cos_member "$root")
+        [ -z "$cm" ] && [ -n "$me" ] && [ -n "$project" ] && [ "$(fm_get "$c" project)" = "$project" ] && { cm=$me; fm_set "$c" member "$me"; }
+        [ -n "$cm" ] && [ "$cm" != "$me" ] && continue
+      fi
+      if [ "$(fm_get "$c" status)" = waiting-owner ]; then [ -n "$a" ] || fm_set "$c" asked "$(date '+%F %H:%M %z')"
       elif [ -n "$a" ]; then fm_set "$c" asked ""; fi
     done
     # ponytail: "substantive" is a heuristic (deliverable file, web research, or a long answer);
@@ -295,13 +306,18 @@ LIBS
       # the shared workspace goes to the team at every turn end: the board, the projects, and the library notes
       # that passed the gate. Held back: notes that failed it, and files that look like they hold a key or token
       kn=; [ -z "$lgaps" ] && [ -n "$push" ] && kn=$(printf '%s\n' "$push" | tr "$TAB" '\n' | sed 1d | sed 's|^|knowledge/|')
-      list=$( { git -C "$root" -c core.quotePath=false status --porcelain -uall --no-renames 2>/dev/null | cut -c4-
-        git -C "$root" rev-parse -q --verify '@{u}' >/dev/null && git -C "$root" -c core.quotePath=false diff --name-only --no-renames '@{u}...HEAD'
+      list=$( { git -C "$root" status --porcelain -z -uall --no-renames 2>/dev/null | tr '\0' '\n' | cut -c4-
+        git -C "$root" rev-parse -q --verify '@{u}' >/dev/null && git -C "$root" diff -z --name-only --no-renames '@{u}...HEAD' | tr '\0' '\n'
         printf '%s\n' "$kn"; } | sort -u | while IFS= read -r f; do
         case $f in ('') ;; (knowledge/*) printf '%s\n' "$kn" | grep -qxF "$f" && printf '%s\n' "$f" ;;
-          (\"*) echo "!$f: rename it with plain letters, digits, spaces and . _ -; until then it stays on this computer" ;;
-          (*) if [ -f "$root/$f" ] && grep -Eq "$SECRETS" "$root/$f" 2>/dev/null; then
-               echo "!$f looks like it holds a key or token, so it stays on this computer: move the secret to a .env file (never shared) and keep only its name in $f"
+          # settings and hooks run code on each computer: a teammate never receives them (sync.sh refuses them too)
+          (.claude/*|*/.claude/*|.mcp.json|*/.mcp.json|.gitattributes|*/.gitattributes|.gitignore|*/.gitignore|.chief-of-staff) printf '!%s\n' "$f: settings, hooks and git rules stay on this computer in a shared workspace" ;;
+          (*) if [ -d "$root/${f%/}/.git" ] || [ -f "$root/${f%/}/.git" ]; then
+               printf '!%s\n' "$f is a git repository of its own, so it stays out of the shared workspace: push it to its own remote and link it from the project"
+             elif [ -n "$(find "$root/$f" -prune -type f -size +20000k 2>/dev/null)" ]; then
+               printf '!%s\n' "$f is over 20 MB, too big for the team repo: share it by a link and keep the link in the project"
+             elif [ -f "$root/$f" ] && grep -Eq "$SECRETS" "$root/$f" 2>/dev/null; then
+               printf '!%s\n' "$f looks like it holds a key or token, so it stays on this computer: move the secret to a .env file (never shared) and keep only its name in $f"
              else printf '%s\n' "$f"; fi ;;
         esac; done)
       wg=$(printf '%s\n' "$list" | sed -n 's/^!//p'); [ -n "$wg" ] && reason="${reason:+$reason }Not sent to the team:

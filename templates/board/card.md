@@ -15,4 +15,7 @@ updated: {{DATE}}
 State in [STATE.md](../projects/{{PROJECT_SLUG}}/STATE.md).
 
 ## For the owner to decide (central asks, all at once)
-- (one line per question, recommendation first; empty when nothing waits on the owner)
+- (one line per open question, recommendation first; empty when nothing waits on the owner)
+
+## Decided
+- (central moves each answered question here, with the answer and its date)

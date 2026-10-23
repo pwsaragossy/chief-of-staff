@@ -17,15 +17,24 @@ say() { printf '%s %s\n' "$(date '+%F %T')" "$*" > "$q/.git/cos-sync"; }
 lk="$q/.git/cos-sync.lock"
 # a lock whose sync is gone (killed, power cut) is stale: its pid no longer runs
 [ -d "$lk" ] && ! kill -0 "$(cat "$lk/pid" 2>/dev/null || echo none)" 2>/dev/null && rm -f "$lk/pid" && rmdir "$lk" 2>/dev/null
-mkdir "$lk" 2>/dev/null || { say "sync busy (another sync runs); the next turn retries"; exit 0; }
+# a push waits for a pull that holds the lock (the last turn of a session must still go out); a pull does not wait
+n=0; while ! mkdir "$lk" 2>/dev/null; do
+  n=$((n + 1)); [ "$cmd" = push ] && [ $n -lt 30 ] || { say "sync busy (another sync runs); the next turn retries"; exit 0; }; sleep 1
+done
 echo $$ > "$lk/pid"; trap 'rm -f "$lk/pid"; rmdir "$lk"' EXIT
 first() { printf '%s' "$1" | tr -d '\000-\037' | cut -c1-160; }
 g() { git -C "$q" -c core.symlinks=false "$@"; }   # a symlink a teammate pushed stays a plain file
+# settings, hooks and git rules run code on this computer: a change to them from the remote is never taken
+incoming_bad() { g diff -z --name-only HEAD...'@{u}' 2>/dev/null | tr '\0' '\n' | grep -E '(^|/)(\.claude/|\.mcp\.json$|\.gitattributes$|\.gitignore$|\.chief-of-staff$)' | head -n 3 | tr '\n' ' '; }
+refused() { say "pull refused: the remote changes settings that run code here ($1); ask the teammate to remove that change"; }
 
 case $cmd in
   pull)
-    g rev-parse -q --verify '@{u}' >/dev/null || { say "nothing to pull yet: the team library was never pushed"; exit 0; }
-    if e=$(g pull -q --ff-only 2>&1); then say "pulled ok"
+    g rev-parse -q --verify '@{u}' >/dev/null || { say "nothing to pull yet: the team copy was never pushed"; exit 0; }
+    if ! e=$(g fetch -q 2>&1); then say "pull failed: $(first "$e")"; exit 0; fi
+    bad=$(incoming_bad)
+    if [ -n "$bad" ]; then refused "$bad"
+    elif e=$(g merge -q --ff-only '@{u}' 2>&1); then say "pulled ok"
     elif [ -n "$(g log --oneline '@{u}..' 2>/dev/null)" ]; then say "local notes not pushed yet; the next push merges the team's"
     else say "pull failed: $(first "$e")"; fi ;;
   push)
@@ -38,13 +47,16 @@ case $cmd in
     # (the index goes back too, so a file a hand commit carried, and the gate did not list, stays here)
     b=$(g merge-base HEAD '@{u}' 2>/dev/null || g rev-list --max-parents=0 HEAD 2>/dev/null | tail -n 1)
     [ -n "$b" ] && g reset -q "$b"
-    [ $# -gt 0 ] && g --literal-pathspecs add -A -- "$@"   # only what the gate passed: anything else stays local
+    if [ $# -gt 0 ] && ! e=$(g --literal-pathspecs add -A -- "$@" 2>&1); then   # only what the gate passed
+      g reset -q; say "push failed: $(first "$e")"; exit 1; fi
     g diff --cached --quiet || g commit -qm "update from $s"
     if ! g rev-parse -q --verify '@{u}' >/dev/null; then   # the first push failed at join: push now, nothing to merge
       if e=$(g push -q -u origin HEAD 2>&1); then say "pushed ok"; else say "push failed: $(first "$e")"; fi; exit 0
     fi
     # files the gate held back stay uncommitted: autostash keeps them out of the way of the rebase
-    if ! e=$(g pull -q --rebase --autostash 2>&1); then
+    if ! e=$(g fetch -q 2>&1); then say "push failed: $(first "$e")"; exit 1; fi
+    bad=$(incoming_bad); [ -n "$bad" ] && { refused "$bad"; exit 1; }
+    if ! e=$(g rebase -q --autostash '@{u}' 2>&1); then
       if g rebase --abort 2>/dev/null; then   # a real conflict: same note changed here and by a teammate
         n=$(basename "$q"); say "conflict: a teammate changed the same files; card in board/"
         c="$w/board/Sync conflict - $n.md"
@@ -57,6 +69,7 @@ tags:
 status: in-progress
 project: $s
 owner: session-$s
+member: $(git -C "$q" config cos.member 2>/dev/null | tr -d '\000-\037')
 due:
 since: $d
 updated: $d

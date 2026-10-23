@@ -242,8 +242,17 @@ What is ours, with no equivalent found in ECC:
   GitHub tokens, private keys, Stellar secret seeds), not a full secret scanner. The member name is
   local git config, set at join, not an identity check. A conflict (two people changing the same
   card) is undone and becomes a card; it is not merged automatically.
-- The owner's OK file (`.owner-ok`) is protected like the library settings: written only through
-  `track.sh ok`, which asks the owner, and read-only on disk.
+- The owner's OK (`.owner-ok`) is protected like the library settings: written only through
+  `track.sh ok`, which asks the owner (in a run with nobody watching, the ask is refused), an item that
+  needs it cannot be marked not applicable, and removing its mark after opening is caught. An agent
+  that builds the file name inside a shell variable is not seen by the hooks; the reviewer and the
+  owner's own read of `.owner-ok` are the last line.
+- Times: write `deadline:` with its offset (`2026-10-25 18:00 -0300`) when teammates are in other
+  time zones; question times are stamped with the offset already. In a shared workspace, files over
+  20 MB, nested git repositories, settings (`.claude/`, `.mcp.json`, `.gitignore`, `.gitattributes`)
+  and files that look like they hold a key stay on the computer, and the turn says which; a change to
+  settings coming from the team is refused at pull. A file name with a line break stops the push
+  until it is renamed.
 - An offloaded library: no automatic sync; Windows paths are not supported; in iCloud, keep the
   folder downloaded on the computer (placeholder files are not seen).
 

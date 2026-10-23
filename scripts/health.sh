@@ -76,7 +76,7 @@ for s in "$root"/projects/*/STATE.md; do
     if [ -z "$dle" ]; then yellow "deadline '$dlv' in TRACK.md is not a date: write YYYY-MM-DD HH:MM in local time"
     elif [ "$dv" != 1 ]; then
       left=$(( (dle - now) / 60 ))
-      if [ "$left" -lt 0 ]; then red "deadline passed $(cos_ago $((-left))) ago and the delivery is open"
+      if [ "$dle" -le "$now" ]; then red "deadline passed $(cos_ago $(( (now - dle) / 60 ))) ago and the delivery is open"
       elif [ "$left" -lt 120 ]; then red "deadline in $(cos_ago "$left") and the delivery is open"
       elif [ "$left" -lt 360 ]; then yellow "deadline in $(cos_ago "$left")"; fi
     fi

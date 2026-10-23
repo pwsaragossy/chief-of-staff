@@ -93,16 +93,19 @@ cos_libof() {
     case $2 in "$_p/notes/"*) printf '%s\t%s\n' "$_n" "$_p"; break ;; esac
   done
 }
-# cos_epoch "YYYY-MM-DD HH:MM" (or a T between, or a date alone = the end of that day), local time -> seconds
-# since 1970; empty for anything else (a time zone suffix included: convert it to local time first)
+# cos_epoch "YYYY-MM-DD HH:MM" (or a T between, or a date alone = the end of that day) -> seconds since 1970;
+# empty for anything else. Local time, unless an offset follows ("2026-10-25 18:00 -0300", or -03:00): teammates
+# in other time zones read the same instant only with the offset written
 cos_epoch() {
-  _v=$(printf '%s' "$1" | tr T ' ')
+  _v=$(printf '%s' "$1" | tr T ' ' | sed 's/ *\([+-][0-2][0-9]\):\{0,1\}\([0-5][0-9]\)$/ \1\2/'); _z=
   case $_v in
     [0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9]) _v="$_v 23:59" ;;
     [0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9]' '[0-2][0-9]:[0-5][0-9]) ;;
+    [0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9]' '[0-2][0-9]:[0-5][0-9]' '[+-][0-2][0-9][0-5][0-9]) _z=${_v##* }; _v=${_v% *} ;;
     *) return 0 ;;
   esac
-  date -j -f '%Y-%m-%d %H:%M:%S' "$_v:00" +%s 2>/dev/null || date -d "$_v" +%s 2>/dev/null
+  if [ -n "$_z" ]; then date -j -f '%Y-%m-%d %H:%M:%S %z' "$_v:00 $_z" +%s 2>/dev/null || date -d "$_v $_z" +%s 2>/dev/null
+  else date -j -f '%Y-%m-%d %H:%M:%S' "$_v:00" +%s 2>/dev/null || date -d "$_v" +%s 2>/dev/null; fi
 }
 # cos_ago MINUTES -> "12 min", "3 h 5 min", "2 d"
 cos_ago() { if [ "$1" -lt 60 ]; then echo "$1 min"; elif [ "$1" -lt 1440 ]; then echo "$(($1 / 60)) h $(($1 % 60)) min"; else echo "$(($1 / 1440)) d"; fi; }

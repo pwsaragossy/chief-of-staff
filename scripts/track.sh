@@ -99,6 +99,11 @@ check() {
           if (ok) { dn[i] = 1; ch = 1 } } } while (ch)
       for (i = 1; i <= n; i++) if (!dn[i]) l = l (l ? ", " : "") id[i]
       if (l != "") print "these items wait on each other in a loop, so none can close: " l }'
+  # an item that needed the owner's OK at opening still needs it: removing the mark does not skip the owner
+  for b in $(fm_get "$t" baseline_owner | tr ',' ' '); do
+    printf '%s\n' "$rows" | awk -F "$US" -v i="$b" '$1 == "I" && $4 == i && $9 != "ok" { f = 1 } END { exit !f }' &&
+      echo "$b needed the owner's OK when the project opened (baseline_owner): put back | owner: ok on its line"
+  done
   # the delivery line: the planned end of the original request
   case $rawdel in ''|[1-9]|[1-9][0-9]) [ "$del" -le "$stages" ] || echo "delivery: $del in TRACK.md, but the track has $stages stages" ;;
     *) echo "delivery: in the TRACK.md front matter must be a stage number from 1 to $stages (found '$rawdel')" ;; esac
@@ -145,7 +150,8 @@ check() {
              esac
            done ;;
       -)   [ -n "$why" ] || echo "$id is marked not applicable without why: (the reason)"
-           [ "$card" = reviewer ] && echo "$id is a reviewer item and cannot be marked not applicable: the independent reviewer closes it with a verdict file that judges every [-] of the stage" ;;
+           [ "$card" = reviewer ] && echo "$id is a reviewer item and cannot be marked not applicable: the independent reviewer closes it with a verdict file that judges every [-] of the stage"
+           [ "$own" = ok ] && echo "$id waits on the owner's OK and cannot be marked not applicable: only the owner drops it, through central" ;;
       *)   echo "$id has the mark [$m]: use [ ] open, [x] done or [-] not applicable" ;;
     esac
   done
@@ -174,14 +180,20 @@ case $cmd in
     id=${3:-}; shift 3 2>/dev/null || { echo "usage: track.sh ok <project_dir> <item> <the owner's words>" >&2; exit 2; }
     printf '%s\n' "$rows" | awk -F "$US" -v i="$id" '$1 == "I" && $4 == i && $9 == "ok" { f = 1 } END { exit !f }' ||
       { echo "track.sh ok: $id is not an item of this track marked owner: ok" >&2; exit 1; }
+    # a shared workspace: only the project's own member gives its OK
+    _r=$(cos_root "$dir"); _m=
+    if [ -n "$_r" ] && cos_shared "$_r"; then _m=$(cos_member "$_r")
+      [ -n "$_m" ] && [ "$(fm_get "$dir/STATE.md" member)" = "$_m" ] || { echo "track.sh ok: this project is $(fm_get "$dir/STATE.md" member)'s; only their central records its OK" >&2; exit 1; }
+    fi
     o="$dir/.owner-ok"; [ -f "$o" ] && chmod u+w "$o"
-    printf '%s\t%s\t%s\n' "$id" "$(date '+%F %H:%M')" "$(printf '%s' "$*" | tr -d '\000-\037' | cut -c1-300)" >> "$o"; chmod 444 "$o"
+    printf '%s\t%s\t%s%s\n' "$id" "$(date '+%F %H:%M')" "${_m:+$_m: }" "$(printf '%s' "$*" | tr -d '\000-\037' | cut -c1-300)" >> "$o"; chmod 444 "$o"
     echo "recorded the owner's OK on $id" ;;
   baseline)
     # once: a second run would reset the yardstick that shows items removed or the delivery line moved
     [ -n "$(fm_get "$t" baseline)" ] && { echo "baseline is already recorded in TRACK.md; it is not rewritten" >&2; exit 1; }
     fm_set "$t" baseline "$(printf '%s\n' "$rows" | grep -c "^I$US")"
-    fm_set "$t" baseline_delivery "$del" ;;
+    fm_set "$t" baseline_delivery "$del"
+    fm_set "$t" baseline_owner "$(printf '%s\n' "$rows" | awk -F "$US" '$1 == "I" && $9 == "ok" { printf "%s%s", c, $4; c = "," }')" ;;
   brief)
     now=; wait=
     while IFS=$US read -r kind s m id card needs ev why own; do

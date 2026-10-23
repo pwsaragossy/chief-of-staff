@@ -14,7 +14,7 @@ Gate: rules, criteria, submission requirements and deadline are written down, an
 - [ ] rules | Rules and eligibility read in full: allowed tools and code, team size, IP terms, prize conditions, disqualifiers | card: researcher | needs: - | evidence:
 - [ ] criteria | Judging criteria extracted with weights, each mapped to one planned moment in the demo | card: product | needs: rules | evidence:
 - [ ] submission-reqs | Submission package requirements listed: form fields, video length, repo, deck, links, file formats, platform | card: researcher | needs: rules | evidence:
-- [ ] deadline | Deadline written as `deadline: YYYY-MM-DD HH:MM` in this file's front matter, converted to local time from the organizer's timezone (the panel counts down to it), and a backward timeline with at least 2 hours of buffer before it (default, adjust to the case) | card: product | needs: submission-reqs | evidence:
+- [ ] deadline | Deadline written as `deadline: YYYY-MM-DD HH:MM` in this file's front matter, in local time, or with the offset when teammates are in other time zones (`2026-10-25 18:00 -0300`); the panel counts down to it, and a backward timeline with at least 2 hours of buffer before it (default, adjust to the case) | card: product | needs: submission-reqs | evidence:
 - [ ] idea | One-sentence idea, user and problem, scored against the criteria | card: product | needs: criteria | evidence:
 - [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: rules, criteria, submission-reqs, deadline, idea | evidence:
 ## Stage 2: Scope and build

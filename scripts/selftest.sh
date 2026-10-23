@@ -564,11 +564,12 @@ check "health is green when the track is clean" 'H gamma | grep -q "^green: on t
 fut() { t=$(( $(date +%s) + $1 )); date -r "$t" '+%F %H:%M' 2>/dev/null || date -d "@$t" '+%F %H:%M'; }
 gcard() { printf -- '---\nstatus: waiting-owner\nproject: gamma\nasked: %s\n---\n# Gamma\n\n## For the owner to decide (central asks, all at once)\n- (one line per question, recommendation first; empty when nothing waits on the owner)\n- Freeze the scope at login and export? Recommended: yes\n' "$1" > "$W/board/Gamma.md"; }
 gcard "$(fut 0)"
-check "health is yellow on a question under its limit, with its age" 'H gamma | grep -q "^yellow: waiting on the owner for 0 min: Gamma"'
+check "health is yellow on a question under its limit, with its age" 'H gamma | grep -Eq "^yellow: waiting on the owner for [01] min: Gamma"'
 check "the central briefing shows the question itself, not the template line" 'o=$(b "$W/central"); printf "%s" "$o" | grep -q "^  - Freeze the scope at login and export? Recommended: yes" && ! printf "%s" "$o" | grep -q "one line per question"'
 fm_set "$G/TRACK.md" owner_wait_minutes 20; fm_set "$W/board/Gamma.md" asked "$(fut -1800)"
-check "a question past owner_wait_minutes turns red, with its age" 'H gamma | grep -q "^red: a question has waited on the owner for 30 min (limit 20 min): Gamma"'
-check "the briefing tells central to ask the late question first" 'b "$W/central" | grep -q "Gamma (project: gamma, waiting 30 min, past the 20 min limit: ask first)"'
+check "a question past owner_wait_minutes turns red, with its age" 'H gamma | grep -Eq "^red: a question has waited on the owner for 3[01] min \(limit 20 min\): Gamma"'
+check "a question asked with its time zone has the same age in another time zone" 'fm_set "$W/board/Gamma.md" asked "$(fut -1800) $(date +%z)" && TZ=Asia/Tokyo sh "$here/health.sh" "$W" | grep -Eq "waited on the owner for 3[01] min"'
+check "the briefing tells central to ask the late question first" 'b "$W/central" | grep -Eq "Gamma \(project: gamma, waiting 3[01] min, past the 20 min limit: ask first\)"'
 printf -- '---\nstatus: waiting-owner\nproject: gamma\n---\n' > "$W/board/Gamma.md"
 check "the Stop hook stamps when a question was asked" 'h "$(ev Stop ",\"stop_hook_active\":false")" "$W/central" >/dev/null 2>&1; [ -n "$(fm_get "$W/board/Gamma.md" asked)" ]'
 fm_set "$W/board/Gamma.md" status in-progress
@@ -590,6 +591,8 @@ fm_set "$G/TRACK.md" deadline ""
 mkdir -p "$W/t3"; printf -- '---\nstage: 1\n---\n## Stage 1: Plan\n- [x] scope | Scope | card: product | needs: - | owner: ok | evidence: scope.md\n- [ ] review-1 | Review | card: reviewer | needs: scope | evidence:\n' > "$W/t3/TRACK.md"
 echo "Scope: login and export. Owner OK: yes" > "$W/t3/scope.md"
 check "an owner item cannot close on a line the agent wrote" 'T check "$W/t3" | grep -q "^scope closes only with the owner.s OK"'
+check "an owner item cannot be marked not applicable" 'sed "s/^- \[x\] scope /- [-] scope /; s/| evidence: scope.md/| why: skipped/" "$W/t3/TRACK.md" > "$W/t3b"; mkdir -p "$W/t4"; mv "$W/t3b" "$W/t4/TRACK.md"; T check "$W/t4" | grep -q "^scope waits on the owner.s OK and cannot be marked not applicable"'
+check "removing the owner mark after opening does not skip the owner" 'cp "$W/t3/TRACK.md" "$W/t5.md"; mkdir -p "$W/t5"; mv "$W/t5.md" "$W/t5/TRACK.md"; cp "$W/t3/scope.md" "$W/t5/"; T baseline "$W/t5" && sed -i.bak "s/ | owner: ok//" "$W/t5/TRACK.md" && T check "$W/t5" | grep -q "^scope needed the owner.s OK when the project opened"'
 check "a project session cannot record the owner OK" '! CLAUDE_PROJECT_DIR="$W/t3" T ok "$W/t3" scope yes 2>/dev/null && [ ! -e "$W/t3/.owner-ok" ]'
 check "the OK is only for items marked owner: ok" '! CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" review-1 yes 2>/dev/null'
 check "central records the owner OK and the item closes" 'CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" scope "yes, freeze it" >/dev/null && ! T check "$W/t3" | grep -q "owner.s OK" && [ ! -w "$W/t3/.owner-ok" ]'
@@ -617,7 +620,7 @@ if command -v python3 >/dev/null && command -v curl >/dev/null; then
   check "panel refuses a request without the token" '[ "$(curl -s -o /dev/null -w %{http_code} "$B/api")" = 403 ]'
   check "panel refuses another Host" '[ "$(curl -s -o /dev/null -w %{http_code} -H "Host: evil.example" "$B/api?t=$TK")" = 403 ]'
   check "panel api reports projects and colors" 'curl -s "$B/api?t=$TK" | grep -q "\"slug\": \"gamma\", \"color\": \"red\""'
-  check "panel api gives the question text, its age and the three counts" 'a=$(curl -s "$B/api?t=$TK"); printf "%s" "$a" | grep -q "\"questions\": \[\"Freeze the scope at login and export? Recommended: yes\"\]" && printf "%s" "$a" | grep -q "\"waited\": 0" && printf "%s" "$a" | grep -Eq "\"counts\": \{\"turns\": [1-9][0-9]*, \"violations\": [1-9]"'
+  check "panel api gives the question text, its age and the three counts" 'a=$(curl -s "$B/api?t=$TK"); printf "%s" "$a" | grep -q "\"questions\": \[\"Freeze the scope at login and export? Recommended: yes\"\]" && printf "%s" "$a" | grep -Eq "\"waited\": [0-9]" && printf "%s" "$a" | grep -Eq "\"counts\": \{\"turns\": [1-9][0-9]*, \"violations\": [1-9]"'
   check "panel imports a file into the inbox" 'printf hello | curl -s -X POST --data-binary @- -H "X-Name: ../../evil name.txt" -H "X-Kind: file" "$B/import?t=$TK" | grep -q saved && ls "$W/knowledge/inbox" | grep -q "evil_name.txt$" && [ ! -e "$W/evil name.txt" ]'
   check "panel saves a pasted link as a note" 'printf "https://example.com/a" | curl -s -X POST --data-binary @- -H "X-Name: link.md" -H "X-Kind: text" "$B/import?t=$TK" >/dev/null && grep -q "^source: https://example.com/a" "$W"/knowledge/inbox/*link.md'
   check "panel answers a non-ASCII token with 403" '[ "$(curl -s -o /dev/null -w %{http_code} "$B/api?t=%C3%A9")" = 403 ]'
@@ -697,15 +700,15 @@ turn() { hk "$(ev UserPromptSubmit)" "$1" >/dev/null 2>&1; hk "$(ev Stop ",\"sto
 inteam() { git -C "$SW/team.git" ls-tree -r --name-only HEAD | grep -qxF "$1"; }
 waitteam() { i=0; while [ $i -lt 60 ] && ! inteam "$1"; do i=$((i+1)); sleep 0.1; done; inteam "$1"; }
 PJ="$SW/a/projects/pa"; mkdir -p "$PJ"; sed -e "s/{{PROJECT_NAME}}/pa/" "$here/../templates/project/STATE.md" > "$PJ/STATE.md"; fm_set "$PJ/STATE.md" member Ana
-printf -- '---\nstatus: waiting-owner\nproject: pa\nowner: session-pa\nmember: Ana\n---\n# Pa\n\n## For the owner to decide (central asks, all at once)\n- Ship the demo on Friday? Recommended: yes\n' > "$SW/a/board/Pa.md"
+printf -- '---\nstatus: waiting-owner\nproject: pa\nowner: session-pa\nmember: Ana\n---\n# Pa\n\n## For the owner to decide (central asks, all at once)\n- Ship the demo on Friday? Recommended: yes\n' > "$SW/a/board/Pa demo.md"
 printf 'aws_key = AKIAABCDEFGHIJKLMNOP\n' > "$PJ/config.txt"
 printf 'not a note\n' > "$SW/a/knowledge/notes/bad-1.md"
 check "a turn end holds back a file with a key, and says so" 'turn "$PJ" | grep -q "config.txt looks like it holds a key or token"'
-check "the board and the project go to the team by themselves" 'waitteam board/Pa.md && waitteam projects/pa/STATE.md'
+check "the board and the project go to the team by themselves" 'waitteam "board/Pa demo.md" && waitteam projects/pa/STATE.md'
 check "the key file and a note that failed the gate stay on this computer" '! inteam projects/pa/config.txt && ! inteam knowledge/notes/bad-1.md'
-check "the question goes out with the time it was asked" 'git -C "$SW/team.git" show HEAD:board/Pa.md | grep -q "^asked: 20"'
+check "the question goes out with the time it was asked" 'git -C "$SW/team.git" show "HEAD:board/Pa demo.md" | grep -q "^asked: 20"'
 rm "$PJ/config.txt" "$SW/a/knowledge/notes/bad-1.md"
-check "the teammate gets the board at session start" 'CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/briefing.sh" >/dev/null; i=0; while [ $i -lt 60 ] && [ ! -f "$SW/b/board/Pa.md" ]; do i=$((i+1)); sleep 0.1; done; [ -f "$SW/b/board/Pa.md" ]'
+check "the teammate gets the board at session start" 'CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/briefing.sh" >/dev/null; i=0; while [ $i -lt 60 ] && [ ! -f "$SW/b/board/Pa demo.md" ]; do i=$((i+1)); sleep 0.1; done; [ -f "$SW/b/board/Pa demo.md" ]'
 check "the one board shows Ana.s project to Bia, with whose it is" 'sh "$here/health.sh" "$SW/b" | awk -F "$(printf "\037")" "\$1 == \"pa\" { print \$13 }" | grep -qx Ana'
 check "Bia.s central does not ask Ana.s question" 'o=$(CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/briefing.sh"); printf "%s" "$o" | grep -q "you are .Bia." && ! printf "%s" "$o" | grep -q "Ship the demo"'
 check "Ana.s central asks it" 'CLAUDE_PROJECT_DIR="$SW/a/central" sh "$here/briefing.sh" | grep -q "^  - Ship the demo on Friday? Recommended: yes"'
@@ -714,10 +717,29 @@ PB="$SW/b/projects/pb"; mkdir -p "$PB"; sed -e "s/{{PROJECT_NAME}}/pb/" "$here/.
 fm_set "$PB/STATE.md" dispatch ready; fm_set "$SW/b/projects/pa/STATE.md" dispatch ready
 check "a teammate.s dispatcher runs only their own projects" 'CLAUDE_BIN="$stub" sh "$here/dispatcher.sh" "$SW/b"; grep -q " run pb" "$SW/b/.dispatch.log" && ! grep -q " run pa" "$SW/b/.dispatch.log"'
 git -C "$SW/b" checkout -q -- projects/pa/STATE.md
-fm_set "$SW/a/board/Pa.md" due 2026-11-01; turn "$SW/a/central" >/dev/null
-i=0; while [ $i -lt 60 ] && ! git -C "$SW/team.git" show HEAD:board/Pa.md | grep -q "due: 2026-11-01"; do i=$((i+1)); sleep 0.1; done
-fm_set "$SW/b/board/Pa.md" due 2026-11-02; turn "$SW/b/central" >/dev/null
-check "two members changing the same card get a conflict card, and nothing is lost" 'i=0; while [ $i -lt 60 ] && [ ! -f "$SW/b/board/Sync conflict - b.md" ]; do i=$((i+1)); sleep 0.1; done; [ -f "$SW/b/board/Sync conflict - b.md" ] && grep -q "due: 2026-11-02" "$SW/b/board/Pa.md" && git -C "$SW/team.git" show HEAD:board/Pa.md | grep -q "due: 2026-11-01"'
-check "a closed card leaves the team board" 'inteam board/Pa.md && rm "$SW/a/board/Pa.md" && { turn "$SW/a/central" >/dev/null; i=0; while [ $i -lt 60 ] && inteam board/Pa.md; do i=$((i+1)); sleep 0.1; done; ! inteam board/Pa.md; }'
+fm_set "$SW/a/board/Pa demo.md" due 2026-11-01; turn "$SW/a/central" >/dev/null
+i=0; while [ $i -lt 60 ] && ! git -C "$SW/team.git" show "HEAD:board/Pa demo.md" | grep -q "due: 2026-11-01"; do i=$((i+1)); sleep 0.1; done
+fm_set "$SW/b/board/Pa demo.md" due 2026-11-02; turn "$SW/b/central" >/dev/null
+check "two members changing the same card get a conflict card, and nothing is lost" 'i=0; while [ $i -lt 60 ] && [ ! -f "$SW/b/board/Sync conflict - b.md" ]; do i=$((i+1)); sleep 0.1; done; [ -f "$SW/b/board/Sync conflict - b.md" ] && grep -q "due: 2026-11-02" "$SW/b/board/Pa demo.md" && git -C "$SW/team.git" show "HEAD:board/Pa demo.md" | grep -q "due: 2026-11-01"'
+PJ2="$SW/a/projects/pa"; printf -- '---\nstatus: in-progress\nproject: pa\nmember: Ana\n---\n# Pa two\n\n## For the owner to decide (central asks, all at once)\n- Use the dark theme? Recommended: no\n' > "$SW/a/board/Pa two.md"
+check "a question written without the status still waits on the owner" 'hk "$(ev UserPromptSubmit)" "$PJ2" >/dev/null 2>&1; touch "$SW/a/board/Pa two.md"; hk "$(ev Stop ",\"stop_hook_active\":false")" "$PJ2" >/dev/null 2>&1; [ "$(fm_get "$SW/a/board/Pa two.md" status)" = waiting-owner ] && waitteam "board/Pa two.md"'
+check "central cannot record the OK on a teammate.s project" 'cp "$here/../templates/tracks/hackathon.md" "$SW/b/projects/pa/TRACK.md"; CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/track.sh" ok "$SW/b/projects/pa" scope yes 2>&1 | grep -q "only their central records its OK" && [ ! -e "$SW/b/projects/pa/.owner-ok" ]'
+git -C "$SW/b" checkout -q -- projects/pa/TRACK.md 2>/dev/null; rm -f "$SW/b/projects/pa/TRACK.md.tmp."*
+check "a renamed copy of track.sh run with ok still asks the owner" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh /tmp/x.sh ok $W/t3 scope yes\"}")" "$W/central" | grep -q "permissionDecision\":\"ask"'
+mkdir -p "$SW/a/.claude"; printf '{"hooks":{}}\n' > "$SW/a/.claude/settings.json"
+check "settings and hooks never go to the team" 'turn "$SW/a/central" | grep -q ".claude/settings.json: settings, hooks and git rules stay on this computer" && sleep 1 && ! inteam .claude/settings.json'
+rm -rf "$SW/a/.claude"
+git clone -q "$SW/team.git" "$SW/evil" 2>/dev/null; mkdir -p "$SW/evil/.claude"; printf '{"hooks":{"SessionStart":[]}}\n' > "$SW/evil/.claude/settings.json"
+git -C "$SW/evil" add -A && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm evil && git -C "$SW/evil" push -q 2>/dev/null
+check "a teammate.s change to settings is never pulled" 'sh "$here/sync.sh" pull "$SW/b"; [ ! -e "$SW/b/.claude/settings.json" ] && grep -q "pull refused" "$SW/b/.git/cos-sync"'
+check "and a push does not take it in either" 'echo x >> "$SW/b/projects/pb/STATE.md"; ! sh "$here/sync.sh" push "$SW/b" pb "$SW/b" projects/pb/STATE.md && [ ! -e "$SW/b/.claude/settings.json" ] && grep -q "pull refused" "$SW/b/.git/cos-sync"'
+git -C "$SW/evil" rm -rq .claude && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm undo && git -C "$SW/evil" push -q 2>/dev/null
+mkdir -p "$PJ/repo" && git -C "$PJ/repo" init -q && echo x > "$PJ/repo/a.txt"; dd if=/dev/zero of="$PJ/demo.mp4" bs=1048576 count=21 2>/dev/null; echo "plan" > "$PJ/plan.md"
+check "a nested git repo and a big video stay local, and the rest still goes" 'o=$(turn "$PJ"); printf "%s" "$o" | grep -q "repo/ is a git repository of its own" && printf "%s" "$o" | grep -q "demo.mp4 is over 20 MB" && waitteam projects/pa/plan.md && ! inteam projects/pa/demo.mp4 && ! inteam projects/pa/repo/a.txt'
+rm -rf "$PJ/repo" "$PJ/demo.mp4"
+check "a push that git refuses says so instead of pushed ok" '! sh "$here/sync.sh" push "$SW/a" pa "$SW/a" "projects/pa/no such file" && grep -q "^.* push failed" "$SW/a/.git/cos-sync"'
+check "a push waits for a pull that holds the lock" 'mkdir "$SW/a/.git/cos-sync.lock"; sleep 30 & sp=$!; echo $sp > "$SW/a/.git/cos-sync.lock/pid"; (sleep 2; kill $sp; rm -f "$SW/a/.git/cos-sync.lock/pid"; rmdir "$SW/a/.git/cos-sync.lock") & echo y >> "$PJ/plan.md"; sh "$here/sync.sh" push "$SW/a" pa "$SW/a" projects/pa/plan.md; grep -q "pushed ok" "$SW/a/.git/cos-sync"'
+check "the dispatcher never plain-pushes a shared workspace" 'COS_PUSH=1 CLAUDE_BIN="$stub" sh "$here/dispatcher.sh" "$SW/b"; grep -q "COS_PUSH ignored" "$SW/b/.dispatch.log"'
+check "a closed card leaves the team board" 'inteam "board/Pa demo.md" && rm "$SW/a/board/Pa demo.md" && { turn "$SW/a/central" >/dev/null; i=0; while [ $i -lt 60 ] && inteam "board/Pa demo.md"; do i=$((i+1)); sleep 0.1; done; ! inteam "board/Pa demo.md"; }'
 
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }
