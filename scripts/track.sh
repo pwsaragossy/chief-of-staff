@@ -58,12 +58,16 @@ undelivered=$(printf '%s\n' "$rows" | awk -F "$US" -v d="$del" '$1 == "I" && $2 
 # Once the project opened with the key (a mark in .owner-items) or the owner approved a check, deleting the key
 # does not switch the gate off.
 TB=$(printf '\t')
-# a shared workspace: an owner file that git tracks came from the team repo (a clone, a hand commit), not from
-# this computer's owner, so it is not trusted; the plugin never commits them (protocol.sh push skip)
+# a shared workspace: an owner file that git tracks, in any letter case, came from the team repo (a clone, a
+# hand commit), not from this computer's owner (the plugin never commits them: protocol.sh push skip). It is
+# moved aside at once, so untracking it later does not make its content trusted.
 OKF="$dir/.owner-ok"; OIF="$dir/.owner-items"; forged=
 if cos_shared "$(cos_root "$dir")" 2>/dev/null; then
-  for _f in .owner-ok .owner-items; do git -C "$dir" ls-files --error-unmatch -- "$_f" > /dev/null 2>&1 && forged="$forged $_f"; done
-  case $forged in *.owner-ok*) OKF=/nonexistent/.owner-ok ;; esac; case $forged in *.owner-items*) OIF=/nonexistent/.owner-items ;; esac
+  for _f in $(git -C "$dir" ls-files -- ':(icase).owner-ok' ':(icase).owner-items' 2>/dev/null); do
+    forged="$forged $_f"; [ -e "$dir/$_f" ] && { chmod u+w "$dir/$_f"; mv -f "$dir/$_f" "$dir/$_f.from-team"; } 2>/dev/null
+  done
+  case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) OKF=/nonexistent/.owner-ok ;; esac
+  case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-items*) OIF=/nonexistent/.owner-items ;; esac
 fi
 has_tc=; awk 'NR == 1 && /^---/ { f = 1; next } f && /^---/ { exit } f && /^target:/ { h = 1 } END { exit !h }' "$t" && has_tc=1
 grep -qx 'target:' "$OIF" 2>/dev/null && has_tc=1
@@ -86,11 +90,18 @@ hsum() { if command -v shasum > /dev/null 2>&1; then shasum -a 256 | cut -c1-64
 # the frozen sum covers the target, the command and the files above
 tcsum() { { printf '%s\n%s\n' "$tgt" "$chk"; set -f; for _f in $(tcfiles); do printf '%s\n' "$_f"; cat "$dir/$_f"; done; set +f; } 2>/dev/null | hsum; }
 frozen() { awk -F '\t' '$1 == "check" { for (i = 4; i <= NF; i++) if ($i ~ /^freeze=/) { f = substr($i, 8); d = $2 } } END { if (f != "") print f "\t" d }' "$OKF" 2>/dev/null; }
-# teamsent: a file a teammate sent into this project (sync.sh logs them) since the owner approved the check
+# teamsent: a file of this project (any letter case) changed by a commit after the owner approved the check that
+# this computer did not make (sync.sh lists its own in cos-own): a pull, by sync.sh or by hand. The approval keeps
+# the commit shared with the team repo then (head=), which a push never rewrites; local commits after it are
+# folded by sync.sh push, and the folded one is listed as this computer's own
 teamsent() { cos_shared "$(cos_root "$dir")" 2>/dev/null || return 1
   _g=$(git -C "$dir" rev-parse --absolute-git-dir 2>/dev/null) || return 1; _p=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null)
-  _a=$(awk -F '\t' '$1 == "check" { a = 0; for (i = 4; i <= NF; i++) if ($i ~ /^at=/) a = substr($i, 4) } END { print a + 0 }' "$OKF" 2>/dev/null)
-  awk -F '\t' -v a="$_a" -v p="$_p" '$1 + 0 >= a && index($2, p) == 1 { print $2; exit }' "$_g/cos-incoming" 2>/dev/null | grep .; }
+  _h=$(awk -F '\t' '$1 == "check" { h = ""; for (i = 4; i <= NF; i++) if ($i ~ /^head=/) h = substr($i, 6) } END { print h }' "$OKF" 2>/dev/null)
+  [ -n "$_h" ] && git -C "$dir" merge-base --is-ancestor "$_h" HEAD 2>/dev/null || { echo "the history since the approval (its commit is gone)"; return 0; }
+  for _c in $(git -C "$dir" rev-list "$_h..HEAD" -- ":(top,icase)$_p" 2>/dev/null); do
+    grep -qx "$_c" "$_g/cos-own" 2>/dev/null && continue
+    git -C "$dir" diff-tree --no-commit-id --name-only -r "$_c" -- ":(top,icase)$_p" | head -n 1; return 0
+  done; return 1; }
 # runcheck: rc (0 met, 1 not met, 124 timed out, other could not run) and val (the last output line)
 runcheck() {
   _o=$(mktemp); _lim=${COS_CHECK_TIMEOUT:-120}; case $_lim in ''|*[!0-9]*) _lim=120 ;; esac
@@ -170,7 +181,7 @@ check() {
   # an item that needed the owner's OK at opening still needs it: removing the mark does not skip the owner
   # (.owner-items, read-only and written once by baseline: TRACK.md itself is the agent's to edit)
   # a project opened with a baseline always has the list: without it the owner gate would be off (fail closed)
-  for _f in $forged; do echo "$_f came from the team repo (git tracks it), so this computer does not trust it: remove it from git (git rm --cached) and have the owner give their OKs again"; done
+  for _f in $forged; do echo "$_f came from the team repo (git tracks it), so this computer does not trust it; it was moved aside to $_f.from-team: remove it from git (git rm --cached $_f) and have the owner give their OKs again"; done
   [ -n "$(fm_get "$t" baseline)" ] && [ ! -r "$OIF" ] &&
     echo "the list of owner items is missing (.owner-items, written when the project opened): restore it from git or ask the owner"
   for b in $(cat "$OIF" 2>/dev/null); do [ "$b" = target: ] && continue
@@ -269,10 +280,10 @@ case $cmd in
            { echo "track.sh ok: $id is not an item of this track marked owner: ok" >&2; exit 1; } ;;
     esac
     # a shared workspace: only the project's own member gives its OK
-    case $forged in *.owner-ok*) echo "track.sh ok: .owner-ok came from the team repo (git tracks it): remove it from git first (git rm --cached)" >&2; exit 1 ;; esac
+    case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) echo "track.sh ok: .owner-ok came from the team repo (git tracks it): remove it from git first (git rm --cached)" >&2; exit 1 ;; esac
     mine || { echo "track.sh ok: this project is $(fm_get "$dir/STATE.md" member)'s; only their central records its OK" >&2; exit 1; }
     w=$(printf '%s' "$*" | tr -d '\000-\037' | cut -c1-300); x=
-    if [ "$id" = check ]; then x="${TB}freeze=$(tcsum)${TB}at=$(date +%s)"; _fl=$(tcfiles)
+    if [ "$id" = check ]; then x="${TB}freeze=$(tcsum)$({ git -C "$dir" merge-base HEAD '@{u}' || git -C "$dir" rev-parse -q --verify HEAD; } 2>/dev/null | head -n 1 | sed "s/^/$TB""head=/")"; _fl=$(tcfiles)
       echo "the owner approves the target '$tgt' and the command '$chk'${_fl:+, frozen with its files: $_fl}"
     elif [ -n "$runnable" ] && { [ "$id" = delivery ] || [ "$(printf '%s\n' "$rows" | awk -F "$US" -v i="$id" '$1 == "I" && $4 == i { print $2 }')" -ge "$del" ]; }; then
       # the delivery OK: the frozen check runs now, in front of the owner; a failing one needs the owner's waiver
