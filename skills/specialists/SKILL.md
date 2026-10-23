@@ -18,6 +18,10 @@ use each, the checks a senior professional never skips, the evidence standard an
    - the line `Role card: <role>` and the full text of that card (the hook blocks a brief without it);
    - the line `Library: [[id]] [[id]] ...` with the notes found, or `Library: none found for <terms>`
      (the hook blocks a brief without it), the question, the files to read, and what to deliver;
+   - the line `Ambition: <the goal behind the goal> | judge: <outside judge>` (ambition skill; the
+     hook blocks a brief without it), with the instruction "run the ambition lenses on your own draft,
+     at most 4 versions, and end with ## Versions: one line per version, the lens and the judge's
+     verdict; anything beyond the request goes under Open questions for the owner, not into the work";
    - "research only what is missing; save each new finding with library.sh new and fill its
      Compared: line; cite every note you use as [[id]]; finish with the never-skip checklist of your
      card".

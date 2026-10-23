@@ -1,7 +1,7 @@
 # chief-of-staff
 
 An AI chief of staff for [Claude Code](https://code.claude.com): a small company of agents that
-works for one owner, or for a team. Version 0.3.
+works for one owner, or for a team. Version 0.4.
 
 What it gives you:
 
@@ -53,6 +53,14 @@ What it gives you:
   its age shown. The panel and the briefing show the questions themselves. Items marked `owner: ok`
   (the hackathon's scope freeze and submission) close only with the owner's OK, which central records
   with `track.sh ok` and the owner approves.
+- **Past the literal request (ambition loop).** Every new request goes through the `ambition` skill:
+  the goal behind the goal, the rawest material, who does this work, and an outside judge that
+  measures that goal, in at most 4 numbered versions. Whoever briefs sets the judge: every specialist
+  brief carries `Ambition: <goal> | judge: <what measures it>`, and a specialist cannot finish
+  without its `## Versions`. Scope beyond the request is a question for the owner, never work.
+  In our test (same vague task, haiku as the worker, a timing check it never saw): 1 pass in 8 runs
+  as asked; 0 in 5 when the worker ran the loop alone (it picked a judge its first draft passed);
+  3 in 3 when a central on sonnet wrote the brief and the judge first.
 - **A hard target and a judge that is not the model.** Every track carries `target:` (a number, taken
   from the criteria, the metric or the raw material) and `check:` (a command that measures it: exit 0
   when met, the value on its last line; or `none (why)`). A project cannot leave stage 1 until both are
@@ -262,6 +270,8 @@ What is ours, with no equivalent found in ECC:
   is a word list, not a shell interpreter: it knows common globs (`.o*`, `*-items`), but an agent that
   builds the file name in a shell variable, or with a glob or shell option it does not know, is not
   seen. Then the reviewer and the owner's own read of `.owner-ok` are the last line.
+- Ambition: the hooks check that the `Ambition:` line and `## Versions` exist, not that the judge is
+  a good one; the reviewer checks that, and it is the same model.
 - Target and check: the check runs a shell command written in TRACK.md, so only a session or central
   on your computer runs it (never a hook), never for a teammate's project in a shared workspace, and
   only a command the owner approved on this computer (the approval lives in `.owner-ok`, which never

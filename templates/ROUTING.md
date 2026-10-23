@@ -23,9 +23,11 @@ tools and when to use each, and what it never skips. Edit cards and rows freely:
 | a decision only the owner can make | a line on the project card, `status: waiting-owner` | — |
 
 Rules (the hooks enforce the first three):
-- Every subagent brief names its card (`Role card: <role>`) and carries the card's text; a search or
+- Every subagent brief names its card (`Role card: <role>`) and carries the card's text, a
+  `Library:` line and an `Ambition: <goal behind the goal> | judge: <outside judge>` line; a search or
   file-reading helper says `Role card: utility`.
-- A specialist's output ends with its never-skip checklist, each item done or not applicable (why).
+- A specialist's output ends with `## Versions` (ambition skill) and its never-skip checklist, each
+  item done or not applicable (why).
 - A deliverable, a cross-area decision or research ends only after a specialist and the reviewer.
 - The person who does the work is never the person who judges it. The reviewer is the same model
   with a different brief: it catches incoherence, not authority.

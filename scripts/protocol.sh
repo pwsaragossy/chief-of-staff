@@ -4,7 +4,7 @@
 #   PostToolUse       records what the turn did: specialists (Agent), library lookups, web research, saves
 #   PreToolUse        on WebSearch/WebFetch: blocked until the library was searched this turn;
 #                     on Agent: blocked unless the brief names an existing role card (specialists/<role>.md)
-#   SubagentStop      a specialist cannot finish without its never-skip checklist
+#   SubagentStop      a specialist cannot finish without its never-skip checklist and its ## Versions
 #   Stop              blocks the end of a substantive turn that skipped specialists or the reviewer, researched
 #                     without saving to the library, or left the project's TRACK.md with a gate problem
 #                     (track.sh check). One push per turn (stop_hook_active), then it lets go and logs a violation.
@@ -70,7 +70,7 @@ case $(jget hook_event_name) in
     cos_libs "$root" | while IFS="$TAB" read -r n q; do [ "$n" = personal ] || [ "$n" = "$lname" ] || [ ! -d "$q/.git" ] && continue
       { git -C "$q" rev-parse -q --verify HEAD; git -C "$q" status --porcelain -uall --no-renames; } > "$st/snap-$n" 2>/dev/null; done
     echo "Chief-of-staff protocol for this request (checked by hooks at the end of the turn):"
-    echo "- A deliverable for other people, a decision that crosses areas, or research goes through the specialists skill: at least one specialist and the independent reviewer, as subagents, each briefed with its role card from $root/specialists/ (the brief contains the line 'Role card: <role>' and the card's text)."
+    echo "- A deliverable for other people, a decision that crosses areas, or research goes through the specialists skill: at least one specialist and the independent reviewer, as subagents, each briefed with its role card from $root/specialists/ (the brief contains the line 'Role card: <role>' and the card's text, a 'Library:' line and an 'Ambition: <goal behind the goal> | judge: <outside judge>' line). A new request from the owner goes through the ambition skill first."
     echo "- Research starts in the library: sh \"$L\" search <terms> (workspace: $root). Web search only for what the library lacks. Every new finding, decision, how-to or option becomes a note: sh \"$L\" new <finding|decision|howto|option|topic> <origin> <title>, then fill it. Hooks check every note."
     [ $lst = 0 ] || { sh "$L" where | sed -n 2p; exit 0; }
     # what the company already knows about this request; skipped for an external or very large library (hook time budget)
@@ -132,8 +132,12 @@ $p"; fi ;;
         role=$(printf '%s' "$in" | grep -o 'Role card: [a-z-]*' | head -n 1 | sed 's/Role card: //')
         [ "$role" = utility ] && exit 0
         if [ -n "$role" ] && [ -f "$root/specialists/$role.md" ]; then
-          case $in in *"Library:"*) exit 0 ;; esac
-          echo "Blocked by chief-of-staff: the brief must carry what the library already knows. Add a line 'Library: [[id]] [[id]] ...' with the notes from library.sh search, or 'Library: none found for <terms>'." >&2
+          case $in in *"Library:"*) ;; *)
+            echo "Blocked by chief-of-staff: the brief must carry what the library already knows. Add a line 'Library: [[id]] [[id]] ...' with the notes from library.sh search, or 'Library: none found for <terms>'." >&2
+            exit 2 ;; esac
+          # a real line, not a placeholder: the goal and the judge both have to say something
+          printf '%s' "$in" | grep -Eq 'Ambition: [^|]{12,}\| *judge: [^"\\]{8,}' && exit 0
+          echo "Blocked by chief-of-staff: a specialist works to the goal behind the request, judged from outside (ambition skill). Add a line 'Ambition: <the goal behind the goal> | judge: <what measures THAT goal: a command that runs, a rule with its source, the arithmetic, or real numbers>'. At most 4 versions; scope beyond the request is a question for the owner, never work." >&2
           exit 2
         fi
         cards=$(ls "$root/specialists" 2>/dev/null | sed -n 's/\.md$//p' | tr '\n' ' ')
@@ -202,8 +206,12 @@ $p"; fi ;;
   SubagentStop)
     [ "$(jget stop_hook_active)" = true ] && exit 0
     case $in in *"Role: utility"*) exit 0 ;; *"Role: "*) ;; *) exit 0 ;; esac
-    case $in in *"Never-skip checklist"*) exit 0 ;; esac
-    echo "Your role card requires a '## Never-skip checklist' section: mark each item of your card's 'Never skip' list as done or not applicable (why). Add it, then finish." >&2
+    case $in in *"Never-skip checklist"*) ;; *)
+      echo "Your role card requires a '## Never-skip checklist' section: mark each item of your card's 'Never skip' list as done or not applicable (why). Add it, then finish." >&2
+      exit 2 ;; esac
+    # the reviewer judges; every other specialist shows its versions (ambition skill)
+    case $in in *"Role: reviewer"*|*"## Versions"*) exit 0 ;; esac
+    echo "Your brief carries an Ambition line: add a '## Versions' section, one line per version (the lens, what changed, the verdict of the judge named in your brief). A version that passed on the first try means the judge was too easy: make it measure the goal behind the goal." >&2
     exit 2
     ;;
   Stop)

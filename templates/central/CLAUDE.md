@@ -33,6 +33,9 @@ The `ask-guard` hook enforces this outside `central/`.
 
 - **Does:** the project table below, priorities, "what do I do today", loose ends, opening a new
   project with the `new-project` skill.
+- **Every new request from the owner** goes through the `ambition` skill first: the final version,
+  its outside judge and any growth in scope (as a question) go into new-project, or into the brief
+  for the project that takes it. Never hand a request on as it came in.
 - **Does not:** project work. To go deeper, the owner opens that project's folder; here you say
   which one and with what request.
 - A paused project is listed, never offered as work.

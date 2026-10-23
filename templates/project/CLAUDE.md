@@ -21,6 +21,9 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
   undone (push, publish, delete, spend), ask whoever gave it, in one plain sentence, before that
   step. Do the reversible part first.
 - **Commit each finished step** with only the files you touched; do not wait for the end.
+- **Go past the literal request.** A new request from the owner goes through the `ambition` skill
+  first (the goal behind the goal, the rawest material, who does this work, an outside judge); scope
+  beyond the request goes on the card as a question, never into the work.
 - **Do not answer as a generalist.** Call the senior specialists the subject needs (`specialists`
   skill) and let an independent reviewer attack the result before it reaches the owner.
 - **Use the company library** (`knowledge` skill). It is shared by every project: search before

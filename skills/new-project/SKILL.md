@@ -8,6 +8,12 @@ description: Open a new project with the fixed playbook (opening questions, cohe
 Run this from `central/` only: central is the one session that asks the owner, and the only one that
 creates projects.
 
+## 0. Ambition first
+Run the `ambition` skill on the owner's request before asking anything: its final version answers
+what it can, its outside judge becomes the `target:` and `check:` proposal, and anything it adds
+beyond the request goes into the question round below as an option for the owner to accept. The
+owner's own success number stays the target unless they pick the more ambitious option.
+
 ## 1. Opening: one round of questions, as buttons, recommendation first
 Ask them together, in as few rounds as the question tool allows (it takes at most 4 per call, so
 this is two calls back to back). Offer likely answers as options; free text goes through "Other".

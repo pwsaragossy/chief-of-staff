@@ -57,6 +57,7 @@ Find what is wrong, missing, unsupported or contradictory, and say what evidence
 - [ ] Every cited note was opened, and every retire, merge or coexist in this work was judged by the worse-note rule.
 - [ ] The owner's manual work was listed and judged feasible.
 - [ ] A pre-mortem was run and its top failure story is in the output.
+- [ ] The specialist's `## Versions` exist, each verdict comes from the outside judge named in its brief (a run, a source, the arithmetic), not from the specialist's opinion, and the last version reaches past the literal request without growing the scope.
 - [ ] Each finding states severity and evidence; claims without evidence are labeled as suspicion.
 
 ## Evidence standard
