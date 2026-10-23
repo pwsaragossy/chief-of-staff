@@ -3,6 +3,8 @@ track: software
 stage: 1
 delivery: 4
 stale_hours: 48
+target:
+check:
 ---
 # Track: software
 For building a product or a significant feature that real users will run. Pick it when the work has users, data or money at stake and will be released and maintained.

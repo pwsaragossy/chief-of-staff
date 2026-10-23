@@ -7,6 +7,10 @@
 #   baseline <project_dir>  records the item count when the project opens (new-project runs it once)
 # delivery: N in the front matter is the stage that delivers the original request (default: the last stage).
 # Item line: - [ ] id | deliverable | card: role | needs: a, b | evidence: path   ([x] done, [-] n/a + why:)
+# target: and check: (front matter) are the hard number and the command that measures it (exit 0 = met, last
+#   output line = the value, or "none (why)"). The owner approves both once (track.sh ok <p> check), which
+#   freezes them; the owner's delivery OK (track.sh ok <p> delivery, or an owner item in the delivery stage)
+#   runs the frozen check. verify <project_dir> runs it any time and keeps the result in .check-runs.
 # "| owner: ok" marks an item that closes only with the owner's OK, recorded in <project>/.owner-ok by
 #   track.sh ok <project_dir> <id> <the owner's words>   (central only; the hook asks the owner to approve it)
 # No TRACK.md: silent, exit 0 (old projects keep working).
@@ -49,6 +53,58 @@ sname=$(printf '%s\n' "$rows" | awk -F "$US" -v c="$cur" '$1 == "S" && $2 == c {
 rawdel=$(fm_get "$t" delivery); del=$rawdel; case $del in ''|*[!0-9]*) del=$stages ;; esac
 # items of stages 1..delivery still open; empty = the original request is delivered
 undelivered=$(printf '%s\n' "$rows" | awk -F "$US" -v d="$del" '$1 == "I" && $2 <= d && $3 != "x" && $3 != "-" { print $4 }')
+
+# target and check: only in a TRACK.md that has the target: key (tracks from before v0.3 are left as they were).
+# Once the project opened with the key (a mark in .owner-items) or the owner approved a check, deleting the key
+# does not switch the gate off.
+TB=$(printf '\t')
+has_tc=; awk 'NR == 1 && /^---/ { f = 1; next } f && /^---/ { exit } f && /^target:/ { h = 1 } END { exit !h }' "$t" && has_tc=1
+grep -qx 'target:' "$dir/.owner-items" 2>/dev/null && has_tc=1
+grep -q '^check	' "$dir/.owner-ok" 2>/dev/null && has_tc=1
+tgt=$(fm_get "$t" target | tr -d '\000-\037'); chk=$(fm_get "$t" check | tr -d '\000-\037')
+case $chk in ''|none|none[!A-Za-z0-9_.-]*) runnable= ;; *) runnable=1 ;; esac
+# tcfiles: the project files the check names, and the files those name in turn (a helper script)
+# ponytail: what the check reaches without naming it (a test suite run by npm or pytest, data) is not frozen
+tcfiles() { set -f; _seen=; _q=$chk
+  while [ -n "$_q" ]; do _n=
+    for _w in $(printf '%s\n' "$_q" | tr -c 'A-Za-z0-9._/-' '\n' | sort -u); do _w=${_w#./}
+      case $_w in /*|*..*|.owner-ok|.owner-items|.check-runs|TRACK.md|STATE.md) continue ;; esac
+      [ -f "$dir/$_w" ] || continue
+      case " $_seen " in *" $_w "*) continue ;; esac
+      _seen="$_seen $_w"; _n="$_n $(cat "$dir/$_w" 2>/dev/null)"
+    done; _q=$_n
+  done; set +f; printf '%s' "${_seen# }"; }
+hsum() { if command -v shasum > /dev/null 2>&1; then shasum -a 256 | cut -c1-64
+  elif command -v sha256sum > /dev/null 2>&1; then sha256sum | cut -c1-64; else cksum | tr -d ' \t'; fi; }
+# the frozen sum covers the target, the command and the files above
+tcsum() { { printf '%s\n%s\n' "$tgt" "$chk"; set -f; for _f in $(tcfiles); do printf '%s\n' "$_f"; cat "$dir/$_f"; done; set +f; } 2>/dev/null | hsum; }
+frozen() { awk -F '\t' '$1 == "check" { for (i = 4; i <= NF; i++) if ($i ~ /^freeze=/) { f = substr($i, 8); d = $2 } } END { if (f != "") print f "\t" d }' "$dir/.owner-ok" 2>/dev/null; }
+# runcheck: rc (0 met, 1 not met, 124 timed out, other could not run) and val (the last output line)
+runcheck() {
+  _o=$(mktemp); _lim=${COS_CHECK_TIMEOUT:-120}; case $_lim in ''|*[!0-9]*) _lim=120 ;; esac
+  # the check runs in its own process group (set -m), so the timeout stops what it started too (a pipe, a server)
+  set -m; ( cd "$dir" && exec sh -c "$chk" ) > "$_o" 2>&1 < /dev/null & _p=$!; set +m
+  ( trap 'kill $_s 2>/dev/null; exit 0' TERM; sleep "$_lim" & _s=$!; wait $_s; { kill -TERM -"$_p" || kill "$_p"; } 2>/dev/null && : > "$_o.to" ) > /dev/null 2>&1 & _k=$!
+  { wait "$_p"; rc=$?; kill "$_k"; wait "$_k"; } 2>/dev/null   # waiting on the stopped timer keeps the shell's "Terminated" notice quiet
+  _to=; [ -f "$_o.to" ] && _to=1
+  val=$(tr -cd '[:print:]\n' < "$_o" | grep . | tail -n 1 | cut -c1-80); rm -f "$_o" "$_o.to"
+  if [ -n "$_to" ]; then rc=124; res="timed out after $_lim s"
+  else case $rc in 0) res="pass $val" ;; 1) res="fail $val" ;; *) res="could not run (exit $rc): $val" ;; esac; [ "$rc" = 124 ] && rc=125; fi
+}
+# the delivery waits on the owner's OK with the check result too (a measured target is part of "delivered")
+# a pass counts only for the target and check the owner approved last, and only while they are unchanged;
+# 'none (why)' needs no run, only the owner's approval of it
+tcpending=
+if [ -n "$has_tc" ]; then fzs=$(frozen); fzs=${fzs%%"$TB"*}
+  if [ -z "$fzs" ] || [ "$fzs" != "$(tcsum)" ]; then tcpending=1
+  elif [ -n "$runnable" ] && ! awk -F '\t' -v s="freeze=$fzs" '$1 != "check" { c = 0; z = 0; for (i = 4; i <= NF; i++) { if ($i ~ /^check=(pass|waived)/) c = 1; if ($i == s) z = 1 } if (c && z) f = 1 } END { exit !f }' "$dir/.owner-ok" 2>/dev/null; then tcpending=1; fi
+fi
+mine() { # a shared workspace: a project's check runs only on its own member's computer
+  _r=$(cos_root "$dir"); _m=
+  if [ -n "$_r" ] && cos_shared "$_r"; then _m=$(cos_member "$_r")
+    [ -n "$_m" ] && [ "$(fm_get "$dir/STATE.md" member)" = "$_m" ] || return 1
+  fi
+}
 
 # cites FILE [PREFIX]: each [[id]] in FILE must be a note of the project's library that is not retired.
 # A personal project may also cite a team's note; a team project cites only its own library (no leak).
@@ -104,7 +160,7 @@ check() {
   # a project opened with a baseline always has the list: without it the owner gate would be off (fail closed)
   [ -n "$(fm_get "$t" baseline)" ] && [ ! -r "$dir/.owner-items" ] &&
     echo "the list of owner items is missing (.owner-items, written when the project opened): restore it from git or ask the owner"
-  for b in $(cat "$dir/.owner-items" 2>/dev/null); do
+  for b in $(cat "$dir/.owner-items" 2>/dev/null); do [ "$b" = target: ] && continue
     printf '%s\n' "$rows" | awk -F "$US" -v i="$b" '$1 == "I" && $4 == i && $9 == "ok" { f = 1 } END { exit !f }' ||
       echo "$b needed the owner's OK when the project opened (.owner-items): put back its line with | owner: ok"
   done
@@ -127,6 +183,17 @@ check() {
   printf '%s\n' "$rows" | while IFS=$US read -r kind s m id card needs ev why own; do
     [ "$kind" = I ] && [ "$m" = x ] && [ -n "$ev" ] && [ -f "$dir/$ev" ] && cites "$dir/$ev" "$id: "
   done
+  if [ -n "$has_tc" ] && [ "$cur" -ge 2 ]; then
+    if [ -z "$tgt" ]; then echo "stage 1 is behind, but target: is empty in TRACK.md: write the number the work must reach, taken from the criteria, the metric or the raw material"
+    elif [ -z "$chk" ]; then echo "check: is empty in TRACK.md: write the command that measures the target (exit 0 when met, the value on its last line), or 'none (why)'"
+    else fz=$(frozen)
+      if [ -z "$fz" ]; then echo "target and check are not approved by the owner yet: put them on the project card in plain words (what is measured, the number, the command); central records the answer with track.sh ok <project> check"
+      elif [ "${fz%%"$TB"*}" != "$(tcsum)" ]; then echo "target or check changed since the owner approved them (${fz#*"$TB"}), or a file the check runs did: put the new ones on the project card for the owner"; fi
+    fi
+  fi
+  if [ -n "$tcpending" ] && [ -z "$undelivered" ] && [ "$stages" -gt 0 ]; then
+    echo "the delivery is closed, but the owner's delivery OK with the check result is missing: put it on the project card; central records it with track.sh ok <project> delivery, which runs the check"
+  fi
   # every stage needs a reviewer item, so no stage passes on the word of the agent that did the work
   printf '%s\n' "$rows" | awk -F "$US" '$1 == "S" { s[$2] = 1 } $1 == "I" && $5 == "reviewer" { r[$2] = 1 }
     END { for (k in s) if (!(k in r)) print "stage " k " has no item with card: reviewer" }'
@@ -166,7 +233,7 @@ case $cmd in
     p=$(check); [ -z "$p" ] && exit 0
     printf '%s\n' "$p"; exit 1 ;;
   status)
-    printf '%s\n' "$rows" | awk -F "$US" -v c="$cur" -v n="$stages" -v dl="$del" -v ok="$([ -z "$undelivered" ] && [ "$stages" -gt 0 ] && echo 1 || echo 0)" -v b="$(fm_get "$t" baseline | tr -cd 0-9)" -v b0="$(fm_get "$t" baseline_delivery | tr -cd 0-9)" '
+    printf '%s\n' "$rows" | awk -F "$US" -v c="$cur" -v n="$stages" -v dl="$del" -v ok="$([ -z "$undelivered" ] && [ "$stages" -gt 0 ] && [ -z "$tcpending" ] && echo 1 || echo 0)" -v b="$(fm_get "$t" baseline | tr -cd 0-9)" -v b0="$(fm_get "$t" baseline_delivery | tr -cd 0-9)" '
       $1 == "I" { t++; if ($3 == "x" || $3 == "-") d++ } END { printf "%s\037%s\037%d\037%d\037%s\037%s\037%s\037%s\n", c, n, d, t, dl, ok, b, b0 }' ;;
   items)
     # deliverable text comes straight from the item line (the rows above leave it out)
@@ -181,25 +248,50 @@ case $cmd in
   ok)
     # the owner's OK on an item: only central records it, and the PreToolUse hook makes the owner approve the command
     case ${CLAUDE_PROJECT_DIR:-} in */central|*/central/*) ;; *) echo "track.sh ok: only central records the owner's OK" >&2; exit 1 ;; esac
-    id=${3:-}; shift 3 2>/dev/null || { echo "usage: track.sh ok <project_dir> <item> <the owner's words>" >&2; exit 2; }
-    printf '%s\n' "$rows" | awk -F "$US" -v i="$id" '$1 == "I" && $4 == i && $9 == "ok" { f = 1 } END { exit !f }' ||
-      { echo "track.sh ok: $id is not an item of this track marked owner: ok" >&2; exit 1; }
+    id=${3:-}; shift 3 2>/dev/null || { echo "usage: track.sh ok <project_dir> <item|check|delivery> <the owner's words>" >&2; exit 2; }
+    case $id in
+      check) [ -n "$has_tc" ] && [ -n "$tgt" ] && [ -n "$chk" ] || { echo "track.sh ok: write target: and check: in TRACK.md first" >&2; exit 1; } ;;
+      delivery) [ -n "$runnable" ] || { echo "track.sh ok: the delivery OK runs the check, and TRACK.md has none to run" >&2; exit 1; } ;;
+      *) printf '%s\n' "$rows" | awk -F "$US" -v i="$id" '$1 == "I" && $4 == i && $9 == "ok" { f = 1 } END { exit !f }' ||
+           { echo "track.sh ok: $id is not an item of this track marked owner: ok" >&2; exit 1; } ;;
+    esac
     # a shared workspace: only the project's own member gives its OK
-    _r=$(cos_root "$dir"); _m=
-    if [ -n "$_r" ] && cos_shared "$_r"; then _m=$(cos_member "$_r")
-      [ -n "$_m" ] && [ "$(fm_get "$dir/STATE.md" member)" = "$_m" ] || { echo "track.sh ok: this project is $(fm_get "$dir/STATE.md" member)'s; only their central records its OK" >&2; exit 1; }
+    mine || { echo "track.sh ok: this project is $(fm_get "$dir/STATE.md" member)'s; only their central records its OK" >&2; exit 1; }
+    w=$(printf '%s' "$*" | tr -d '\000-\037' | cut -c1-300); x=
+    if [ "$id" = check ]; then x="${TB}freeze=$(tcsum)"; _fl=$(tcfiles)
+      echo "the owner approves the target '$tgt' and the command '$chk'${_fl:+, frozen with its files: $_fl}"
+    elif [ -n "$runnable" ] && { [ "$id" = delivery ] || [ "$(printf '%s\n' "$rows" | awk -F "$US" -v i="$id" '$1 == "I" && $4 == i { print $2 }')" -ge "$del" ]; }; then
+      # the delivery OK: the frozen check runs now, in front of the owner; a failing one needs the owner's waiver
+      fz=$(frozen)
+      [ -n "$fz" ] || { echo "track.sh ok: the owner never approved target and check: record track.sh ok <project> check first" >&2; exit 1; }
+      [ "${fz%%"$TB"*}" = "$(tcsum)" ] || { echo "track.sh ok: target or check changed since the owner approved them: approve the new ones first (track.sh ok <project> check)" >&2; exit 1; }
+      runcheck; printf '%s\t%s\t%s\n' "$(date '+%F %H:%M')" "$rc" "$val" >> "$dir/.check-runs"
+      if [ "$rc" = 0 ]; then x="${TB}check=$res${TB}freeze=${fz%%"$TB"*}"
+      else case $(printf '%s' "$w" | tr 'A-Z' 'a-z') in
+        'waive:'*|'waive '*) x="${TB}check=waived $res${TB}freeze=${fz%%"$TB"*}"; echo "WAIVED: the check fails ($res) and the owner accepted it" ;;
+        *) echo "track.sh ok: the check fails: $([ "$rc" = 1 ] && echo "$val" || echo "$res") (target: $tgt). The owner can still accept it: record 'waive: <the reason>'." >&2; exit 1 ;; esac
+      fi
     fi
     o="$dir/.owner-ok"; [ -f "$o" ] && chmod u+w "$o"
-    printf '%s\t%s\t%s%s\n' "$id" "$(date '+%F %H:%M')" "${_m:+$_m: }" "$(printf '%s' "$*" | tr -d '\000-\037' | cut -c1-300)" >> "$o"; chmod 444 "$o"
-    echo "recorded the owner's OK on $id" ;;
+    printf '%s\t%s\t%s%s%s\n' "$id" "$(date '+%F %H:%M')" "${_m:+$_m: }" "$w" "$x" >> "$o"; chmod 444 "$o"
+    echo "recorded the owner's OK on $id${x:+ (${x#"$TB"})}" ;;
+  verify)
+    [ -n "$runnable" ] || { echo "check: nothing to run (TRACK.md check: ${chk:-empty})"; exit 0; }
+    mine || { echo "verify: this project is $(fm_get "$dir/STATE.md" member)'s; only their own computer runs its check" >&2; exit 1; }
+    runcheck; printf '%s\t%s\t%s\n' "$(date '+%F %H:%M')" "$rc" "$val" >> "$dir/.check-runs"
+    echo "check: $res$([ "$rc" = 1 ] && echo " (target: $tgt)")"; [ "$rc" = 0 ] ;;
   baseline)
     # once: a second run would reset the yardstick that shows items removed or the delivery line moved
     [ -n "$(fm_get "$t" baseline)" ] && { echo "baseline is already recorded in TRACK.md; it is not rewritten" >&2; exit 1; }
     [ -e "$dir/.owner-items" ] && { echo ".owner-items is already recorded; it is not rewritten" >&2; exit 1; }
     fm_set "$t" baseline "$(printf '%s\n' "$rows" | grep -c "^I$US")"
     fm_set "$t" baseline_delivery "$del"
-    printf '%s\n' "$rows" | awk -F "$US" '$1 == "I" && $9 == "ok" { print $4 }' > "$dir/.owner-items"; chmod 444 "$dir/.owner-items" ;;
+    { printf '%s\n' "$rows" | awk -F "$US" '$1 == "I" && $9 == "ok" { print $4 }'; [ -n "$has_tc" ] && echo target:; } > "$dir/.owner-items"; chmod 444 "$dir/.owner-items" ;;
   brief)
+    if [ -n "$has_tc" ] && [ -n "$tgt" ]; then
+      l=$(tail -n 1 "$dir/.check-runs" 2>/dev/null | cut -f2,3 | tr '\t' ' ' | sed 's/^0 /pass /; s/^1 /fail /' | tr -d '\000-\037')
+      echo "Target: $tgt. Check: ${chk:-none}.${l:+ Last run: $l.} Run it with track.sh verify; the owner's delivery OK runs it too."
+    fi
     now=; wait=
     while IFS=$US read -r kind s m id card needs ev why own; do
       [ "$kind" = I ] && [ "$s" = "$cur" ] && [ "$m" = ' ' ] || continue
@@ -210,13 +302,14 @@ $rows
 EOF
     if [ -z "$undelivered" ]; then
       case $state in
-        delivered|done) echo "Delivered: the original request is done (DELIVERY.md, delivery line at stage $del). New work is a proposal on the project card unless the owner approved it." ;;
-        *) echo "Delivery line reached (stage $del): before anything else, write DELIVERY.md and set STATE.md status: delivered." ;;
+        delivered|done) if [ -n "$tcpending" ]; then echo "Not delivered yet: the delivery waits on the owner. Put the delivery OK on the project card; central runs the check (track.sh ok <project> delivery)."
+          else echo "Delivered: the original request is done (DELIVERY.md, delivery line at stage $del). New work is a proposal on the project card unless the owner approved it."; fi ;;
+        *) echo "Delivery line reached (stage $del): before anything else, write DELIVERY.md and set STATE.md status: delivered.${tcpending:+ Then put the delivery OK of the owner on the project card: central runs the check (track.sh ok <project> delivery).}" ;;
       esac
       [ "$cur" -le "$del" ] && exit 0
     fi
     if [ -z "$now" ]; then now="none, the stage can pass its gate"; [ -n "$wait" ] && now="nothing until the prerequisites below are closed"; fi
     printf 'Track %s, stage %s of %s (%s), delivery line at stage %s. Open now: %s.%s\n' "$(fm_get "$t" track)" "$cur" "$stages" "$sname" "$del" \
       "$now" "${wait:+ Waiting on prerequisites: $wait.}" ;;
-  *) echo "usage: track.sh check|brief|status|items|baseline <project_dir> | track.sh ok <project_dir> <item> <words>" >&2; exit 2 ;;
+  *) echo "usage: track.sh check|brief|status|items|baseline|verify <project_dir> | track.sh ok <project_dir> <item|check|delivery> <words>" >&2; exit 2 ;;
 esac

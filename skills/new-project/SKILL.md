@@ -41,7 +41,9 @@ the owner to pick, in the same round of buttons if possible.
    `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" baseline ../projects/<slug>` once, which records how
    many items the map had at opening, so the panel shows how much was added later. When the project
    has a deadline, write it in TRACK.md as `deadline: YYYY-MM-DD HH:MM` in local time: the panel
-   counts down, turns yellow under 6 hours and red under 2 hours while the delivery is open. If an item truly cannot apply, mark it
+   counts down, turns yellow under 6 hours and red under 2 hours while the delivery is open. When the
+   success answer already has a number, write it as `target:` in TRACK.md (stage 1 cannot pass without
+   target, check and the owner's approval of both). If an item truly cannot apply, mark it
    `[-]` with `why:` instead of deleting it, so the reviewer sees it.
    For a team project, from its folder: `CLAUDE_PROJECT_DIR=<absolute path of ../projects/<slug>> sh
    "${CLAUDE_PLUGIN_ROOT}/scripts/library.sh" use <team>` (the owner confirms; never write `.library` by hand).

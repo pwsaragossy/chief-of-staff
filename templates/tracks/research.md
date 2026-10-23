@@ -3,6 +3,8 @@ track: research
 stage: 1
 delivery: 4
 stale_hours: 48
+target:
+check:
 ---
 # Track: research
 For answering a question that a decision depends on. Pick it when the answer must be sourced, graded and triangulated, not just recalled.

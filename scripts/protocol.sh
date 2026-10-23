@@ -174,7 +174,7 @@ $p"; fi ;;
               # the owner's OK on a project step: the word ok after track.sh, or a subcommand from a variable
               # (and any script run with ok as its first argument: a renamed copy of track.sh)
               printf '%s\n' "$nq" | grep -Eq 'track\.sh(.*[^a-z0-9_.-]ok([^a-z0-9_.-]|$)|[^;&|]*[$`])|[^ ]\.sh +ok([^a-z0-9_.-]|$)' && {
-                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this records YOUR OK on a project step (scope freeze or submission). Only approve if you gave that OK."}}'; exit 0; }
+                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this records YOUR OK on a project step (scope freeze, submission, or the target and check, which approves and later runs the check command shown in its output). Only approve if you gave that OK."}}'; exit 0; }
               case $nq in *library.sh*off*|*offload*)
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this moves the whole library (and may push it to a git remote). Only approve if you asked for it."}}' ;;
               # any use, join or leave word after library.sh (a search for "use" asks too: rare, and safe)
@@ -312,7 +312,7 @@ LIBS
         printf '%s\n' "$kn"; } | sort -u | while IFS= read -r f; do
         lf=$(printf '%s' "$f" | tr 'A-Z' 'a-z')   # macOS reads .CLAUDE/ as .claude/
         case $lf in (.claude/*|*/.claude/*|.mcp.json|*/.mcp.json|.gitattributes|*/.gitattributes|.gitignore|*/.gitignore|.chief-of-staff) f="!$f" ;;
-          (*/.owner-ok|*/.owner-items) f= ;; esac   # the owner's OK is per computer: a teammate could forge it
+          (*/.owner-ok|*/.owner-items|*/.check-runs) f= ;; esac   # the owner's OK is per computer: a teammate could forge it
         case $f in ('') ;; (knowledge/*) printf '%s\n' "$kn" | grep -qxF "$f" && printf '%s\n' "$f" ;;
           # settings and hooks run code on each computer: a teammate never receives them (sync.sh refuses them too)
           (!*) printf '%s\n' "$f: settings, hooks and git rules stay on this computer in a shared workspace" ;;

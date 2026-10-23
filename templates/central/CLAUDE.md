@@ -15,6 +15,11 @@ owner, what stalled, what comes first. It does not do project work.
    A question that asks for the owner's OK on a track item (scope freeze, submission): when the owner
    says yes, record it with `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" ok <absolute project folder>
    <item> "<their words>"`; the owner approves that command too. Without it the track gate keeps the item open.
+   Target and check (end of stage 1): ask in plain words what is measured, the number and the command;
+   on yes, `track.sh ok <folder> check "<their words>"`. At the delivery: run `track.sh verify <folder>`
+   first and put its result in the question; on yes, `track.sh ok <folder> delivery "<their words>"`
+   (in a track with an owner item in the delivery stage, such as the hackathon's submit, that item's
+   OK runs the check instead). If the check fails and the owner accepts anyway, record "waive: <their reason>".
 4. In a shared workspace (`shared: yes` in `../.chief-of-staff`), ask only the cards the briefing
    lists as yours (`member:` is you or empty); the others wait on your teammates' own central.
 

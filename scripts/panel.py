@@ -128,8 +128,8 @@ def sync_color(text):
 def snapshot(root, libname="personal"):
     projects = []
     for line in sh("health.sh", root).splitlines():
-        f = (line.split(US) + [""] * 13)[:13]
-        slug, color, reason, stage, stages, closed, total, delivery, delivered, baseline, baseline_delivery, deadline, member = f
+        f = (line.split(US) + [""] * 16)[:16]
+        slug, color, reason, stage, stages, closed, total, delivery, delivered, baseline, baseline_delivery, deadline, member, target, check, runs = f
         pdir = os.path.join(root, "projects", slug)
         stage_names, items = [], []
         for row in sh("track.sh", "items", pdir).splitlines():
@@ -144,8 +144,9 @@ def snapshot(root, libname="personal"):
             "stage": stage, "stages": stages, "closed": closed, "total": total,
             "delivery": delivery, "delivered": delivered == "1", "baseline": baseline, "baseline_delivery": baseline_delivery,
             "deadline": int(deadline) if deadline.isdigit() else None, "member": member,
+            "target": target, "check": check, "runs": runs,
             "stage_names": stage_names, "items": items,
-            "brief": sh("track.sh", "brief", pdir).strip().split(" Waiting on prerequisites:")[0],
+            "brief": " ".join(l for l in sh("track.sh", "brief", pdir).splitlines() if not l.startswith("Target: ")).strip().split(" Waiting on prerequisites:")[0],
             "next": front_matter(os.path.join(pdir, "STATE.md")).get("next", ""),
         })
     libs = libraries(root)
@@ -314,6 +315,7 @@ function render(){
   if(!d.projects.length)empty(P,"No projects");else P.replaceChildren(...d.projects.map(p=>{
     const row=el("div","row"),body=el("div","grow");row.append(el("span","dot "+p.color),body);
     body.append(el("div","name",p.slug+(p.member?" · "+p.member:"")),el("div","",p.reason));
+    if(p.target)body.append(el("div","muted","Target: "+p.target+(/^none( |$)/.test(p.check)?" · no outside check"+p.check.slice(4):p.check?" · check: "+p.check:"")+(p.runs?" · agent runs: first "+p.runs.replace(" -> ",", now "):"")));
     if(p.deadline&&!p.delivered){const m=Math.round((p.deadline*1000-Date.now())/60000);
       body.append(el("div","muted",m<0?"Deadline passed "+ago(-m)+" ago":"Deadline in "+ago(m)))}
     if(p.total){const b=el("div","bar"),i=el("i");i.style.width=(100*p.closed/p.total)+"%";b.append(i);

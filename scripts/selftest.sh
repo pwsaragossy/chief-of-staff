@@ -600,6 +600,53 @@ check "a project session cannot record the owner OK" '! CLAUDE_PROJECT_DIR="$W/t
 check "the OK is only for items marked owner: ok" '! CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" review-1 yes 2>/dev/null'
 check "central records the owner OK and the item closes" 'CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" scope "yes, freeze it" >/dev/null && ! T check "$W/t3" | grep -q "owner.s OK" && [ ! -w "$W/t3/.owner-ok" ]'
 check "recording the owner OK asks the owner" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/track.sh ok $W/t3 scope yes\"}")" "$W/central" | grep -q "permissionDecision\":\"ask"'
+# target and check: a hard number and an outside judge that runs (v0.3)
+TC="$W/projects/tc"; mkdir -p "$TC"; C="$W/central"
+printf -- '---\nstatus: in-progress\n---\n# tc\n' > "$TC/STATE.md"; echo plan > "$TC/plan.md"; echo ok > "$TC/r1.md"
+printf 'v=$(cat *.out); echo "$v s"; [ "$v" -lt 2 ]\n' > "$TC/measure.sh"; echo 5 > "$TC/app.out"
+printf -- '---\nstage: 2\ndelivery: 2\ntarget:\ncheck:\n---\n## Stage 1: Plan\n- [x] plan | Plan | card: product | needs: - | evidence: plan.md\n- [x] review-1 | Review | card: reviewer | needs: plan | evidence: r1.md\n## Stage 2: Build\n- [ ] build | Build | card: engineer | needs: - | evidence:\n- [ ] review-2 | Review | card: reviewer | needs: build | evidence:\n' > "$TC/TRACK.md"
+check "tc: a project from before v0.3 (no target key) gets no new gate" 'mkdir -p "$W/tc0"; grep -v "^target:\|^check:" "$TC/TRACK.md" > "$W/tc0/TRACK.md"; cp "$TC/plan.md" "$TC/r1.md" "$W/tc0/"; ! T check "$W/tc0" | grep -qi "target\|check:"'
+check "tc: leaving stage 1 with an empty target is a gate problem" 'T check "$TC" | grep -q "target: is empty in TRACK.md"'
+fm_set "$TC/TRACK.md" target "under 2 s for the full run"
+check "tc: an empty check is a gate problem" 'T check "$TC" | grep -q "check: is empty in TRACK.md"'
+fm_set "$TC/TRACK.md" check "sh measure.sh"
+check "tc: a target and check the owner has not approved are a gate problem" 'T check "$TC" | grep -q "not approved by the owner yet"'
+check "tc: a project session cannot approve them" '! CLAUDE_PROJECT_DIR="$TC" T ok "$TC" check yes 2>/dev/null && [ ! -e "$TC/.owner-ok" ]'
+check "tc: central records the owner approval and the gate passes" 'CLAUDE_PROJECT_DIR="$C" T ok "$TC" check "yes, under 2 s" >/dev/null && ! T check "$TC" | grep -q "target\|approved"'
+check "tc: changing the target after approval reopens the question" 'fm_set "$TC/TRACK.md" target "under 9 s"; T check "$TC" | grep -q "changed since the owner approved"; r=$?; fm_set "$TC/TRACK.md" target "under 2 s for the full run"; [ $r = 0 ]'
+check "tc: changing a file the check runs after approval reopens it" 'cp "$TC/measure.sh" "$W/m.bak"; echo "exit 0" > "$TC/measure.sh"; T check "$TC" | grep -q "changed since the owner approved"; r=$?; cp "$W/m.bak" "$TC/measure.sh"; [ $r = 0 ] && ! T check "$TC" | grep -q "changed since"'
+check "tc: verify runs the check and shows the measured value" 'T verify "$TC" | grep -q "^check: fail 5 s (target: under 2 s for the full run)" && echo 1 > "$TC/app.out" && T verify "$TC" | grep -q "^check: pass 1 s"'
+check "tc: verify prints only its result, no shell job notices" 'o=$(T verify "$TC" 2>&1); [ "$(printf "%s\n" "$o" | wc -l | tr -d " ")" = 1 ]'
+check "tc: verify stops a check that runs too long" 'cp "$TC/TRACK.md" "$W/tt.bak"; fm_set "$TC/TRACK.md" check "sleep 9"; s=$(date +%s); o=$(COS_CHECK_TIMEOUT=1 T verify "$TC"); e=$(date +%s); cp "$W/tt.bak" "$TC/TRACK.md"; printf "%s" "$o" | grep -q "timed out after 1 s" && [ $((e - s)) -lt 5 ]'
+echo 5 > "$TC/app.out"; echo built > "$TC/build.md"; echo ok > "$TC/r2.md"
+sed -i.bak 's/^- \[ \] build | Build | card: engineer | needs: - | evidence:/- [x] build | Build | card: engineer | needs: - | evidence: build.md/; s/^- \[ \] review-2 | Review | card: reviewer | needs: build | evidence:/- [x] review-2 | Review | card: reviewer | needs: build | evidence: r2.md/' "$TC/TRACK.md"
+check "tc: closing the delivery without the owner delivery OK is a gate problem" 'T check "$TC" | grep -q "owner.s delivery OK with the check result is missing"'
+check "tc: the panel does not call it delivered while the owner.s delivery OK is missing" '[ "$(T status "$TC" | cut -d "$(printf "\037")" -f6)" = 0 ] && T brief "$TC" | grep -q "central runs the check"'
+check "tc: a STATE that says delivered is not called delivered before the delivery OK" 'fm_set "$TC/STATE.md" status delivered; o=$(T brief "$TC"); fm_set "$TC/STATE.md" status in-progress; printf "%s" "$o" | grep -q "Not delivered yet" && ! printf "%s" "$o" | grep -q "^Delivered:"'
+check "tc: the delivery OK runs the check and refuses a failing result" '! CLAUDE_PROJECT_DIR="$C" T ok "$TC" delivery "ship it" > "$W/tc.out" 2>&1 && grep -q "the check fails: 5 s (target: under 2 s for the full run)" "$W/tc.out" && ! grep -q "^delivery" "$TC/.owner-ok"'
+check "tc: the owner can waive a failing check, and the value is kept" 'CLAUDE_PROJECT_DIR="$C" T ok "$TC" delivery "waive: demo is in 10 min" >/dev/null && grep -q "^delivery.*check=waived fail 5 s" "$TC/.owner-ok" && ! T check "$TC" | grep -q "delivery OK"'
+check "tc: a passing check is recorded with its value on the delivery OK" 'echo 1 > "$TC/app.out"; CLAUDE_PROJECT_DIR="$C" T ok "$TC" delivery "ship it" >/dev/null && grep -q "^delivery.*check=pass 1 s" "$TC/.owner-ok"'
+# the reviewer's findings (v0.3 review): each of these was a way around the owner
+cp -R "$TC" "$W/tc3"; cp -R "$TC" "$W/tc4"; chmod u+w "$W/tc4/.owner-ok"; rm -f "$W/tc4/.owner-ok"
+check "tc: a weaker check approved later needs a fresh delivery OK" 'fm_set "$W/tc3/TRACK.md" check "true"; CLAUDE_PROJECT_DIR="$C" T ok "$W/tc3" check yes >/dev/null && T check "$W/tc3" | grep -q "delivery OK with the check result is missing" && [ "$(T status "$W/tc3" | cut -d "$(printf "\037")" -f6)" = 0 ]'
+check "tc: deleting target: after the owner approved it does not switch the gate off" 'sed -i.bak "/^target:/d" "$W/tc3/TRACK.md"; T check "$W/tc3" | grep -q "target: is empty" && [ "$(T status "$W/tc3" | cut -d "$(printf "\037")" -f6)" = 0 ]'
+check "tc: deleting target: before the owner saw it does not switch the gate off" 'T baseline "$W/tc4" && sed -i.bak "/^target:/d; /^check:/d" "$W/tc4/TRACK.md" && T check "$W/tc4" | grep -q "target: is empty" && [ "$(T status "$W/tc4" | cut -d "$(printf "\037")" -f6)" = 0 ] && ! T check "$W/tc4" | grep -q "needed the owner"'
+mkdir -p "$W/tc5"; cp "$TC/TRACK.md" "$TC/STATE.md" "$TC/plan.md" "$TC/r1.md" "$TC/build.md" "$TC/r2.md" "$W/tc5/"
+printf 'sh helper.sh\n' > "$W/tc5/m2.sh"; printf 'echo "5 s"; exit 1\n' > "$W/tc5/helper.sh"; fm_set "$W/tc5/TRACK.md" check "sh m2.sh"
+check "tc: changing a file the check reaches through another file reopens the approval" 'CLAUDE_PROJECT_DIR="$C" T ok "$W/tc5" check yes >/dev/null && printf "echo 1 s; exit 0\n" > "$W/tc5/helper.sh" && T check "$W/tc5" | grep -q "changed since the owner approved"'
+printf 'echo "5 s"; exit 1\n' > "$W/tc5/helper.sh"
+check "tc: a waiver needs the word waive, not a word that starts with it" '! CLAUDE_PROJECT_DIR="$C" T ok "$W/tc5" delivery "Waiver? No. Do not ship." 2>/dev/null && ! grep -q "^delivery" "$W/tc5/.owner-ok"'
+check "tc: check none with a comma is not run as a command" 'cp "$W/tc5/TRACK.md" "$W/tn.bak"; fm_set "$W/tc5/TRACK.md" check "none, judged by people"; o=$(T verify "$W/tc5"); cp "$W/tn.bak" "$W/tc5/TRACK.md"; printf "%s" "$o" | grep -q "nothing to run"'
+check "tc: a check that exits 124 by itself is not called a timeout" 'cp "$W/tc5/TRACK.md" "$W/tn.bak"; fm_set "$W/tc5/TRACK.md" check "exit 124"; o=$(T verify "$W/tc5"); cp "$W/tn.bak" "$W/tc5/TRACK.md"; printf "%s" "$o" | grep -q "could not run (exit 124)"'
+check "tc: the timeout leaves no process behind" 'cp "$W/tc5/TRACK.md" "$W/tn.bak"; fm_set "$W/tc5/TRACK.md" check "sleep 37 | cat"; COS_CHECK_TIMEOUT=1 T verify "$W/tc5" >/dev/null 2>&1; cp "$W/tn.bak" "$W/tc5/TRACK.md"; fm_set "$W/tc5/TRACK.md" check "true"; COS_CHECK_TIMEOUT=41 T verify "$W/tc5" >/dev/null 2>&1; cp "$W/tn.bak" "$W/tc5/TRACK.md"; sleep 1; ! pgrep -f "sleep 37" >/dev/null && ! pgrep -f "sleep 41" >/dev/null'
+check "tc: the owner sees the exact command and the frozen files when approving" 'cp "$W/tc5/TRACK.md" "$W/tn.bak"; CLAUDE_PROJECT_DIR="$C" T ok "$W/tc5" check yes | grep -q "sh m2.sh.*helper.sh"'
+sed -i.bak 's/^- \[x\] review-2 /- [ ] review-2 /' "$TC/TRACK.md"
+check "tc: a failing last run is yellow with its value" 'echo 5 > "$TC/app.out"; T verify "$TC" >/dev/null; fm_set "$TC/STATE.md" status in-progress; H tc | grep -q "check fails: 5 s (target: under 2 s for the full run)"'
+check "tc: a target met on the very first run is flagged as not hard" 'rm -f "$TC/.check-runs"; echo 1 > "$TC/app.out"; T verify "$TC" >/dev/null; echo 5 > "$TC/app.out"; T verify "$TC" >/dev/null; echo 1 > "$TC/app.out"; T verify "$TC" >/dev/null; H tc | grep -q "target met on the first run"'
+check "tc: check none with a reason needs no delivery OK" 'mkdir -p "$W/tc2"; sed "s/^check: .*/check: none (a pitch: judged by people)/" "$TC/TRACK.md" > "$W/tc2/TRACK.md"; cp "$TC/plan.md" "$TC/r1.md" "$TC/build.md" "$TC/r2.md" "$W/tc2/"; CLAUDE_PROJECT_DIR="$C" T ok "$W/tc2" check yes >/dev/null && ! T check "$W/tc2" | grep -q "check\|approved"'
+check "tc: every track template carries target and check" 'for f in "$here"/../templates/tracks/*.md; do grep -q "^target:" "$f" && grep -q "^check:" "$f" || echo "$f"; done > "$W/tc.miss"; [ ! -s "$W/tc.miss" ]'
+check "tc: the brief shows the target and the last result" 'T brief "$TC" | grep -q "Target: under 2 s for the full run"'
+rm -rf "$TC" "$W/tc0" "$W/tc2" "$W/tc3" "$W/tc4" "$W/tc5"
 check "checking the track of a project named booking does not ask" '[ -z "$(h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/track.sh check $W/projects/booking\"}")" "$P")" ]'
 check "agents cannot write the owner OK file" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/t3/.owner-ok\"}")" "$P")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"chmod u+w $W/t3/.owner-ok\"}")" "$P")" = 2 ]'
 check "the hackathon track asks the owner at scope and submit only" '[ "$(grep -c "| owner: ok |" "$here/../templates/tracks/hackathon.md")" = 2 ] && grep -q "^- \[ \] scope .*owner: ok" "$here/../templates/tracks/hackathon.md" && grep -q "^- \[ \] submit .*owner: ok" "$here/../templates/tracks/hackathon.md"'
@@ -731,6 +778,9 @@ check "the hook reopens neither a done card nor a teammate.s card" 'hk "$(ev Use
 rm -f "$SW/a/board/Old.md" "$SW/a/board/Bias.md"
 check "central cannot record the OK on a teammate.s project" 'cp "$here/../templates/tracks/hackathon.md" "$SW/b/projects/pa/TRACK.md"; CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/track.sh" ok "$SW/b/projects/pa" scope yes 2>&1 | grep -q "only their central records its OK" && [ ! -e "$SW/b/projects/pa/.owner-ok" ]'
 git -C "$SW/b" checkout -q -- projects/pa/TRACK.md 2>/dev/null; rm -f "$SW/b/projects/pa/TRACK.md.tmp."*
+printf -- '---\nstage: 2\ntarget: under 1 s\ncheck: sh x.sh\n---\n' > "$SW/b/projects/pa/TRACK.v3"; cp "$SW/b/projects/pa/TRACK.v3" "$SW/b/projects/pa/TRACK.md" 2>/dev/null
+check "tc: verify never runs a teammate.s check on this computer" 'echo "touch pwned" > "$SW/b/projects/pa/x.sh"; T verify "$SW/b/projects/pa" 2>&1 | grep -q "only their own computer runs its check" && [ ! -e "$SW/b/projects/pa/pwned" ]'
+rm -f "$SW/b/projects/pa/x.sh" "$SW/b/projects/pa/TRACK.v3"; git -C "$SW/b" checkout -q -- projects/pa/TRACK.md 2>/dev/null || rm -f "$SW/b/projects/pa/TRACK.md"
 check "a renamed copy of track.sh run with ok still asks the owner" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh /tmp/x.sh ok $W/t3 scope yes\"}")" "$W/central" | grep -q "permissionDecision\":\"ask"'
 mkdir -p "$SW/a/.Claude"; printf '{"hooks":{}}\n' > "$SW/a/.Claude/settings.json"
 check "settings and hooks never go to the team, in any letter case" 'turn "$SW/a/central" >/dev/null; grep -q ".Claude/settings.json: settings, hooks and git rules stay on this computer" "$SW/a/.git/cos-held" && sleep 1 && ! inteam .Claude/settings.json'

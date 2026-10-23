@@ -1,7 +1,7 @@
 # chief-of-staff
 
 An AI chief of staff for [Claude Code](https://code.claude.com): a small company of agents that
-works for one owner, or for a team. Version 0.2.
+works for one owner, or for a team. Version 0.3.
 
 What it gives you:
 
@@ -53,6 +53,19 @@ What it gives you:
   its age shown. The panel and the briefing show the questions themselves. Items marked `owner: ok`
   (the hackathon's scope freeze and submission) close only with the owner's OK, which central records
   with `track.sh ok` and the owner approves.
+- **A hard target and a judge that is not the model.** Every track carries `target:` (a number, taken
+  from the criteria, the metric or the raw material) and `check:` (a command that measures it: exit 0
+  when met, the value on its last line; or `none (why)`). A project cannot leave stage 1 until both are
+  written and the owner approved them; the approval freezes the target, the command, the files the
+  command names and the files those name in turn, so a later change goes back to the owner. A pass
+  counts only for the check the owner approved last. `track.sh verify` runs the check any time.
+  The owner's delivery OK runs it again in front of the owner: a pass is recorded with its value, a
+  fail needs the owner's waiver, recorded with the failing value. The panel shows the target and the
+  first and latest values; a failing check, or a target already met on the first run, is yellow.
+  Why: models grade their own work; a measured number does not. In our test the same model got the
+  same task as a plain prompt and as a prompt with a target and a check: 11.1 s and a failing check
+  without them, 1.43 s and a passing one with them (target under 3 s). That measured the prompt, the
+  idea this feature builds into every track.
 - **A routing table** (`ROUTING.md`) so nobody has to remember whom to call.
 - **A local panel**: green, yellow or red per project with the reason, a live map of each track
   (stages, deliverables by state, prerequisites, the delivery line, items added since opening), decisions
@@ -113,7 +126,7 @@ request without the token. Colors come from `scripts/health.sh`, which also work
   past `owner_wait_minutes`, or the deadline less than 2 hours away (or past) with the delivery open;
 - **yellow**: a decision waiting on the owner, a card past its `due:` date, the deadline less than
   6 hours away, no handoff for longer than the track's `stale_hours` (3 h for a hackathon, 48 h
-  otherwise), or paused;
+  otherwise), paused, the last check run failed, or the target was met on the very first run;
 - **green**: none of these.
 
 Files or links dropped in the import box land in the library's `inbox/` (the panel warns when one
@@ -249,6 +262,15 @@ What is ours, with no equivalent found in ECC:
   is a word list, not a shell interpreter: it knows common globs (`.o*`, `*-items`), but an agent that
   builds the file name in a shell variable, or with a glob or shell option it does not know, is not
   seen. Then the reviewer and the owner's own read of `.owner-ok` are the last line.
+- Target and check: the check runs a shell command written in TRACK.md, so only a session or central
+  on your computer runs it (never a hook), and never for a teammate's project in a shared workspace.
+  The check is only as hard as its inputs. The freeze covers the files the command names and the files
+  those name, not what the check reaches without naming it: a test suite run by `npm test` or `pytest`,
+  or data the agent writes. Prefer a check that measures the product from outside (its command, its
+  URL, a fixed input), and read the frozen file list `track.sh ok <p> check` prints. A timing check can
+  be flaky on a busy laptop; the owner's waiver (`waive: <reason>`) exists for that.
+  `.check-runs` (the history the panel shows, run by the agent) is not protected: the approval and the delivery result
+  live in `.owner-ok`, like the other owner OKs.
 - Times: write `deadline:` with its offset (`2026-10-25 18:00 -0300`) when teammates are in other
   time zones; question times are stamped with the offset already. In a shared workspace, files over
   20 MB, nested git repositories, settings (`.claude/`, `.mcp.json`, `.gitignore`, `.gitattributes`)

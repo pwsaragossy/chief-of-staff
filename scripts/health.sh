@@ -2,6 +2,7 @@
 # Health of each project, the one source for the panel and the briefing.
 #   health.sh [dir]        one line per project, fields split by \037:
 #     slug color reason stage stages closed total delivery delivered baseline baseline_delivery deadline member
+#     target check runs   (runs: "first value -> last value" from .check-runs)
 #     (deadline: seconds since 1970, empty when TRACK.md sets none)
 #   health.sh cards [dir]  one line per board card, fields split by \037:
 #     C name project status member color waited limit due due_left questions   (questions split by \036;
@@ -10,7 +11,8 @@
 #          a question waiting on the owner longer than owner_wait_minutes (TRACK.md, default 60),
 #          the deadline (TRACK.md) less than 2 h away or past with the delivery open
 # yellow = a card waiting on the owner, a card past its due date, the deadline less than 6 h away,
-#          STATE.md unchanged for longer than stale_hours, status paused
+#          STATE.md unchanged for longer than stale_hours, status paused, the last check run failed,
+#          the target met on the very first run (not a hard target)
 # green  = none of the above
 . "$(dirname "$0")/lib.sh"
 
@@ -81,6 +83,13 @@ for s in "$root"/projects/*/STATE.md; do
       elif [ "$left" -lt 360 ]; then yellow "deadline in $(cos_ago "$left")"; fi
     fi
   fi
+  tg=$(fm_get "$d/TRACK.md" target | clean); ck=$(fm_get "$d/TRACK.md" check | clean); runs=
+  if [ -s "$d/.check-runs" ]; then   # rc 0 met, 1 not met; other codes (timeout, error) are not a measurement
+    fr=$(awk -F '\t' '$2 == 0 || $2 == 1 { print $2 "\t" $3; exit }' "$d/.check-runs"); lr=$(tail -n 1 "$d/.check-runs" | cut -f2,3)
+    lv=$(printf '%s' "$lr" | cut -f2 | clean); [ -n "$fr" ] && runs="$(printf '%s' "$fr" | cut -f2 | clean) -> $lv"
+    [ "${lr%%	*}" = 1 ] && yellow "check fails: $lv (target: $tg)"
+    [ "${fr%%	*}" = 0 ] && yellow "target met on the first run: not a hard target, raise it with the owner"
+  fi
   while IFS=$US read -r k cn cp cs cm cc cw cl cd cdl cq; do
     [ "$k" = C ] && [ "$cp" = "$p" ] || continue
     if [ "$cs" = waiting-owner ]; then
@@ -98,5 +107,5 @@ EOC
   [ "$status" = paused ] && yellow "paused"
   if [ -n "$quiet" ]; then on="delivered: the original request is done"; else on="on track"; fi
   [ -n "$color" ] || { color=green; reason=$on; }
-  printf '%s\037%s\037%s\037%s\037%s\037%s\n' "$p" "$color" "$(printf '%s' "$reason" | clean)" "$st" "$dle" "$(fm_get "$s" member | clean)"
+  printf '%s\037%s\037%s\037%s\037%s\037%s\n' "$p" "$color" "$(printf '%s' "$reason" | clean)" "$st" "$dle" "$(fm_get "$s" member | clean)$US$tg$US$ck$US$runs"
 done

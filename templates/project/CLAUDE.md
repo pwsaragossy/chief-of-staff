@@ -29,6 +29,13 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
 - **Close track items with proof.** An item is `[x]` only with `evidence:` pointing to a file in this
   folder (the deliverable or the reviewer's verdict); `[-]` needs `why:`. Move `stage:` forward only
   when the stage's items are closed; the hook checks this at the end of every turn.
+- **A hard target, measured.** In stage 1 write `target:` (a number from the criteria, the metric or
+  the raw material, hard enough that it is not met today) and `check:` (a command run in this folder:
+  exit 0 when the target is met, the measured value on its last line; or `none (why)`) in TRACK.md, and
+  put both on the project card for the owner's approval. Run `track.sh verify` while you work; never
+  edit the check or the files it runs to make it pass: that reopens the owner's approval. Keep the
+  measuring files apart from the work: every file the check names, and every file those name, is
+  frozen, so reach the product through its own command, URL or output, not by naming its sources.
 - **The delivery line is the planned end.** `delivery:` in TRACK.md is the stage that delivers what
   the owner asked for. Add any item that makes the work complete; when every item up to the
   delivery line is closed, write `DELIVERY.md` (what was asked, what was delivered, the proof files)

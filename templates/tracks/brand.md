@@ -3,6 +3,8 @@ track: brand
 stage: 1
 delivery: 4
 stale_hours: 48
+target:
+check:
 ---
 # Track: brand
 For creating a brand from design to logo to visual identity, strategy first. Pick it when a new product, company or project needs a name, a mark and rules for using them.
