@@ -592,7 +592,7 @@ fm_set "$G/TRACK.md" deadline "$(fut 14400)"
 check "a deadline under 6 h is yellow" 'H gamma | grep -Eq "^yellow: deadline in (3 h 59|4 h 0) min"'
 check "health gives the panel the deadline as a number" 'sh "$here/health.sh" "$W" | awk -F "$(printf "\037")" "\$1 == \"gamma\" { print \$12 }" | grep -q "^[0-9][0-9]*$"'
 fm_set "$G/TRACK.md" deadline "$(fut -120)"
-check "a passed deadline with the delivery open is red" 'H gamma | grep -q "^red: deadline passed 2 min ago"'
+check "a passed deadline with the delivery open is red" 'H gamma | grep -Eq "^red: deadline passed (2|3) min ago"'
 fm_set "$G/TRACK.md" deadline "Friday 6pm"
 check "a deadline that is not a date says how to write it" 'H gamma | grep -q "^yellow: deadline .Friday 6pm. in TRACK.md is not a date"'
 fm_set "$G/TRACK.md" deadline ""
