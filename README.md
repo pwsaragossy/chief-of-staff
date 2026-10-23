@@ -244,13 +244,15 @@ What is ours, with no equivalent found in ECC:
   card) is undone and becomes a card; it is not merged automatically.
 - The owner's OK (`.owner-ok`) is protected like the library settings: written only through
   `track.sh ok`, which asks the owner (in a run with nobody watching, the ask is refused), an item that
-  needs it cannot be marked not applicable, and removing its mark after opening is caught. An agent
+  needs it cannot be marked not applicable, and removing its mark or its line after opening is caught
+  (the list of those items is written once at opening, read-only, in `.owner-items`). An agent
   that builds the file name inside a shell variable is not seen by the hooks; the reviewer and the
   owner's own read of `.owner-ok` are the last line.
 - Times: write `deadline:` with its offset (`2026-10-25 18:00 -0300`) when teammates are in other
   time zones; question times are stamped with the offset already. In a shared workspace, files over
   20 MB, nested git repositories, settings (`.claude/`, `.mcp.json`, `.gitignore`, `.gitattributes`)
-  and files that look like they hold a key stay on the computer, and the turn says which; a change to
+  and files that look like they hold a key stay on the computer: a key stops the turn until it is
+  moved to `.env`, the rest is listed in the next briefing; a change to
   settings coming from the team is refused at pull. A file name with a line break stops the push
   until it is renamed.
 - An offloaded library: no automatic sync; Windows paths are not supported; in iCloud, keep the

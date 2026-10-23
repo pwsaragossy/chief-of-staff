@@ -100,9 +100,10 @@ check() {
       for (i = 1; i <= n; i++) if (!dn[i]) l = l (l ? ", " : "") id[i]
       if (l != "") print "these items wait on each other in a loop, so none can close: " l }'
   # an item that needed the owner's OK at opening still needs it: removing the mark does not skip the owner
-  for b in $(fm_get "$t" baseline_owner | tr ',' ' '); do
-    printf '%s\n' "$rows" | awk -F "$US" -v i="$b" '$1 == "I" && $4 == i && $9 != "ok" { f = 1 } END { exit !f }' &&
-      echo "$b needed the owner's OK when the project opened (baseline_owner): put back | owner: ok on its line"
+  # (.owner-items, read-only and written once by baseline: TRACK.md itself is the agent's to edit)
+  for b in $(cat "$dir/.owner-items" 2>/dev/null); do
+    printf '%s\n' "$rows" | awk -F "$US" -v i="$b" '$1 == "I" && $4 == i && $9 == "ok" { f = 1 } END { exit !f }' ||
+      echo "$b needed the owner's OK when the project opened (.owner-items): put back its line with | owner: ok"
   done
   # the delivery line: the planned end of the original request
   case $rawdel in ''|[1-9]|[1-9][0-9]) [ "$del" -le "$stages" ] || echo "delivery: $del in TRACK.md, but the track has $stages stages" ;;
@@ -193,7 +194,7 @@ case $cmd in
     [ -n "$(fm_get "$t" baseline)" ] && { echo "baseline is already recorded in TRACK.md; it is not rewritten" >&2; exit 1; }
     fm_set "$t" baseline "$(printf '%s\n' "$rows" | grep -c "^I$US")"
     fm_set "$t" baseline_delivery "$del"
-    fm_set "$t" baseline_owner "$(printf '%s\n' "$rows" | awk -F "$US" '$1 == "I" && $9 == "ok" { printf "%s%s", c, $4; c = "," }')" ;;
+    printf '%s\n' "$rows" | awk -F "$US" '$1 == "I" && $9 == "ok" { print $4 }' > "$dir/.owner-items"; chmod 444 "$dir/.owner-items" ;;
   brief)
     now=; wait=
     while IFS=$US read -r kind s m id card needs ev why own; do

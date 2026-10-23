@@ -158,7 +158,7 @@ $p"; fi ;;
             uq=$(printf '%s' "$cq" | tr -d "\"'\\\\")
             # the names, or a glob that could spell them (.[c]hief, .l*, .ch?ef, ?library), next to a write.
             # ponytail: a name built in a variable (a=.chi; ...${a}ef) is not seen; the files are read-only on disk
-            sus=; case $uq in *.chief*|*.library*|*cos-foreign*|*cos-cfg*|*owner-ok*) sus=1 ;; esac   # not "chief-of-staff": the plugin's own folder has that name
+            sus=; case $uq in *.chief*|*.library*|*cos-foreign*|*cos-cfg*|*owner-ok*|*owner-items*) sus=1 ;; esac   # not "chief-of-staff": the plugin's own folder has that name
             printf '%s\n' "$uq" | grep -Eq '\.[][?*]|(^|[^a-z0-9_.-])\.(c(h(i(e(f)?)?)?)?|l(i(b(r(a(r(y)?)?)?)?)?)?)([^a-z0-9_-]|$)|[][?*](l?ibrary|c?hief)|(^|[^$])\{[^}]*,[^}]*\}' && sus=1   # also {.,x}library
             case $cq in *"\$'"*) sus=1 ;; esac   # $'\056library' (quotes are gone from uq)
             # whole words only: a folder named "firmware" or a random temp name is not rm
@@ -193,7 +193,7 @@ $p"; fi ;;
              if [ -n "$o" ] && [ "$o" != "$lname" ]; then
                echo "Blocked by chief-of-staff: $fp is in the library '$o', and this session works in '$lname'. A session writes only its own library, so nothing personal or from another team leaks into a shared one. Write the note in $lib/notes/." >&2; exit 2
              fi
-             case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.library|*/.chief-of-staff/*|*/.owner-ok) ;; *) exit 0 ;; esac ;;
+             case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.library|*/.chief-of-staff/*|*/.owner-ok|*/.owner-items) ;; *) exit 0 ;; esac ;;
         esac
         echo "Blocked by chief-of-staff: .chief-of-staff (where the libraries live), .library-id, a project's .library (which library it shares with) and .owner-ok (the owner's OKs) are changed only through library.sh offload, join, leave or use and track.sh ok, which the owner confirms." >&2
         exit 2 ;;
@@ -212,13 +212,14 @@ $p"; fi ;;
     # card wait on the owner, even when the agent forgot the status: central moves answered lines to "## Decided"
     for c in "$root"/board/*.md; do
       [ -f "$c" ] || continue; a=$(fm_get "$c" asked)
-      [ -n "$project" ] && [ -f "$st/start" ] && [ "$(fm_get "$c" project)" = "$project" ] && [ -n "$(find "$c" -cnewer "$st/start" 2>/dev/null)" ] &&
-        [ -n "$(cos_questions "$c")" ] && [ "$(fm_get "$c" status)" != waiting-owner ] && fm_set "$c" status waiting-owner
       if [ -n "$shared" ]; then   # a shared board: each card is stamped by its own member's computer only
         cm=$(fm_get "$c" member); me=$(cos_member "$root")
-        [ -z "$cm" ] && [ -n "$me" ] && [ -n "$project" ] && [ "$(fm_get "$c" project)" = "$project" ] && { cm=$me; fm_set "$c" member "$me"; }
+        # a card without a member gets this person's, from central or from the session of its own project
+        [ -z "$cm" ] && [ -n "$me" ] && { [ -z "$project" ] || [ "$(fm_get "$c" project)" = "$project" ]; } && { cm=$me; fm_set "$c" member "$me"; }
         [ -n "$cm" ] && [ "$cm" != "$me" ] && continue
       fi
+      [ -n "$project" ] && [ -f "$st/start" ] && [ "$(fm_get "$c" project)" = "$project" ] && [ -n "$(find "$c" -cnewer "$st/start" 2>/dev/null)" ] &&
+        [ -n "$(cos_questions "$c")" ] && case $(fm_get "$c" status) in ''|in-progress) true ;; *) false ;; esac && fm_set "$c" status waiting-owner
       if [ "$(fm_get "$c" status)" = waiting-owner ]; then [ -n "$a" ] || fm_set "$c" asked "$(date '+%F %H:%M %z')"
       elif [ -n "$a" ]; then fm_set "$c" asked ""; fi
     done
@@ -309,9 +310,11 @@ LIBS
       list=$( { git -C "$root" status --porcelain -z -uall --no-renames 2>/dev/null | tr '\0' '\n' | cut -c4-
         git -C "$root" rev-parse -q --verify '@{u}' >/dev/null && git -C "$root" diff -z --name-only --no-renames '@{u}...HEAD' | tr '\0' '\n'
         printf '%s\n' "$kn"; } | sort -u | while IFS= read -r f; do
+        lf=$(printf '%s' "$f" | tr 'A-Z' 'a-z')   # macOS reads .CLAUDE/ as .claude/
+        case $lf in (.claude/*|*/.claude/*|.mcp.json|*/.mcp.json|.gitattributes|*/.gitattributes|.gitignore|*/.gitignore|.chief-of-staff) f="!$f" ;; esac
         case $f in ('') ;; (knowledge/*) printf '%s\n' "$kn" | grep -qxF "$f" && printf '%s\n' "$f" ;;
           # settings and hooks run code on each computer: a teammate never receives them (sync.sh refuses them too)
-          (.claude/*|*/.claude/*|.mcp.json|*/.mcp.json|.gitattributes|*/.gitattributes|.gitignore|*/.gitignore|.chief-of-staff) printf '!%s\n' "$f: settings, hooks and git rules stay on this computer in a shared workspace" ;;
+          (!*) printf '%s\n' "$f: settings, hooks and git rules stay on this computer in a shared workspace" ;;
           (*) if [ -d "$root/${f%/}/.git" ] || [ -f "$root/${f%/}/.git" ]; then
                printf '!%s\n' "$f is a git repository of its own, so it stays out of the shared workspace: push it to its own remote and link it from the project"
              elif [ -n "$(find "$root/$f" -prune -type f -size +20000k 2>/dev/null)" ]; then
@@ -320,7 +323,9 @@ LIBS
                printf '!%s\n' "$f looks like it holds a key or token, so it stays on this computer: move the secret to a .env file (never shared) and keep only its name in $f"
              else printf '%s\n' "$f"; fi ;;
         esac; done)
-      wg=$(printf '%s\n' "$list" | sed -n 's/^!//p'); [ -n "$wg" ] && reason="${reason:+$reason }Not sent to the team:
+      # a key blocks the turn (the agent must move it); the rest is a notice the next briefing shows
+      printf '%s\n' "$list" | sed -n 's/^!//p' | grep -v 'looks like it holds a key' > "$root/.git/cos-held" 2>/dev/null
+      wg=$(printf '%s\n' "$list" | sed -n 's/^!//p' | grep 'looks like it holds a key'); [ -n "$wg" ] && reason="${reason:+$reason }Not sent to the team:
 $wg"
       fl=$(printf '%s\n' "$list" | grep -v '^!' | grep . | tr '\n' "$TAB")
       ( IFS=$TAB; set -f; set -- $fl

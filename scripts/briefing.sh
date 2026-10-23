@@ -43,6 +43,7 @@ done
 cos_shared "$root" && sh "$here/sync.sh" pull "$root" </dev/null >/dev/null 2>&1 &
 syncline() {
   cos_shared "$root" && out "Shared workspace: last sync $(head -n 1 "$root/.git/cos-sync" 2>/dev/null | tr -d '\000-\037' | cut -c1-120 | grep . || echo never)."
+  [ -s "$root/.git/cos-held" ] && { out "Kept on this computer at the last turn end (not sent to the team):"; head -n 5 "$root/.git/cos-held" | tr -d '\000-\011\013-\037' | cut -c1-200 | sed 's/^/- /'; }
   printf '%s\n' "$teams" | while IFS="$TAB" read -r n q; do
   [ -n "$n" ] || continue; sy=$(head -n 1 "$q/.git/cos-sync" 2>/dev/null | tr -d '\000-\037' | cut -c1-120)
   out "Team library '$n': last sync ${sy:-never}."; done; }

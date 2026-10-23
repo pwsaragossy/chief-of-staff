@@ -25,7 +25,11 @@ echo $$ > "$lk/pid"; trap 'rm -f "$lk/pid"; rmdir "$lk"' EXIT
 first() { printf '%s' "$1" | tr -d '\000-\037' | cut -c1-160; }
 g() { git -C "$q" -c core.symlinks=false "$@"; }   # a symlink a teammate pushed stays a plain file
 # settings, hooks and git rules run code on this computer: a change to them from the remote is never taken
-incoming_bad() { g diff -z --name-only HEAD...'@{u}' 2>/dev/null | tr '\0' '\n' | grep -E '(^|/)(\.claude/|\.mcp\.json$|\.gitattributes$|\.gitignore$|\.chief-of-staff$)' | head -n 3 | tr '\n' ' '; }
+# (letter case ignored: macOS reads .CLAUDE/ as .claude/; a remote whose changes cannot be listed is refused too)
+incoming_bad() {
+  _d=$(g diff -z --name-only HEAD...'@{u}' 2>/dev/null | tr '\0' '\n') || { echo "changes that cannot be listed"; return; }
+  printf '%s\n' "$_d" | grep -Ei '(^|/)(\.claude/|\.mcp\.json$|\.gitattributes$|\.gitignore$|\.chief-of-staff$)' | head -n 3 | tr '\n' ' '
+}
 refused() { say "pull refused: the remote changes settings that run code here ($1); ask the teammate to remove that change"; }
 
 case $cmd in
