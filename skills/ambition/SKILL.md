@@ -56,3 +56,5 @@ Based on Felix Rieseberg, "How to be more ambitious" (altitude, depth, range, an
 - **Specialists**: the brief carries `Ambition: <goal behind the goal> | judge: <outside judge>`
   (the hooks block a specialist brief without it and a specialist output without `## Versions`).
   The hooks check that the lines exist; the reviewer checks that each verdict came from the judge.
+  The one who briefs sets the judge, not the one who does the work: a worker left to pick its own
+  judge picks one its first draft already passes.

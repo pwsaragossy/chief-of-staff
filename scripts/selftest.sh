@@ -147,7 +147,7 @@ check "a specialist with its checklist and versions finishes" '[ "$(rc "$(ev Sub
 check "ambition: a specialist cannot finish without its versions" 'h "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Never-skip checklist ok\"")" "$P" 2>&1 | grep -q "## Versions" && [ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Never-skip checklist ok\"")" "$P")" = 2 ]'
 check "ambition: the reviewer finishes without versions (it judges, it does not draft)" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: reviewer ## Never-skip checklist ok\"")" "$P")" = 0 ]'
 check "ambition: a placeholder Ambition: line is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher Library: [[tax-2]] Ambition: x | judge: y\"}")" "$P")" = 2 ]'
-check "ambition: the skill makes the judge measure the goal behind the goal, and keeps the owner.s target" 'f="$here/../skills/ambition/SKILL.md"; grep -q "first try" "$f" && grep -q "never raise or lower" "$f" && grep -q "deadline" "$f" && ! grep -qi "gets one version" "$f"'
+check "ambition: the skill makes the judge measure the goal behind the goal, and keeps the owner.s target" 'f="$here/../skills/ambition/SKILL.md"; grep -q "first try" "$f" && grep -q "briefs sets the judge" "$f" && grep -q "never raise or lower" "$f" && grep -q "deadline" "$f" && ! grep -qi "gets one version" "$f"'
 check "a helper without a role finishes" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"found 3 files\"")" "$P")" = 0 ]'
 
 # library: the save gate, the turn-end gate, search, retire/merge/coexist, offline, speed
