@@ -27,8 +27,9 @@ g() { git -C "$q" -c core.symlinks=false "$@"; }   # a symlink a teammate pushed
 # settings, hooks and git rules run code on this computer: a change to them from the remote is never taken
 # (letter case ignored: macOS reads .CLAUDE/ as .claude/; a remote whose changes cannot be listed is refused too)
 incoming_bad() {
-  _d=$(g diff -z --name-only HEAD...'@{u}' 2>/dev/null | tr '\0' '\n') || { echo "changes that cannot be listed"; return; }
-  printf '%s\n' "$_d" | grep -Ei '(^|/)(\.claude/|\.mcp\.json$|\.gitattributes$|\.gitignore$|\.chief-of-staff$)' | head -n 3 | tr '\n' ' '
+  # fail closed: with no common history git cannot list what changed, and an empty list would pass
+  g merge-base HEAD '@{u}' >/dev/null 2>&1 || { echo "changes that cannot be listed"; return; }
+  g diff -z --name-only HEAD...'@{u}' 2>/dev/null | tr '\0' '\n' | grep -Ei '(^|/)(\.claude/|\.mcp\.json$|\.gitattributes$|\.gitignore$|\.chief-of-staff$|\.owner-ok$|\.owner-items$)' | head -n 3 | tr '\n' ' '
 }
 refused() { say "pull refused: the remote changes settings that run code here ($1); ask the teammate to remove that change"; }
 

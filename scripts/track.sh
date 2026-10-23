@@ -101,6 +101,9 @@ check() {
       if (l != "") print "these items wait on each other in a loop, so none can close: " l }'
   # an item that needed the owner's OK at opening still needs it: removing the mark does not skip the owner
   # (.owner-items, read-only and written once by baseline: TRACK.md itself is the agent's to edit)
+  # a project opened with a baseline always has the list: without it the owner gate would be off (fail closed)
+  [ -n "$(fm_get "$t" baseline)" ] && [ ! -r "$dir/.owner-items" ] &&
+    echo "the list of owner items is missing (.owner-items, written when the project opened): restore it from git or ask the owner"
   for b in $(cat "$dir/.owner-items" 2>/dev/null); do
     printf '%s\n' "$rows" | awk -F "$US" -v i="$b" '$1 == "I" && $4 == i && $9 == "ok" { f = 1 } END { exit !f }' ||
       echo "$b needed the owner's OK when the project opened (.owner-items): put back its line with | owner: ok"
@@ -192,6 +195,7 @@ case $cmd in
   baseline)
     # once: a second run would reset the yardstick that shows items removed or the delivery line moved
     [ -n "$(fm_get "$t" baseline)" ] && { echo "baseline is already recorded in TRACK.md; it is not rewritten" >&2; exit 1; }
+    [ -e "$dir/.owner-items" ] && { echo ".owner-items is already recorded; it is not rewritten" >&2; exit 1; }
     fm_set "$t" baseline "$(printf '%s\n' "$rows" | grep -c "^I$US")"
     fm_set "$t" baseline_delivery "$del"
     printf '%s\n' "$rows" | awk -F "$US" '$1 == "I" && $9 == "ok" { print $4 }' > "$dir/.owner-items"; chmod 444 "$dir/.owner-items" ;;

@@ -594,6 +594,7 @@ check "an owner item cannot close on a line the agent wrote" 'T check "$W/t3" | 
 check "an owner item cannot be marked not applicable" 'sed "s/^- \[x\] scope /- [-] scope /; s/| evidence: scope.md/| why: skipped/" "$W/t3/TRACK.md" > "$W/t3b"; mkdir -p "$W/t4"; mv "$W/t3b" "$W/t4/TRACK.md"; T check "$W/t4" | grep -q "^scope waits on the owner.s OK and cannot be marked not applicable"'
 check "removing the owner mark after opening does not skip the owner" 'cp "$W/t3/TRACK.md" "$W/t5.md"; mkdir -p "$W/t5"; mv "$W/t5.md" "$W/t5/TRACK.md"; cp "$W/t3/scope.md" "$W/t5/"; T baseline "$W/t5" && sed -i.bak "s/ | owner: ok//" "$W/t5/TRACK.md" && T check "$W/t5" | grep -q "^scope needed the owner.s OK when the project opened"'
 check "nor does deleting the item, and the list of owner items is protected" 'sed -i.bak "/^- \[x\] scope /d; s/needs: scope/needs: -/" "$W/t5/TRACK.md" && T check "$W/t5" | grep -q "^scope needed the owner.s OK" && [ ! -w "$W/t5/.owner-items" ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/t5/.owner-items\"}")" "$P")" = 2 ]'
+check "baseline never rewrites the owner list, and a missing list fails closed" 'fm_set "$W/t5/TRACK.md" baseline ""; ! T baseline "$W/t5" 2>/dev/null && grep -qx scope "$W/t5/.owner-items" && T baseline "$W/t5" 2>&1 | grep -q "already" ; fm_set "$W/t5/TRACK.md" baseline 2; chmod u+w "$W/t5/.owner-items"; mv "$W/t5/.owner-items" "$W/t5/oi"; T check "$W/t5" | grep -q "list of owner items is missing"'
 check "a project session cannot record the owner OK" '! CLAUDE_PROJECT_DIR="$W/t3" T ok "$W/t3" scope yes 2>/dev/null && [ ! -e "$W/t3/.owner-ok" ]'
 check "the OK is only for items marked owner: ok" '! CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" review-1 yes 2>/dev/null'
 check "central records the owner OK and the item closes" 'CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" scope "yes, freeze it" >/dev/null && ! T check "$W/t3" | grep -q "owner.s OK" && [ ! -w "$W/t3/.owner-ok" ]'
@@ -739,11 +740,20 @@ check "a teammate.s change to settings is never pulled" 'sh "$here/sync.sh" pull
 check "and a push does not take it in either" 'echo x >> "$SW/b/projects/pb/STATE.md"; ! sh "$here/sync.sh" push "$SW/b" pb "$SW/b" projects/pb/STATE.md && [ ! -e "$SW/b/.CLAUDE/settings.json" ] && grep -q "pull refused" "$SW/b/.git/cos-sync"'
 git -C "$SW/evil" rm -rq .CLAUDE && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm undo && git -C "$SW/evil" push -q 2>/dev/null
 mkdir -p "$PJ/repo" && git -C "$PJ/repo" init -q && echo x > "$PJ/repo/a.txt"; dd if=/dev/zero of="$PJ/demo.mp4" bs=1048576 count=21 2>/dev/null; echo "plan" > "$PJ/plan.md"
+printf 'scope\tyes\n' > "$PJ/.owner-ok"; printf 'scope\n' > "$PJ/.owner-items"
+check "the owner OK and the owner list stay on the member.s computer" 'turn "$PJ" >/dev/null; sleep 1; ! inteam projects/pa/.owner-ok && ! inteam projects/pa/.owner-items'
+rm -f "$PJ/.owner-ok" "$PJ/.owner-items"
+git -C "$SW/evil" pull -q 2>/dev/null; printf 'scope\tforged\n' > "$SW/evil/projects/pa/.owner-ok"; git -C "$SW/evil" add -f projects/pa/.owner-ok && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm forge && git -C "$SW/evil" push -q 2>/dev/null
+check "a teammate cannot send an owner OK" 'sh "$here/sync.sh" pull "$SW/b"; [ ! -e "$SW/b/projects/pa/.owner-ok" ] && grep -q "pull refused" "$SW/b/.git/cos-sync"'
+git -C "$SW/evil" rm -q --cached projects/pa/.owner-ok && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm undo && git -C "$SW/evil" push -q 2>/dev/null
 check "a nested git repo and a big video stay local without blocking the turn, and the rest still goes" 'o=$(turn "$PJ"); [ -z "$o" ] && grep -q "repo/ is a git repository of its own" "$SW/a/.git/cos-held" && grep -q "demo.mp4 is over 20 MB" "$SW/a/.git/cos-held" && CLAUDE_PROJECT_DIR="$PJ" sh "$here/briefing.sh" | grep -q "^- projects/pa/demo.mp4 is over 20 MB" && waitteam projects/pa/plan.md && ! inteam projects/pa/demo.mp4 && ! inteam projects/pa/repo/a.txt'
 rm -rf "$PJ/repo" "$PJ/demo.mp4"
 check "a push that git refuses says so instead of pushed ok" '! sh "$here/sync.sh" push "$SW/a" pa "$SW/a" "projects/pa/no such file" && grep -q "^.* push failed" "$SW/a/.git/cos-sync"'
 check "a push waits for a pull that holds the lock" 'mkdir "$SW/a/.git/cos-sync.lock"; sleep 30 & sp=$!; echo $sp > "$SW/a/.git/cos-sync.lock/pid"; (sleep 2; kill $sp; rm -f "$SW/a/.git/cos-sync.lock/pid"; rmdir "$SW/a/.git/cos-sync.lock") & echo y >> "$PJ/plan.md"; sh "$here/sync.sh" push "$SW/a" pa "$SW/a" projects/pa/plan.md; grep -q "pushed ok" "$SW/a/.git/cos-sync"'
 check "the dispatcher never plain-pushes a shared workspace" 'COS_PUSH=1 CLAUDE_BIN="$stub" sh "$here/dispatcher.sh" "$SW/b"; grep -q "COS_PUSH ignored" "$SW/b/.dispatch.log"'
 check "a closed card leaves the team board" 'inteam "board/Pa demo.md" && rm "$SW/a/board/Pa demo.md" && { turn "$SW/a/central" >/dev/null; i=0; while [ $i -lt 60 ] && inteam "board/Pa demo.md"; do i=$((i+1)); sleep 0.1; done; ! inteam "board/Pa demo.md"; }'
+
+git -C "$SW/evil" checkout -q --orphan other && git -C "$SW/evil" rm -rqf . && mkdir -p "$SW/evil/.CLAUDE" && printf '{}\n' > "$SW/evil/.CLAUDE/settings.json" && git -C "$SW/evil" add -A && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm other && git -C "$SW/evil" push -q origin other 2>/dev/null
+check "a remote with no shared history is refused, not pulled" 'git -C "$SW/b" fetch -q && git -C "$SW/b" branch -q -u origin/other && sh "$here/sync.sh" pull "$SW/b"; [ ! -e "$SW/b/.CLAUDE/settings.json" ] && grep -q "pull refused: .*changes that cannot be listed" "$SW/b/.git/cos-sync"'
 
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }

@@ -311,7 +311,8 @@ LIBS
         git -C "$root" rev-parse -q --verify '@{u}' >/dev/null && git -C "$root" diff -z --name-only --no-renames '@{u}...HEAD' | tr '\0' '\n'
         printf '%s\n' "$kn"; } | sort -u | while IFS= read -r f; do
         lf=$(printf '%s' "$f" | tr 'A-Z' 'a-z')   # macOS reads .CLAUDE/ as .claude/
-        case $lf in (.claude/*|*/.claude/*|.mcp.json|*/.mcp.json|.gitattributes|*/.gitattributes|.gitignore|*/.gitignore|.chief-of-staff) f="!$f" ;; esac
+        case $lf in (.claude/*|*/.claude/*|.mcp.json|*/.mcp.json|.gitattributes|*/.gitattributes|.gitignore|*/.gitignore|.chief-of-staff) f="!$f" ;;
+          (*/.owner-ok|*/.owner-items) f= ;; esac   # the owner's OK is per computer: a teammate could forge it
         case $f in ('') ;; (knowledge/*) printf '%s\n' "$kn" | grep -qxF "$f" && printf '%s\n' "$f" ;;
           # settings and hooks run code on each computer: a teammate never receives them (sync.sh refuses them too)
           (!*) printf '%s\n' "$f: settings, hooks and git rules stay on this computer in a shared workspace" ;;
