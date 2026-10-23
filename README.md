@@ -245,9 +245,10 @@ What is ours, with no equivalent found in ECC:
 - The owner's OK (`.owner-ok`) is protected like the library settings: written only through
   `track.sh ok`, which asks the owner (in a run with nobody watching, the ask is refused), an item that
   needs it cannot be marked not applicable, and removing its mark or its line after opening is caught
-  (the list of those items is written once at opening, read-only, in `.owner-items`). An agent
-  that builds the file name inside a shell variable is not seen by the hooks; the reviewer and the
-  owner's own read of `.owner-ok` are the last line.
+  (the list of those items is written once at opening, read-only, in `.owner-items`). The shell check
+  is a word list, not a shell interpreter: it knows common globs (`.o*`, `*-items`), but an agent that
+  builds the file name in a shell variable, or with a glob or shell option it does not know, is not
+  seen. Then the reviewer and the owner's own read of `.owner-ok` are the last line.
 - Times: write `deadline:` with its offset (`2026-10-25 18:00 -0300`) when teammates are in other
   time zones; question times are stamped with the offset already. In a shared workspace, files over
   20 MB, nested git repositories, settings (`.claude/`, `.mcp.json`, `.gitignore`, `.gitattributes`)
