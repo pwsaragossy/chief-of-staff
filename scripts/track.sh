@@ -278,6 +278,9 @@ case $cmd in
   verify)
     [ -n "$runnable" ] || { echo "check: nothing to run (TRACK.md check: ${chk:-empty})"; exit 0; }
     mine || { echo "verify: this project is $(fm_get "$dir/STATE.md" member)'s; only their own computer runs its check" >&2; exit 1; }
+    # only a command the owner approved on this computer runs: .owner-ok never syncs, TRACK.md and STATE.md do
+    fz=$(frozen); [ -n "$fz" ] && [ "${fz%%"$TB"*}" = "$(tcsum)" ] ||
+      { echo "verify: the owner has not approved this check on this computer, or it changed since: nothing runs until central records it with track.sh ok <project> check" >&2; exit 1; }
     runcheck; printf '%s\t%s\t%s\n' "$(date '+%F %H:%M')" "$rc" "$val" >> "$dir/.check-runs"
     echo "check: $res$([ "$rc" = 1 ] && echo " (target: $tgt)")"; [ "$rc" = 0 ] ;;
   baseline)
