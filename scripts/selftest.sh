@@ -798,6 +798,20 @@ check "the owner OK and the owner list stay on the member.s computer" 'turn "$PJ
 rm -f "$PJ/.owner-ok" "$PJ/.owner-items"
 git -C "$SW/evil" pull -q 2>/dev/null; printf 'scope\tforged\n' > "$SW/evil/projects/pa/.owner-ok"; git -C "$SW/evil" add -f projects/pa/.owner-ok && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm forge && git -C "$SW/evil" push -q 2>/dev/null
 check "a teammate cannot send an owner OK" 'sh "$here/sync.sh" pull "$SW/b"; [ ! -e "$SW/b/projects/pa/.owner-ok" ] && grep -q "pull refused" "$SW/b/.git/cos-sync"'
+# a clone brings whatever the team repo holds: an owner file in it is not this computer's owner
+sh "$here/setup.sh" join "$SW/c" "$SW/team.git" --member Ana >/dev/null 2>&1; CP="$SW/c/projects/pa"
+printf -- '---\nstage: 2\ntarget: under 1 s\ncheck: touch pwned\n---\n' > "$CP/TRACK.md"
+mkdir -p "$W/scr"; cp "$CP/TRACK.md" "$W/scr/"; printf -- '---\nstatus: in-progress\n---\n' > "$W/scr/STATE.md"; CLAUDE_PROJECT_DIR="$C" T ok "$W/scr" check yes >/dev/null; chmod u+w "$CP/.owner-ok" 2>/dev/null; cat "$W/scr/.owner-ok" >> "$CP/.owner-ok"
+check "tc: an owner OK that came with the team repo is not trusted" 'git -C "$SW/c" ls-files --error-unmatch projects/pa/.owner-ok >/dev/null 2>&1 && ! T verify "$CP" >/dev/null 2>&1 && [ ! -e "$CP/pwned" ] && T check "$CP" | grep -q ".owner-ok came from the team repo"'
+rm -rf "$SW/c" "$W/scr"
+# a teammate's change to a project after its owner approved the check stops the check until the owner looks
+PB2="$SW/b/projects/pb"; printf -- '---\nstage: 2\ntarget: under 1 s\ncheck: sh m.sh\n---\n' > "$PB2/TRACK.md"; printf 'for f in *.app; do [ -f "$f" ] && sh "$f"; done; echo 0 s\n' > "$PB2/m.sh"
+CLAUDE_PROJECT_DIR="$SW/b/central" T ok "$PB2" check yes >/dev/null
+git -C "$SW/evil" pull -q 2>/dev/null; git -C "$SW/evil" rm -q projects/pa/.owner-ok; mkdir -p "$SW/evil/projects/pb"; printf 'touch pwned\n' > "$SW/evil/projects/pb/x.app"
+git -C "$SW/evil" add -A && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm "tweak pb" && git -C "$SW/evil" push -q 2>/dev/null
+sh "$here/sync.sh" pull "$SW/b"; [ -f "$PB2/x.app" ] || sh "$here/sync.sh" push "$SW/b" pb "$SW/b" >/dev/null 2>&1
+check "tc: a file a teammate sent into the project after the approval stops the check" '[ -f "$PB2/x.app" ] && T verify "$PB2" 2>&1 | grep -q "a teammate changed projects/pb/x.app" && [ ! -e "$PB2/pwned" ]'
+rm -f "$PB2/TRACK.md" "$PB2/m.sh" "$PB2/pwned"; chmod u+w "$PB2/.owner-ok" 2>/dev/null; rm -f "$PB2/.owner-ok" "$PB2/.check-runs"
 git -C "$SW/evil" rm -q --cached projects/pa/.owner-ok && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm undo && git -C "$SW/evil" push -q 2>/dev/null
 check "a nested git repo and a big video stay local without blocking the turn, and the rest still goes" 'o=$(turn "$PJ"); [ -z "$o" ] && grep -q "repo/ is a git repository of its own" "$SW/a/.git/cos-held" && grep -q "demo.mp4 is over 20 MB" "$SW/a/.git/cos-held" && CLAUDE_PROJECT_DIR="$PJ" sh "$here/briefing.sh" | grep -q "^- projects/pa/demo.mp4 is over 20 MB" && waitteam projects/pa/plan.md && ! inteam projects/pa/demo.mp4 && ! inteam projects/pa/repo/a.txt'
 rm -rf "$PJ/repo" "$PJ/demo.mp4"

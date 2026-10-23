@@ -58,9 +58,16 @@ undelivered=$(printf '%s\n' "$rows" | awk -F "$US" -v d="$del" '$1 == "I" && $2 
 # Once the project opened with the key (a mark in .owner-items) or the owner approved a check, deleting the key
 # does not switch the gate off.
 TB=$(printf '\t')
+# a shared workspace: an owner file that git tracks came from the team repo (a clone, a hand commit), not from
+# this computer's owner, so it is not trusted; the plugin never commits them (protocol.sh push skip)
+OKF="$dir/.owner-ok"; OIF="$dir/.owner-items"; forged=
+if cos_shared "$(cos_root "$dir")" 2>/dev/null; then
+  for _f in .owner-ok .owner-items; do git -C "$dir" ls-files --error-unmatch -- "$_f" > /dev/null 2>&1 && forged="$forged $_f"; done
+  case $forged in *.owner-ok*) OKF=/nonexistent/.owner-ok ;; esac; case $forged in *.owner-items*) OIF=/nonexistent/.owner-items ;; esac
+fi
 has_tc=; awk 'NR == 1 && /^---/ { f = 1; next } f && /^---/ { exit } f && /^target:/ { h = 1 } END { exit !h }' "$t" && has_tc=1
-grep -qx 'target:' "$dir/.owner-items" 2>/dev/null && has_tc=1
-grep -q '^check	' "$dir/.owner-ok" 2>/dev/null && has_tc=1
+grep -qx 'target:' "$OIF" 2>/dev/null && has_tc=1
+grep -q '^check	' "$OKF" 2>/dev/null && has_tc=1
 tgt=$(fm_get "$t" target | tr -d '\000-\037'); chk=$(fm_get "$t" check | tr -d '\000-\037')
 case $chk in ''|none|none[!A-Za-z0-9_.-]*) runnable= ;; *) runnable=1 ;; esac
 # tcfiles: the project files the check names, and the files those name in turn (a helper script)
@@ -78,7 +85,12 @@ hsum() { if command -v shasum > /dev/null 2>&1; then shasum -a 256 | cut -c1-64
   elif command -v sha256sum > /dev/null 2>&1; then sha256sum | cut -c1-64; else cksum | tr -d ' \t'; fi; }
 # the frozen sum covers the target, the command and the files above
 tcsum() { { printf '%s\n%s\n' "$tgt" "$chk"; set -f; for _f in $(tcfiles); do printf '%s\n' "$_f"; cat "$dir/$_f"; done; set +f; } 2>/dev/null | hsum; }
-frozen() { awk -F '\t' '$1 == "check" { for (i = 4; i <= NF; i++) if ($i ~ /^freeze=/) { f = substr($i, 8); d = $2 } } END { if (f != "") print f "\t" d }' "$dir/.owner-ok" 2>/dev/null; }
+frozen() { awk -F '\t' '$1 == "check" { for (i = 4; i <= NF; i++) if ($i ~ /^freeze=/) { f = substr($i, 8); d = $2 } } END { if (f != "") print f "\t" d }' "$OKF" 2>/dev/null; }
+# teamsent: a file a teammate sent into this project (sync.sh logs them) since the owner approved the check
+teamsent() { cos_shared "$(cos_root "$dir")" 2>/dev/null || return 1
+  _g=$(git -C "$dir" rev-parse --absolute-git-dir 2>/dev/null) || return 1; _p=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null)
+  _a=$(awk -F '\t' '$1 == "check" { a = 0; for (i = 4; i <= NF; i++) if ($i ~ /^at=/) a = substr($i, 4) } END { print a + 0 }' "$OKF" 2>/dev/null)
+  awk -F '\t' -v a="$_a" -v p="$_p" '$1 + 0 >= a && index($2, p) == 1 { print $2; exit }' "$_g/cos-incoming" 2>/dev/null | grep .; }
 # runcheck: rc (0 met, 1 not met, 124 timed out, other could not run) and val (the last output line)
 runcheck() {
   _o=$(mktemp); _lim=${COS_CHECK_TIMEOUT:-120}; case $_lim in ''|*[!0-9]*) _lim=120 ;; esac
@@ -97,7 +109,7 @@ runcheck() {
 tcpending=
 if [ -n "$has_tc" ]; then fzs=$(frozen); fzs=${fzs%%"$TB"*}
   if [ -z "$fzs" ] || [ "$fzs" != "$(tcsum)" ]; then tcpending=1
-  elif [ -n "$runnable" ] && ! awk -F '\t' -v s="freeze=$fzs" '$1 != "check" { c = 0; z = 0; for (i = 4; i <= NF; i++) { if ($i ~ /^check=(pass|waived)/) c = 1; if ($i == s) z = 1 } if (c && z) f = 1 } END { exit !f }' "$dir/.owner-ok" 2>/dev/null; then tcpending=1; fi
+  elif [ -n "$runnable" ] && ! awk -F '\t' -v s="freeze=$fzs" '$1 != "check" { c = 0; z = 0; for (i = 4; i <= NF; i++) { if ($i ~ /^check=(pass|waived)/) c = 1; if ($i == s) z = 1 } if (c && z) f = 1 } END { exit !f }' "$OKF" 2>/dev/null; then tcpending=1; fi
 fi
 mine() { # a shared workspace: a project's check runs only on its own member's computer
   _r=$(cos_root "$dir"); _m=
@@ -158,9 +170,10 @@ check() {
   # an item that needed the owner's OK at opening still needs it: removing the mark does not skip the owner
   # (.owner-items, read-only and written once by baseline: TRACK.md itself is the agent's to edit)
   # a project opened with a baseline always has the list: without it the owner gate would be off (fail closed)
-  [ -n "$(fm_get "$t" baseline)" ] && [ ! -r "$dir/.owner-items" ] &&
+  for _f in $forged; do echo "$_f came from the team repo (git tracks it), so this computer does not trust it: remove it from git (git rm --cached) and have the owner give their OKs again"; done
+  [ -n "$(fm_get "$t" baseline)" ] && [ ! -r "$OIF" ] &&
     echo "the list of owner items is missing (.owner-items, written when the project opened): restore it from git or ask the owner"
-  for b in $(cat "$dir/.owner-items" 2>/dev/null); do [ "$b" = target: ] && continue
+  for b in $(cat "$OIF" 2>/dev/null); do [ "$b" = target: ] && continue
     printf '%s\n' "$rows" | awk -F "$US" -v i="$b" '$1 == "I" && $4 == i && $9 == "ok" { f = 1 } END { exit !f }' ||
       echo "$b needed the owner's OK when the project opened (.owner-items): put back its line with | owner: ok"
   done
@@ -210,7 +223,7 @@ check() {
                 elif [ -L "$dir/$ev" ] || [ ! -f "$dir/$ev" ]; then echo "$id: evidence $ev must be a regular file, not a folder or a link"
                 elif [ ! -s "$dir/$ev" ]; then echo "$id: evidence $ev is empty"; fi ;;
            esac; fi
-           [ "$own" = ok ] && ! grep -q "^$id$(printf '\t')" "$dir/.owner-ok" 2>/dev/null &&
+           [ "$own" = ok ] && ! grep -q "^$id$(printf '\t')" "$OKF" 2>/dev/null &&
              echo "$id closes only with the owner's OK: put the question on the project card; central records the answer with track.sh ok, which the owner approves"
            for n in $(printf '%s' "$needs" | tr ',' ' '); do
              [ "$n" = - ] && continue
@@ -256,15 +269,17 @@ case $cmd in
            { echo "track.sh ok: $id is not an item of this track marked owner: ok" >&2; exit 1; } ;;
     esac
     # a shared workspace: only the project's own member gives its OK
+    case $forged in *.owner-ok*) echo "track.sh ok: .owner-ok came from the team repo (git tracks it): remove it from git first (git rm --cached)" >&2; exit 1 ;; esac
     mine || { echo "track.sh ok: this project is $(fm_get "$dir/STATE.md" member)'s; only their central records its OK" >&2; exit 1; }
     w=$(printf '%s' "$*" | tr -d '\000-\037' | cut -c1-300); x=
-    if [ "$id" = check ]; then x="${TB}freeze=$(tcsum)"; _fl=$(tcfiles)
+    if [ "$id" = check ]; then x="${TB}freeze=$(tcsum)${TB}at=$(date +%s)"; _fl=$(tcfiles)
       echo "the owner approves the target '$tgt' and the command '$chk'${_fl:+, frozen with its files: $_fl}"
     elif [ -n "$runnable" ] && { [ "$id" = delivery ] || [ "$(printf '%s\n' "$rows" | awk -F "$US" -v i="$id" '$1 == "I" && $4 == i { print $2 }')" -ge "$del" ]; }; then
       # the delivery OK: the frozen check runs now, in front of the owner; a failing one needs the owner's waiver
       fz=$(frozen)
       [ -n "$fz" ] || { echo "track.sh ok: the owner never approved target and check: record track.sh ok <project> check first" >&2; exit 1; }
       [ "${fz%%"$TB"*}" = "$(tcsum)" ] || { echo "track.sh ok: target or check changed since the owner approved them: approve the new ones first (track.sh ok <project> check)" >&2; exit 1; }
+      _s=$(teamsent) && { echo "track.sh ok: a teammate changed $_s in this project after the owner approved the check: the owner reads the change and approves again (track.sh ok <project> check)" >&2; exit 1; }
       runcheck; printf '%s\t%s\t%s\n' "$(date '+%F %H:%M')" "$rc" "$val" >> "$dir/.check-runs"
       if [ "$rc" = 0 ]; then x="${TB}check=$res${TB}freeze=${fz%%"$TB"*}"
       else case $(printf '%s' "$w" | tr 'A-Z' 'a-z') in
@@ -281,6 +296,7 @@ case $cmd in
     # only a command the owner approved on this computer runs: .owner-ok never syncs, TRACK.md and STATE.md do
     fz=$(frozen); [ -n "$fz" ] && [ "${fz%%"$TB"*}" = "$(tcsum)" ] ||
       { echo "verify: the owner has not approved this check on this computer, or it changed since: nothing runs until central records it with track.sh ok <project> check" >&2; exit 1; }
+    _s=$(teamsent) && { echo "verify: a teammate changed $_s in this project after the owner approved the check: nothing runs until the owner reads the change and approves again (track.sh ok <project> check)" >&2; exit 1; }
     runcheck; printf '%s\t%s\t%s\n' "$(date '+%F %H:%M')" "$rc" "$val" >> "$dir/.check-runs"
     echo "check: $res$([ "$rc" = 1 ] && echo " (target: $tgt)")"; [ "$rc" = 0 ] ;;
   baseline)

@@ -31,6 +31,8 @@ incoming_bad() {
   g merge-base HEAD '@{u}' >/dev/null 2>&1 || { echo "changes that cannot be listed"; return; }
   g diff -z --name-only HEAD...'@{u}' 2>/dev/null | tr '\0' '\n' | grep -Ei '(^|/)(\.claude/|\.mcp\.json$|\.gitattributes$|\.gitignore$|\.chief-of-staff$|\.owner-ok$|\.owner-items$)' | head -n 3 | tr '\n' ' '
 }
+# what a teammate sent, path by path, so track.sh can tell a check approved before it changed (cos-incoming in .git)
+log_incoming() { _t=$(date +%s); g diff -z --name-only HEAD...'@{u}' 2>/dev/null | tr '\0' '\n' | grep . | sed "s/^/$_t	/" >> "$(g rev-parse --absolute-git-dir)/cos-incoming"; }
 refused() { say "pull refused: the remote changes settings that run code here ($1); ask the teammate to remove that change"; }
 
 case $cmd in
@@ -38,6 +40,7 @@ case $cmd in
     g rev-parse -q --verify '@{u}' >/dev/null || { say "nothing to pull yet: the team copy was never pushed"; exit 0; }
     if ! e=$(g fetch -q 2>&1); then say "pull failed: $(first "$e")"; exit 0; fi
     bad=$(incoming_bad)
+    [ -z "$bad" ] && log_incoming
     if [ -n "$bad" ]; then refused "$bad"
     elif e=$(g merge -q --ff-only '@{u}' 2>&1); then say "pulled ok"
     elif [ -n "$(g log --oneline '@{u}..' 2>/dev/null)" ]; then say "local notes not pushed yet; the next push merges the team's"
@@ -61,6 +64,7 @@ case $cmd in
     # files the gate held back stay uncommitted: autostash keeps them out of the way of the rebase
     if ! e=$(g fetch -q 2>&1); then say "push failed: $(first "$e")"; exit 1; fi
     bad=$(incoming_bad); [ -n "$bad" ] && { refused "$bad"; exit 1; }
+    log_incoming
     if ! e=$(g rebase -q --autostash '@{u}' 2>&1); then
       if g rebase --abort 2>/dev/null; then   # a real conflict: same note changed here and by a teammate
         n=$(basename "$q"); say "conflict: a teammate changed the same files; card in board/"

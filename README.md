@@ -264,7 +264,10 @@ What is ours, with no equivalent found in ECC:
   seen. Then the reviewer and the owner's own read of `.owner-ok` are the last line.
 - Target and check: the check runs a shell command written in TRACK.md, so only a session or central
   on your computer runs it (never a hook), never for a teammate's project in a shared workspace, and
-  only a command the owner approved on this computer (the approval lives in `.owner-ok`, which never syncs).
+  only a command the owner approved on this computer (the approval lives in `.owner-ok`, which never
+  syncs; in a shared workspace one that git tracks came from the team repo and is not trusted). A file a
+  teammate sends into the project after the approval stops the check until the owner approves again.
+  That record is kept by `sync.sh`: a hand-run `git pull` in the workspace bypasses it.
   The check is only as hard as its inputs. The freeze covers the files the command names and the files
   those name, not what the check reaches without naming it: a test suite run by `npm test` or `pytest`,
   or data the agent writes. Prefer a check that measures the product from outside (its command, its
