@@ -159,7 +159,7 @@ $p"; fi ;;
             # the names, or a glob that could spell them (.[c]hief, .l*, .ch?ef, ?library), next to a write.
             # ponytail: a name built in a variable (a=.chi; ...${a}ef) is not seen; the files are read-only on disk
             sus=; case $uq in *.chief*|*.library*|*cos-foreign*|*cos-cfg*|*owner-ok*|*owner-items*) sus=1 ;; esac   # not "chief-of-staff": the plugin's own folder has that name
-            printf '%s\n' "$uq" | grep -Eq '\.[][?*]|(^|[^a-z0-9_.-])\.(c(h(i(e(f)?)?)?)?|l(i(b(r(a(r(y)?)?)?)?)?)?)([^a-z0-9_-]|$)|[][?*](l?ibrary|c?hief)|(^|[^$])\{[^}]*,[^}]*\}' && sus=1   # also {.,x}library
+            printf '%s\n' "$uq" | grep -Eq '\.[][?*]|(^|[^a-z0-9_.-])\.(c(h(i(e(f)?)?)?)?|l(i(b(r(a(r(y)?)?)?)?)?)?)([^a-z0-9_-]|$)|[][?*](l?ibrary|c?hief)|(^|[^$])\{[^}]*,[^}]*\}|\.o[a-z-]*[][?*]|[][?*][a-z]*-(ok|items)([^a-z0-9_-]|$)' && sus=1   # also {.,x}library, .own*, *-items
             case $cq in *"\$'"*) sus=1 ;; esac   # $'\056library' (quotes are gone from uq)
             # whole words only: a folder named "firmware" or a random temp name is not rm
             # 2>&1 and >/dev/null write nothing
