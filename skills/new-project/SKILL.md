@@ -49,7 +49,8 @@ the owner to pick, in the same round of buttons if possible.
    with `owner` set to the project session (for example `session-<slug>`), never the owner.
    In a shared workspace (`shared: yes` in `.chief-of-staff`), set `member:` in the card and in
    STATE.md to this person's name (`git config cos.member`), so the team board shows whose it is.
-4. Add one line to the project table in `central/CLAUDE.md`.
+4. Add one line to the project table in `central/CLAUDE.md` (not in a shared workspace: there the
+   briefing and the panel list every project, and a shared table would clash between teammates).
 5. Commit only these files.
 
 ## 4. Start

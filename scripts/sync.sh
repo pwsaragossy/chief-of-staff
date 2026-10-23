@@ -1,5 +1,6 @@
 #!/bin/sh
-# Team library sync. The hooks run it in the background; it never waits for a password (GIT_TERMINAL_PROMPT=0).
+# Team sync of a team library, or of a whole shared workspace (<library> = the workspace root). The hooks run it
+# in the background; it never waits for a password (GIT_TERMINAL_PROMPT=0).
 #   sync.sh pull <library>                          at session start: fast-forward to the team's latest notes
 #   sync.sh push <library> <session> <workspace> [file...]   after a turn whose notes passed the gate: commit only
 #                                                   those files (paths inside the library), rebase, push.
@@ -34,18 +35,19 @@ case $cmd in
     if [ $# -ge 4 ]; then shift 4; else shift $#; fi
     # what leaves is one commit: the last shared state plus exactly the gated files, as they were gated. Commits
     # made by hand in this folder are folded in, so their content never leaves unless the gate saw it
+    # (the index goes back too, so a file a hand commit carried, and the gate did not list, stays here)
     b=$(g merge-base HEAD '@{u}' 2>/dev/null || g rev-list --max-parents=0 HEAD 2>/dev/null | tail -n 1)
-    [ -n "$b" ] && g reset -q --soft "$b"
-    [ $# -gt 0 ] && g add -A -- "$@"   # only what the gate passed: anything else stays local
-    g diff --cached --quiet || g commit -qm "notes from $s"
+    [ -n "$b" ] && g reset -q "$b"
+    [ $# -gt 0 ] && g --literal-pathspecs add -A -- "$@"   # only what the gate passed: anything else stays local
+    g diff --cached --quiet || g commit -qm "update from $s"
     if ! g rev-parse -q --verify '@{u}' >/dev/null; then   # the first push failed at join: push now, nothing to merge
       if e=$(g push -q -u origin HEAD 2>&1); then say "pushed ok"; else say "push failed: $(first "$e")"; fi; exit 0
     fi
     # files the gate held back stay uncommitted: autostash keeps them out of the way of the rebase
     if ! e=$(g pull -q --rebase --autostash 2>&1); then
       if g rebase --abort 2>/dev/null; then   # a real conflict: same note changed here and by a teammate
-        n=$(basename "$q"); say "conflict: a teammate changed the same notes; card in board/"
-        c="$w/board/Library conflict - $n.md"
+        n=$(basename "$q"); say "conflict: a teammate changed the same files; card in board/"
+        c="$w/board/Sync conflict - $n.md"
         if [ -n "$w" ] && [ -d "$w/board" ] && [ ! -f "$c" ]; then
           d=$(date +%F)
           cat > "$c" <<CARD
@@ -60,16 +62,17 @@ since: $d
 updated: $d
 ---
 
-# Library conflict - $n
+# Sync conflict - $n
 
-Notes saved here clash with a teammate's change to the same notes in the team library $n ($q).
-Nothing was lost: your notes are committed locally, the team's are on the remote.
+Files saved here clash with a teammate's change to the same files in $q.
+Nothing was lost: your changes are committed locally, the team's are on the remote.
 
 To do (this session, not the owner):
 1. git -C "$q" pull --rebase
-2. For each conflicting note, apply the library rule: keep the better version and retire the worse one
-   (library.sh retire), or merge both into one note. Never drop a teammate's note to win the conflict.
-3. git -C "$q" add notes && git -C "$q" rebase --continue
+2. For each conflicting file, keep both changes. For a library note, apply the library rule: keep the
+   better version and retire the worse one (library.sh retire), or merge both into one note. Never
+   drop a teammate's change to win the conflict.
+3. git -C "$q" add <the files> && git -C "$q" rebase --continue
 4. sh "$(cd "$(dirname "$0")" && pwd)/sync.sh" push "$q" $s "$w", then delete this card.
 CARD
         fi

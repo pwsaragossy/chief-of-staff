@@ -12,9 +12,9 @@ owner, what stalled, what comes first. It does not do project work.
 3. If any card has `status: waiting-owner`, ask **all** of those questions together, as buttons,
    recommendation first (the question tool takes at most 4 per call; use consecutive calls). Write each answer, with the date, into the card and into the project's
    `STATE.md`, and set the card back to `status: in-progress`. The owning session acts from there.
-   A question that asks for the owner's OK on a track item (scope freeze, submission) names that
-   item's proof file: write the answer there too, as one line `Owner OK: <date> <their words>`, only
-   from the owner's own reply. Without that line the track gate keeps the item open.
+   A question that asks for the owner's OK on a track item (scope freeze, submission): when the owner
+   says yes, record it with `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" ok <absolute project folder>
+   <item> "<their words>"`; the owner approves that command too. Without it the track gate keeps the item open.
 4. In a shared workspace (`shared: yes` in `../.chief-of-staff`), ask only the cards the briefing
    lists as yours (`member:` is you or empty); the others wait on your teammates' own central.
 

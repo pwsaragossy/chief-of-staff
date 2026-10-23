@@ -1,6 +1,6 @@
 ---
 name: panel
-description: Open the local panel of a chief-of-staff workspace — green, yellow or red per project, track progress, cards waiting on the owner, the last turns, and a box to import files or links into the knowledge inbox. Use when the user asks for the panel, the dashboard, "how is everything going", or runs /chief-of-staff:panel.
+description: Open the local panel of a chief-of-staff workspace — green, yellow or red per project, track progress, cards waiting on the owner with their questions, the deadline countdown, the last 24 hours in three counts, and a box to import files or links into the knowledge inbox. Use when the user asks for the panel, the dashboard, "how is everything going", or runs /chief-of-staff:panel.
 ---
 
 # Open the panel

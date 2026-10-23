@@ -57,6 +57,8 @@ prompt='You were started by the chief-of-staff dispatcher, with nobody watching.
 for s in "$root"/projects/*/STATE.md; do
   [ -f "$s" ] || continue
   [ "$(fm_get "$s" status)" = "in-progress" ] && [ "$(fm_get "$s" dispatch)" = "ready" ] || continue
+  # a shared workspace: only this person's projects, so two teammates' dispatchers never run the same one
+  cos_shared "$root" && { [ -n "$(cos_member "$root")" ] && [ "$(fm_get "$s" member)" = "$(cos_member "$root")" ] || continue; }
   runs=$(grep -c "^$today [0-9:]* run " "$log" 2>/dev/null || true)
   if [ "${runs:-0}" -ge "$max" ]; then note "ceiling: $max runs today, stopping"; break; fi
   p=$(basename "$(dirname "$s")")

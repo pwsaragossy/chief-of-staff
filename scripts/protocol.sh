@@ -31,11 +31,17 @@ SENT='
   /^(~~~|Compared:|#)/ { next }
   { l = $0; sub(/^[[:space:]>*+-]+/, "", l); n = split(l, a, /[.!?;:][[:space:]]+/); for (k = 1; k <= n; k++) out(a[k]) }'
 sentences() { LC_ALL=C awk -v want="${want:-}" "$SENT" "$@"; }
+# (the library may be a folder of a bigger repo, the shared workspace: paths come back relative to the library)
 libchanges() {
-  { git -C "$1" status --porcelain -uall --no-renames 2>/dev/null | grep -Ev '^(D.|.D) ' | cut -c4-
-    if git -C "$1" rev-parse -q --verify '@{u}' >/dev/null; then git -C "$1" diff --name-only --diff-filter=d '@{u}...HEAD'
-    else git -C "$1" diff --name-only --diff-filter=d "$(git -C "$1" rev-list --max-parents=0 HEAD 2>/dev/null | tail -n 1)" HEAD 2>/dev/null; fi; } | sort -u
+  _pre=$(git -C "$1" rev-parse --show-prefix 2>/dev/null)
+  { git -C "$1" -c core.quotePath=false status --porcelain -uall --no-renames -- . 2>/dev/null | grep -Ev '^(D.|.D) ' | cut -c4-
+    if git -C "$1" rev-parse -q --verify '@{u}' >/dev/null; then git -C "$1" -c core.quotePath=false diff --name-only --diff-filter=d '@{u}...HEAD' -- .
+    else git -C "$1" -c core.quotePath=false diff --name-only --diff-filter=d "$(git -C "$1" rev-list --max-parents=0 HEAD 2>/dev/null | tail -n 1)" HEAD -- . 2>/dev/null; fi; } |
+    while IFS= read -r _f; do case $_f in "$_pre"*) printf '%s\n' "${_f#"$_pre"}" ;; esac; done | sort -u
 }
+shared=; cos_shared "$root" && shared=1
+# a key or token in a file that would go to the team (same list as the panel's import check, plus Stellar secret seeds)
+SECRETS='AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40}|sk-[A-Za-z0-9_-]{32}|xox[baprs]-[A-Za-z0-9-]{10}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10}[.]eyJ[A-Za-z0-9_-]{10}[.]|(^|[^A-Z0-9])S[A-Z2-7]{55}([^A-Z0-9]|$)'
 # a path with .., symlinks and letter case resolved (macOS ignores case); "" when a part that does not exist yet holds ..
 real() { d=$1 r=; k=0
   while [ -L "$d" ] && [ $k -lt 20 ]; do t=$(readlink "$d"); case $t in /*) d=$t ;; *) d=${d%/*}/$t ;; esac; k=$((k+1)); done   # a symlinked file
@@ -151,7 +157,7 @@ $p"; fi ;;
             uq=$(printf '%s' "$cq" | tr -d "\"'\\\\")
             # the names, or a glob that could spell them (.[c]hief, .l*, .ch?ef, ?library), next to a write.
             # ponytail: a name built in a variable (a=.chi; ...${a}ef) is not seen; the files are read-only on disk
-            sus=; case $uq in *.chief*|*.library*|*cos-foreign*|*cos-cfg*) sus=1 ;; esac   # not "chief-of-staff": the plugin's own folder has that name
+            sus=; case $uq in *.chief*|*.library*|*cos-foreign*|*cos-cfg*|*owner-ok*) sus=1 ;; esac   # not "chief-of-staff": the plugin's own folder has that name
             printf '%s\n' "$uq" | grep -Eq '\.[][?*]|(^|[^a-z0-9_.-])\.(c(h(i(e(f)?)?)?)?|l(i(b(r(a(r(y)?)?)?)?)?)?)([^a-z0-9_-]|$)|[][?*](l?ibrary|c?hief)|(^|[^$])\{[^}]*,[^}]*\}' && sus=1   # also {.,x}library
             case $cq in *"\$'"*) sus=1 ;; esac   # $'\056library' (quotes are gone from uq)
             # whole words only: a folder named "firmware" or a random temp name is not rm
@@ -164,6 +170,9 @@ $p"; fi ;;
               # $(...), stdin or another command after library.sh asks too
               nq=$(printf '%s' "$cq" | tr -d "\"'\\\\")
               # moving the library sends every note somewhere: the owner confirms each time
+              # the owner's OK on a project step: the word ok after track.sh, or a subcommand from a variable
+              printf '%s\n' "$nq" | grep -Eq 'track\.sh(.*[^a-z0-9_.-]ok([^a-z0-9_.-]|$)|[^;&|]*[$`])' && {
+                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this records YOUR OK on a project step (scope freeze or submission). Only approve if you gave that OK."}}'; exit 0; }
               case $nq in *library.sh*off*|*offload*)
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this moves the whole library (and may push it to a git remote). Only approve if you asked for it."}}' ;;
               # any use, join or leave word after library.sh (a search for "use" asks too: rare, and safe)
@@ -182,9 +191,9 @@ $p"; fi ;;
              if [ -n "$o" ] && [ "$o" != "$lname" ]; then
                echo "Blocked by chief-of-staff: $fp is in the library '$o', and this session works in '$lname'. A session writes only its own library, so nothing personal or from another team leaks into a shared one. Write the note in $lib/notes/." >&2; exit 2
              fi
-             case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.library|*/.chief-of-staff/*) ;; *) exit 0 ;; esac ;;
+             case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.library|*/.chief-of-staff/*|*/.owner-ok) ;; *) exit 0 ;; esac ;;
         esac
-        echo "Blocked by chief-of-staff: .chief-of-staff (where the libraries live), .library-id and a project's .library (which library it shares with) are changed only through library.sh offload, join, leave or use, which the owner confirms." >&2
+        echo "Blocked by chief-of-staff: .chief-of-staff (where the libraries live), .library-id, a project's .library (which library it shares with) and .owner-ok (the owner's OKs) are changed only through library.sh offload, join, leave or use and track.sh ok, which the owner confirms." >&2
         exit 2 ;;
     esac
     ;;
@@ -219,6 +228,7 @@ $p"; fi ;;
         [ -n "$n" ] || continue
         cos_libpath "$root" "$n" >/dev/null || continue   # offline or broken: nothing to gate there
         team=; [ "$n" != personal ] && [ -d "$q/.git" ] && team=1
+        [ -n "$shared" ] && team=1   # a shared workspace's knowledge/ is the team's library
         if [ -n "$team" ]; then
           # what would leave this computer: every path git sees changed here or committed and not pushed
           # (a teammate's pulled note is neither), so the push set is exactly the gated set
@@ -281,9 +291,27 @@ CH
 $(cos_libs "$root")
 LIBS
     fi
+    if [ -n "$shared" ]; then
+      # the shared workspace goes to the team at every turn end: the board, the projects, and the library notes
+      # that passed the gate. Held back: notes that failed it, and files that look like they hold a key or token
+      kn=; [ -z "$lgaps" ] && [ -n "$push" ] && kn=$(printf '%s\n' "$push" | tr "$TAB" '\n' | sed 1d | sed 's|^|knowledge/|')
+      list=$( { git -C "$root" -c core.quotePath=false status --porcelain -uall --no-renames 2>/dev/null | cut -c4-
+        git -C "$root" rev-parse -q --verify '@{u}' >/dev/null && git -C "$root" -c core.quotePath=false diff --name-only --no-renames '@{u}...HEAD'
+        printf '%s\n' "$kn"; } | sort -u | while IFS= read -r f; do
+        case $f in ('') ;; (knowledge/*) printf '%s\n' "$kn" | grep -qxF "$f" && printf '%s\n' "$f" ;;
+          (\"*) echo "!$f: rename it with plain letters, digits, spaces and . _ -; until then it stays on this computer" ;;
+          (*) if [ -f "$root/$f" ] && grep -Eq "$SECRETS" "$root/$f" 2>/dev/null; then
+               echo "!$f looks like it holds a key or token, so it stays on this computer: move the secret to a .env file (never shared) and keep only its name in $f"
+             else printf '%s\n' "$f"; fi ;;
+        esac; done)
+      wg=$(printf '%s\n' "$list" | sed -n 's/^!//p'); [ -n "$wg" ] && reason="${reason:+$reason }Not sent to the team:
+$wg"
+      fl=$(printf '%s\n' "$list" | grep -v '^!' | grep . | tr '\n' "$TAB")
+      ( IFS=$TAB; set -f; set -- $fl
+        sh "$(dirname "$0")/sync.sh" push "$root" "${project:-central}" "$root" "$@" </dev/null >/dev/null 2>&1 & )
     # team notes that passed go to the team now, in the background (the hook has 5 s); conflicts become a card.
     # Only this session's library, only the files just gated, and only when nothing in this turn failed
-    if [ -z "$lgaps" ] && [ -n "$push" ]; then
+    elif [ -z "$lgaps" ] && [ -n "$push" ]; then
       ( IFS=$TAB; set -f; set -- $push; q=$1; shift
         sh "$(dirname "$0")/sync.sh" push "$q" "${project:-central}" "$root" "$@" </dev/null >/dev/null 2>&1 & )
     fi

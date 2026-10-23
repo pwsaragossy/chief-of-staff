@@ -1,7 +1,7 @@
 # chief-of-staff
 
 An AI chief of staff for [Claude Code](https://code.claude.com): a small company of agents that
-works for one owner. Version 0.1.
+works for one owner, or for a team. Version 0.2.
 
 What it gives you:
 
@@ -40,36 +40,51 @@ What it gives you:
   Team notes are pulled at session start and pushed after a turn whose notes pass the checks; a
   conflict with a teammate becomes a card for that project's session. Join, leave and use ask you
   first; settings changed any other way stop the turn until you confirm them (`library.sh trust`).
+- **One board for the whole team.** A workspace can be shared: one teammate creates it on an empty
+  private git repo (`setup.sh create <folder> --share <link> --member <name>`), the others join it
+  (`setup.sh join <folder> <link> --member <name>`). Every turn end sends the board, the projects and
+  the library notes that passed the checks to the team; every session start brings the teammates'
+  changes. Each card and project says whose it is (`member:`), each person's central asks only their
+  own questions, each dispatcher runs only its own projects, and the panel shows everyone's work.
+  Files that look like they hold a key or token stay on the computer, and the turn says so.
+- **Built for deadlines.** A project's `TRACK.md` can carry `deadline: YYYY-MM-DD HH:MM`: the panel
+  counts down, yellow under 6 hours, red under 2 hours while the delivery is open. A question waiting
+  on the owner turns red after `owner_wait_minutes` (60 by default, 20 in the hackathon track), with
+  its age shown. The panel and the briefing show the questions themselves. Items marked `owner: ok`
+  (the hackathon's scope freeze and submission) close only with the owner's OK, which central records
+  with `track.sh ok` and the owner approves.
 - **A routing table** (`ROUTING.md`) so nobody has to remember whom to call.
 - **A local panel**: green, yellow or red per project with the reason, a live map of each track
   (stages, deliverables by state, prerequisites, the delivery line, items added since opening), decisions
-  waiting on the owner, the last turns, and a box to drop files or links into the knowledge inbox.
+  waiting on the owner with their questions and how long they have waited, the deadline countdown, the
+  last 24 hours in three counts (turns, protocol breaks, rejected notes), the sync state, and a box to
+  drop files or links into the knowledge inbox.
 - **An optional dispatcher** that starts the next session on its own. Off by default.
 
 ## Install
 
 ```sh
-claude plugin marketplace add <owner>/chief-of-staff
+claude plugin marketplace add pwsaragossy/chief-of-staff
 claude plugin install chief-of-staff@chief-of-staff
 ```
 
-Replace `<owner>` with the GitHub account that hosts the repository. For a private repository,
-Claude Code clones with your existing git credentials
-(`gh auth login` then `gh auth setup-git`). Inside Claude Code you can use
-`/plugin marketplace add` and `/plugin install` instead.
+The repository is private: each person needs read access to it on GitHub, and Claude Code clones
+with their own git credentials (`gh auth login`, then `gh auth setup-git`). Inside Claude Code,
+`/plugin marketplace add pwsaragossy/chief-of-staff` and `/plugin install chief-of-staff@chief-of-staff`
+do the same. Update later with `claude plugin marketplace update chief-of-staff`.
 
 Then open Claude Code in any folder and run `/chief-of-staff:setup`. It looks at your computer first,
 then asks up to four questions in one block, each with a recommendation: where the workspace goes
 (default `~/chief-of-staff`); where the company library goes (inside the workspace, your Obsidian
 vault, iCloud Drive, Dropbox, Google Drive, OneDrive or an external disk); when the GitHub CLI is
-signed in, whether to back up to private GitHub repositories; and whether to join a team library
-(paste its git link). Then it creates:
+signed in, whether to back up to private GitHub repositories; and whether to work with a team (just
+you, a shared library, one board for the whole team, or join a teammate's board). Then it creates:
 
 ```
 <workspace>/
   .chief-of-staff        marker the hooks look for
   central/CLAUDE.md      the one door to the owner
-  board/                 one card per open item (status, project, owner, due)
+  board/                 one card per open item (status, project, owner, member, due, asked)
   projects/<slug>/       CLAUDE.md + STATE.md + TRACK.md per project
   knowledge/             inbox/, notes/, templates/ (or the folder you picked; move later: library.sh offload)
   libraries/<team>/      one git clone per team library you joined (ignored by the workspace repo)
@@ -94,9 +109,11 @@ a link like `http://127.0.0.1:<port>/?t=<token>`. It listens on this computer on
 request without the token. Colors come from `scripts/health.sh`, which also works as text:
 
 - **red**: a track gate problem, STATE.md says red, a turn in the last 24 h ended without the
-  specialists, the reviewer or the track gate, or a dispatcher alert;
-- **yellow**: a decision waiting on the owner, no handoff for longer than the track's
-  `stale_hours` (3 h for a hackathon, 48 h otherwise), or paused;
+  specialists, the reviewer or the track gate, a dispatcher alert, a question waiting on the owner
+  past `owner_wait_minutes`, or the deadline less than 2 hours away (or past) with the delivery open;
+- **yellow**: a decision waiting on the owner, a card past its `due:` date, the deadline less than
+  6 hours away, no handoff for longer than the track's `stale_hours` (3 h for a hackathon, 48 h
+  otherwise), or paused;
 - **green**: none of these.
 
 Files or links dropped in the import box land in the library's `inbox/` (the panel warns when one
@@ -219,6 +236,14 @@ What is ours, with no equivalent found in ECC:
   Confirmation for join, leave and use matches the command text, so a renamed copy of library.sh
   is not seen, and neither is a protected file name (`.chief-of-staff`, `.library`) built inside a
   shell variable; those files are read-only on disk.
+- A shared workspace is the team's: nothing personal belongs in it, and it takes no personal or other
+  team library. The hooks do not stop an agent that reads a personal workspace elsewhere on the disk
+  and retypes it there; keep the two apart. The key check is a list of known token shapes (cloud keys,
+  GitHub tokens, private keys, Stellar secret seeds), not a full secret scanner. The member name is
+  local git config, set at join, not an identity check. A conflict (two people changing the same
+  card) is undone and becomes a card; it is not merged automatically.
+- The owner's OK file (`.owner-ok`) is protected like the library settings: written only through
+  `track.sh ok`, which asks the owner, and read-only on disk.
 - An offloaded library: no automatic sync; Windows paths are not supported; in iCloud, keep the
   folder downloaded on the computer (placeholder files are not seen).
 

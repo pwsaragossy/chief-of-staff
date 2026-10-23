@@ -39,7 +39,11 @@ case $rel in central|central/*) teams=$(cos_libs "$root" | sed 1d) ;;
 printf '%s\n' "$teams" | while IFS="$TAB" read -r n q; do
   [ -n "$q" ] && sh "$here/sync.sh" pull "$q" </dev/null >/dev/null 2>&1 &
 done
-syncline() { printf '%s\n' "$teams" | while IFS="$TAB" read -r n q; do
+# a shared workspace: fetch the team's board, projects and notes in the background too
+cos_shared "$root" && sh "$here/sync.sh" pull "$root" </dev/null >/dev/null 2>&1 &
+syncline() {
+  cos_shared "$root" && out "Shared workspace: last sync $(head -n 1 "$root/.git/cos-sync" 2>/dev/null | tr -d '\000-\037' | cut -c1-120 | grep . || echo never)."
+  printf '%s\n' "$teams" | while IFS="$TAB" read -r n q; do
   [ -n "$n" ] || continue; sy=$(head -n 1 "$q/.git/cos-sync" 2>/dev/null | tr -d '\000-\037' | cut -c1-120)
   out "Team library '$n': last sync ${sy:-never}."; done; }
 
@@ -50,7 +54,8 @@ syncline() { printf '%s\n' "$teams" | while IFS="$TAB" read -r n q; do
     central|central/*)
       out "This session is central: the only one that asks the owner. Cards waiting on the owner:"
       w=$(waiting ""); out "${w:-- none}"
-      [ -n "$me" ] && out "Shared workspace: you are '$me'. Cards of other members are listed on the panel; their central asks them."
+      cos_shared "$root" && if [ -n "$me" ]; then out "Shared workspace: you are '$me'. Cards of other members are on the panel; their own central asks them."
+        else out "Shared workspace, but this computer has no member name: set it with git -C \"$root\" config cos.member <name>. Until then every card is listed here."; fi
       dd=$(due7); [ -n "$dd" ] && { out "Due in the next 7 days:"; out "$dd"; }
       out "Projects:"
       for s in "$root"/projects/*/STATE.md; do

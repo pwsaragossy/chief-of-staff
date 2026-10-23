@@ -459,7 +459,7 @@ rm -f "$PA/f.md"
 sh "$here/sync.sh" pull "$V/m3/libraries/t1"
 sed -i.bak 's/9 to 5\./8 to 4./' "$V/m3/libraries/t1/notes/team-3.md"; sed -i.bak 's/9 to 5\./10 to 6./' "$TN/team-3.md"; rm -f "$TN"/*.bak "$V/m3/libraries/t1/notes"/*.bak
 sh "$here/sync.sh" push "$V/m3/libraries/t1" b "$V/m3" notes/team-3.md
-check "a conflict is undone and becomes a card for the session, not the owner" '! sh "$here/sync.sh" push "$V/m1/libraries/t1" a "$V/m1" notes/team-3.md && grep -q "^owner: session-a" "$V/m1/board/Library conflict - t1.md" && grep -q "conflict" "$V/m1/libraries/t1/.git/cos-sync" && [ ! -d "$V/m1/libraries/t1/.git/rebase-merge" ] && grep -q "10 to 6" "$TN/team-3.md"'
+check "a conflict is undone and becomes a card for the session, not the owner" '! sh "$here/sync.sh" push "$V/m1/libraries/t1" a "$V/m1" notes/team-3.md && grep -q "^owner: session-a" "$V/m1/board/Sync conflict - t1.md" && grep -q "conflict" "$V/m1/libraries/t1/.git/cos-sync" && [ ! -d "$V/m1/libraries/t1/.git/rebase-merge" ] && grep -q "10 to 6" "$TN/team-3.md"'
 N0=$N; N=$TN; note pending-x "Pending note of a team session" 2026-01-04 "Not saved by central." "none similar"; N=$N0
 hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$V/m1/central" >/dev/null
 N0=$N; N=$TN; note team-leak "Owner salary target" 2026-01-04 "Private." "none similar"; N=$N0
@@ -578,7 +578,7 @@ check "a card past its due date is yellow" 'H gamma | grep -q "^yellow: card pas
 check "central lists what is due or overdue" 'b "$W/central" | grep -q "^- Gamma: was due 2026-01-02"'
 rm "$W/board/Gamma.md"
 fm_set "$G/TRACK.md" deadline "$(fut 3600)"
-check "a deadline under 2 h with the delivery open is red, with the countdown" 'H gamma | grep -q "^red: deadline in [0-9]* min and the delivery is open"'
+check "a deadline under 2 h with the delivery open is red, with the countdown" 'H gamma | grep -Eq "^red: deadline in ([0-9]+ h )?[0-9]+ min and the delivery is open"'
 fm_set "$G/TRACK.md" deadline "$(fut 14400)"
 check "a deadline under 6 h is yellow" 'H gamma | grep -Eq "^yellow: deadline in (3 h 59|4 h 0) min"'
 check "health gives the panel the deadline as a number" 'sh "$here/health.sh" "$W" | awk -F "$(printf "\037")" "\$1 == \"gamma\" { print \$12 }" | grep -q "^[0-9][0-9]*$"'
@@ -588,10 +588,14 @@ fm_set "$G/TRACK.md" deadline "Friday 6pm"
 check "a deadline that is not a date says how to write it" 'H gamma | grep -q "^yellow: deadline .Friday 6pm. in TRACK.md is not a date"'
 fm_set "$G/TRACK.md" deadline ""
 mkdir -p "$W/t3"; printf -- '---\nstage: 1\n---\n## Stage 1: Plan\n- [x] scope | Scope | card: product | needs: - | owner: ok | evidence: scope.md\n- [ ] review-1 | Review | card: reviewer | needs: scope | evidence:\n' > "$W/t3/TRACK.md"
-echo "Scope: login and export" > "$W/t3/scope.md"
-check "an owner item cannot close without the owner OK in its proof" 'T check "$W/t3" | grep -q "^scope closes only with the owner.s OK"'
-echo "Owner OK: 2026-10-23 yes, freeze it" >> "$W/t3/scope.md"
-check "the Owner OK line closes it" '! T check "$W/t3" | grep -q "owner.s OK"'
+echo "Scope: login and export. Owner OK: yes" > "$W/t3/scope.md"
+check "an owner item cannot close on a line the agent wrote" 'T check "$W/t3" | grep -q "^scope closes only with the owner.s OK"'
+check "a project session cannot record the owner OK" '! CLAUDE_PROJECT_DIR="$W/t3" T ok "$W/t3" scope yes 2>/dev/null && [ ! -e "$W/t3/.owner-ok" ]'
+check "the OK is only for items marked owner: ok" '! CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" review-1 yes 2>/dev/null'
+check "central records the owner OK and the item closes" 'CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" scope "yes, freeze it" >/dev/null && ! T check "$W/t3" | grep -q "owner.s OK" && [ ! -w "$W/t3/.owner-ok" ]'
+check "recording the owner OK asks the owner" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/track.sh ok $W/t3 scope yes\"}")" "$W/central" | grep -q "permissionDecision\":\"ask"'
+check "checking the track of a project named booking does not ask" '[ -z "$(h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/track.sh check $W/projects/booking\"}")" "$P")" ]'
+check "agents cannot write the owner OK file" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/t3/.owner-ok\"}")" "$P")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"chmod u+w $W/t3/.owner-ok\"}")" "$P")" = 2 ]'
 check "the hackathon track asks the owner at scope and submit only" '[ "$(grep -c "| owner: ok |" "$here/../templates/tracks/hackathon.md")" = 2 ] && grep -q "^- \[ \] scope .*owner: ok" "$here/../templates/tracks/hackathon.md" && grep -q "^- \[ \] submit .*owner: ok" "$here/../templates/tracks/hackathon.md"'
 touch -t 202001010000 "$G/STATE.md"
 check "health is yellow without a handoff for longer than stale_hours" 'H gamma | grep -q "^yellow: no handoff for more than 48 h"'
@@ -680,5 +684,40 @@ wr() { h "$(ev UserPromptSubmit)" "$P" >/dev/null; h "$(ev PostToolUse ",\"tool_
 check "a path with a comma after TRACK.md still counts as a deliverable" '[ "$(wr "$W/projects/alpha/TRACK.md,x/deck.md")" = 2 ]'
 check "a dot-dot slug is not a control file" '[ "$(wr "$W/projects/../TRACK.md")" = 2 ]'
 check "the real TRACK.md is still a control file" '[ "$(wr "$W/projects/alpha/TRACK.md")" = 0 ]'
+
+# shared workspace: one board for the whole team. Ana and Bia, each with their own copy, one team repo
+SW="$W/sw"; mkdir -p "$SW"; git init -q --bare "$SW/team.git"; git init -q --bare "$SW/plain.git"
+git clone -q "$SW/plain.git" "$SW/plainc" 2>/dev/null; printf x > "$SW/plainc/README"; git -C "$SW/plainc" add -A; git -C "$SW/plainc" -c user.name=a -c user.email=a@b commit -qm x; git -C "$SW/plainc" push -q origin HEAD 2>/dev/null
+check "a shared workspace needs the member name" '! sh "$here/setup.sh" create "$SW/a" --share "$SW/team.git" 2>/dev/null && [ ! -e "$SW/a" ]'
+check "a shared workspace is created and pushed to the team repo" 'sh "$here/setup.sh" create "$SW/a" --share "$SW/team.git" --member Ana | grep -q "^Shared: pushed" && grep -qx "shared: yes" "$SW/a/.chief-of-staff" && git -C "$SW/team.git" ls-tree -r --name-only HEAD | grep -qx board/.gitkeep'
+check "a repo that is not a shared workspace cannot be joined, and leaves nothing" '! sh "$here/setup.sh" join "$SW/x" "$SW/plain.git" --member Bia 2>/dev/null && [ ! -e "$SW/x" ] && ! ls "$SW" | grep -q cos-join'
+check "a teammate joins with their own name" 'sh "$here/setup.sh" join "$SW/b" "$SW/team.git" --member Bia | grep -q "you are Bia" && [ "$(git -C "$SW/b" config cos.member)" = Bia ] && [ ! -w "$SW/b/.chief-of-staff" ]'
+check "a shared workspace takes no other library" 'CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/library.sh" join "$SW/plain.git" 2>&1 | grep -q "shared with the team"'
+turn() { hk "$(ev UserPromptSubmit)" "$1" >/dev/null 2>&1; hk "$(ev Stop ",\"stop_hook_active\":false")" "$1" 2>&1; }
+inteam() { git -C "$SW/team.git" ls-tree -r --name-only HEAD | grep -qxF "$1"; }
+waitteam() { i=0; while [ $i -lt 60 ] && ! inteam "$1"; do i=$((i+1)); sleep 0.1; done; inteam "$1"; }
+PJ="$SW/a/projects/pa"; mkdir -p "$PJ"; sed -e "s/{{PROJECT_NAME}}/pa/" "$here/../templates/project/STATE.md" > "$PJ/STATE.md"; fm_set "$PJ/STATE.md" member Ana
+printf -- '---\nstatus: waiting-owner\nproject: pa\nowner: session-pa\nmember: Ana\n---\n# Pa\n\n## For the owner to decide (central asks, all at once)\n- Ship the demo on Friday? Recommended: yes\n' > "$SW/a/board/Pa.md"
+printf 'aws_key = AKIAABCDEFGHIJKLMNOP\n' > "$PJ/config.txt"
+printf 'not a note\n' > "$SW/a/knowledge/notes/bad-1.md"
+check "a turn end holds back a file with a key, and says so" 'turn "$PJ" | grep -q "config.txt looks like it holds a key or token"'
+check "the board and the project go to the team by themselves" 'waitteam board/Pa.md && waitteam projects/pa/STATE.md'
+check "the key file and a note that failed the gate stay on this computer" '! inteam projects/pa/config.txt && ! inteam knowledge/notes/bad-1.md'
+check "the question goes out with the time it was asked" 'git -C "$SW/team.git" show HEAD:board/Pa.md | grep -q "^asked: 20"'
+rm "$PJ/config.txt" "$SW/a/knowledge/notes/bad-1.md"
+check "the teammate gets the board at session start" 'CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/briefing.sh" >/dev/null; i=0; while [ $i -lt 60 ] && [ ! -f "$SW/b/board/Pa.md" ]; do i=$((i+1)); sleep 0.1; done; [ -f "$SW/b/board/Pa.md" ]'
+check "the one board shows Ana.s project to Bia, with whose it is" 'sh "$here/health.sh" "$SW/b" | awk -F "$(printf "\037")" "\$1 == \"pa\" { print \$13 }" | grep -qx Ana'
+check "Bia.s central does not ask Ana.s question" 'o=$(CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/briefing.sh"); printf "%s" "$o" | grep -q "you are .Bia." && ! printf "%s" "$o" | grep -q "Ship the demo"'
+check "Ana.s central asks it" 'CLAUDE_PROJECT_DIR="$SW/a/central" sh "$here/briefing.sh" | grep -q "^  - Ship the demo on Friday? Recommended: yes"'
+check "the panel knows the workspace is shared and who is looking" 'python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; s = panel.shared(sys.argv[2]); assert s and s[\"member\"] == \"Bia\"" "$here" "$SW/b"'
+PB="$SW/b/projects/pb"; mkdir -p "$PB"; sed -e "s/{{PROJECT_NAME}}/pb/" "$here/../templates/project/STATE.md" > "$PB/STATE.md"; fm_set "$PB/STATE.md" member Bia
+fm_set "$PB/STATE.md" dispatch ready; fm_set "$SW/b/projects/pa/STATE.md" dispatch ready
+check "a teammate.s dispatcher runs only their own projects" 'CLAUDE_BIN="$stub" sh "$here/dispatcher.sh" "$SW/b"; grep -q " run pb" "$SW/b/.dispatch.log" && ! grep -q " run pa" "$SW/b/.dispatch.log"'
+git -C "$SW/b" checkout -q -- projects/pa/STATE.md
+fm_set "$SW/a/board/Pa.md" due 2026-11-01; turn "$SW/a/central" >/dev/null
+i=0; while [ $i -lt 60 ] && ! git -C "$SW/team.git" show HEAD:board/Pa.md | grep -q "due: 2026-11-01"; do i=$((i+1)); sleep 0.1; done
+fm_set "$SW/b/board/Pa.md" due 2026-11-02; turn "$SW/b/central" >/dev/null
+check "two members changing the same card get a conflict card, and nothing is lost" 'i=0; while [ $i -lt 60 ] && [ ! -f "$SW/b/board/Sync conflict - b.md" ]; do i=$((i+1)); sleep 0.1; done; [ -f "$SW/b/board/Sync conflict - b.md" ] && grep -q "due: 2026-11-02" "$SW/b/board/Pa.md" && git -C "$SW/team.git" show HEAD:board/Pa.md | grep -q "due: 2026-11-01"'
+check "a closed card leaves the team board" 'inteam board/Pa.md && rm "$SW/a/board/Pa.md" && { turn "$SW/a/central" >/dev/null; i=0; while [ $i -lt 60 ] && inteam board/Pa.md; do i=$((i+1)); sleep 0.1; done; ! inteam board/Pa.md; }'
 
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }

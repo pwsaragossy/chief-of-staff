@@ -32,6 +32,8 @@ name=; [ "${1:-}" = --lib ] && { name=${2:-}; shift 2 || usage; }
 mine=$(cos_libname "$root" "$dir")   # the session's own library
 setlib() { name=$1; lib=$(cos_libpath "$root" "$name"); state=$?; kind=team; [ "$name" = personal ] && kind=personal; }
 setlib "${name:-$mine}"
+# a shared workspace is the team's: its knowledge/ is already the team library, and nothing personal joins it
+case ${1:-} in join|use|offload) cos_shared "$root" && die "this workspace is shared with the team: its library (knowledge/) is already the team's, so it takes no other library. Personal notes belong in a personal workspace." ;; esac
 central_only() { case ${dir#"$root"} in /central|/central/*) ;; *) die "only central $1, after the owner agrees (this session is in ${dir#"$root"/})" ;; esac; }
 today=$(date +%F)
 idre='^[a-z0-9][a-z0-9-]\{1,79\}$'

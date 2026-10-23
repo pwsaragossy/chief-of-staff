@@ -7,7 +7,8 @@
 #   baseline <project_dir>  records the item count when the project opens (new-project runs it once)
 # delivery: N in the front matter is the stage that delivers the original request (default: the last stage).
 # Item line: - [ ] id | deliverable | card: role | needs: a, b | evidence: path   ([x] done, [-] n/a + why:)
-# "| owner: ok" marks an item that closes only with the owner's OK: its proof file holds an "Owner OK:" line.
+# "| owner: ok" marks an item that closes only with the owner's OK, recorded in <project>/.owner-ok by
+#   track.sh ok <project_dir> <id> <the owner's words>   (central only; the hook asks the owner to approve it)
 # No TRACK.md: silent, exit 0 (old projects keep working).
 . "$(dirname "$0")/lib.sh"
 
@@ -131,9 +132,10 @@ check() {
              *) if [ ! -e "$dir/$ev" ] && [ -e "$dir/${ev%% *}" ]; then echo "$id: evidence must be the file path alone (found \"$ev\"); write evidence: ${ev%% *} and put any note in that file"
                 elif [ ! -e "$dir/$ev" ]; then echo "$id is marked done, but its evidence $ev does not exist"
                 elif [ -L "$dir/$ev" ] || [ ! -f "$dir/$ev" ]; then echo "$id: evidence $ev must be a regular file, not a folder or a link"
-                elif [ ! -s "$dir/$ev" ]; then echo "$id: evidence $ev is empty"
-                elif [ "$own" = ok ] && ! grep -q '^Owner OK: ' "$dir/$ev"; then echo "$id closes only with the owner's OK: put the question on the project card; central asks the owner and writes their answer in $ev as a line 'Owner OK: <date> <their words>'"; fi ;;
+                elif [ ! -s "$dir/$ev" ]; then echo "$id: evidence $ev is empty"; fi ;;
            esac; fi
+           [ "$own" = ok ] && ! grep -q "^$id$(printf '\t')" "$dir/.owner-ok" 2>/dev/null &&
+             echo "$id closes only with the owner's OK: put the question on the project card; central records the answer with track.sh ok, which the owner approves"
            for n in $(printf '%s' "$needs" | tr ',' ' '); do
              [ "$n" = - ] && continue
              case $(mark_of "$n") in
@@ -166,6 +168,15 @@ case $cmd in
         if (st == "ready") { k = split(f[6], a, /, */); for (j = 1; j <= k; j++) if (a[j] != "-" && a[j] != "" && m[a[j]] != "x" && m[a[j]] != "-") st = "blocked" }
         print "I\037" f[2] "\037" st "\037" f[4] "\037" f[5] "\037" f[6] "\037" desc[f[4]] } }' - "$t"
     ;;
+  ok)
+    # the owner's OK on an item: only central records it, and the PreToolUse hook makes the owner approve the command
+    case ${CLAUDE_PROJECT_DIR:-} in */central|*/central/*) ;; *) echo "track.sh ok: only central records the owner's OK" >&2; exit 1 ;; esac
+    id=${3:-}; shift 3 2>/dev/null || { echo "usage: track.sh ok <project_dir> <item> <the owner's words>" >&2; exit 2; }
+    printf '%s\n' "$rows" | awk -F "$US" -v i="$id" '$1 == "I" && $4 == i && $9 == "ok" { f = 1 } END { exit !f }' ||
+      { echo "track.sh ok: $id is not an item of this track marked owner: ok" >&2; exit 1; }
+    o="$dir/.owner-ok"; [ -f "$o" ] && chmod u+w "$o"
+    printf '%s\t%s\t%s\n' "$id" "$(date '+%F %H:%M')" "$(printf '%s' "$*" | tr -d '\000-\037' | cut -c1-300)" >> "$o"; chmod 444 "$o"
+    echo "recorded the owner's OK on $id" ;;
   baseline)
     # once: a second run would reset the yardstick that shows items removed or the delivery line moved
     [ -n "$(fm_get "$t" baseline)" ] && { echo "baseline is already recorded in TRACK.md; it is not rewritten" >&2; exit 1; }
@@ -190,5 +201,5 @@ EOF
     if [ -z "$now" ]; then now="none, the stage can pass its gate"; [ -n "$wait" ] && now="nothing until the prerequisites below are closed"; fi
     printf 'Track %s, stage %s of %s (%s), delivery line at stage %s. Open now: %s.%s\n' "$(fm_get "$t" track)" "$cur" "$stages" "$sname" "$del" \
       "$now" "${wait:+ Waiting on prerequisites: $wait.}" ;;
-  *) echo "usage: track.sh check|brief|status|items|baseline <project_dir>" >&2; exit 2 ;;
+  *) echo "usage: track.sh check|brief|status|items|baseline <project_dir> | track.sh ok <project_dir> <item> <words>" >&2; exit 2 ;;
 esac
