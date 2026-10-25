@@ -124,13 +124,14 @@ h "$(ev UserPromptSubmit)" "$P" >/dev/null
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/pitch.md\"}")" "$P"
 check "a deliverable without specialists cannot end" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
 # hackathon pace: one specialist is enough for internal work, nothing is still not enough
-chmod u+w "$W/.chief-of-staff"; cp "$W/.chief-of-staff" "$W/marker.bak"; echo "pace: fast" >> "$W/.chief-of-staff"
+chmod u+w "$W/.chief-of-staff"; cp "$W/.chief-of-staff" "$W/marker.bak"; echo "pace: fast" >> "$W/.chief-of-staff"; ( . "$here/lib.sh"; cos_cfgsave "$W" )
 check "hackathon pace: the prompt says the reviewer is for what goes outside" 'h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "reviewer runs only on what goes outside"'
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/plan.md\"}")" "$P"
 check "hackathon pace: a deliverable with no specialist still cannot end" 'h "$(ev Stop ",\"stop_hook_active\":false")" "$P" 2>&1 | grep -q "no specialist"'
 h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher ...\"}")" "$P"
 check "hackathon pace: one specialist without the reviewer ends freely" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
-cp "$W/marker.bak" "$W/.chief-of-staff"; rm -f "$W/marker.bak"
+check "a pace: change nobody recorded shows at the turn end" '( . "$here/lib.sh"; [ "$(cat "$(cos_cfgrec "$W")")" = "$(cos_cfg "$W")" ] ) && cp "$W/marker.bak" "$W/marker.x" && ( . "$here/lib.sh"; [ "$(cat "$(cos_cfgrec "$W")")" != "$({ cat "$W/marker.x"; } | cksum | tr -d " \t")" ] )'
+cp "$W/marker.bak" "$W/.chief-of-staff"; rm -f "$W/marker.bak" "$W/marker.x"; ( . "$here/lib.sh"; cos_cfgsave "$W" )
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/pitch.md\"}")" "$P"
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
