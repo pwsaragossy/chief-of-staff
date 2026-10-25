@@ -420,7 +420,7 @@ const T=new URLSearchParams(location.search).get("t");
 const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e};
 const ago=m=>m<60?m+" min":m<1440?Math.floor(m/60)+" h "+(m%60)+" min":Math.floor(m/1440)+" d";
 function empty(box,text){box.replaceChildren(el("div","empty",text))}
-const openMaps=new Set();let last=null,graphOpen=false,origin="",libName="personal";
+let last=null,graphOpen=true,origin="",libName="personal";
 const SVG=t=>document.createElementNS("http://www.w3.org/2000/svg",t);
 function drawGraph(L){
   const W=900,H=440,nodes=L.nodes.filter(n=>!origin||n.origin===origin),at=new Map();
@@ -479,9 +479,7 @@ function render(){
       const diff=p.baseline!==""?p.total-p.baseline:0,moved=p.baseline_delivery!==""&&p.baseline_delivery!==p.delivery;
       body.append(b,el("div","muted",p.closed+" of "+p.total+" deliverables closed"+(diff>0?", "+diff+" added since opening":"")+(diff<0?", "+(-diff)+" removed since opening":"")+(moved?", delivery line moved from stage "+p.baseline_delivery+" to "+p.delivery:"")+
         (p.delivered?". Original request delivered.":". "+p.brief)));
-      const t=el("button","toggle",openMaps.has(p.slug)?"Hide map":"Map");
-      t.onclick=()=>{openMaps.has(p.slug)?openMaps.delete(p.slug):openMaps.add(p.slug);render()};body.append(t);
-      if(openMaps.has(p.slug))body.append(drawMap(p))}
+      body.append(drawMap(p))}
     else if(p.next)body.append(el("div","muted","Next: "+p.next));
     (p.progress||[]).forEach(g=>body.append(el("div","muted","Latest on "+g.card+" ("+g.when+", "+g.who+"): "+g.what)));
     return row}));
@@ -502,7 +500,6 @@ function render(){
     if(cur&&cur.sync!=="-"){const y=el("div","","Last sync: "+cur.sync);y.style.color=cur.sync_color==="green"?"var(--muted)":"var(--"+cur.sync_color+")";hb.append(y)}}
   if(L.state!=="online"){hb.append(el("div","name",L.state==="offline"?"Library offline":"Library error"),el("div","muted",L.message));B.replaceChildren(head)}
   else{hb.append(el("div","name",L.total+" notes"+(L.retired?", "+L.retired+" retired":"")),el("div","muted",L.path));
-    const t=el("button","toggle",graphOpen?"Hide graph":"Graph");t.onclick=()=>{graphOpen=!graphOpen;render()};hb.append(t);
     if(graphOpen&&L.origins.length>1){const s=el("select");s.setAttribute("aria-label","Origin");[["","All origins"],...L.origins.map(o=>[o,o])].forEach(([v,x])=>{const o=el("option","",x);o.value=v;if(v===origin)o.selected=true;s.append(o)});
       s.onchange=()=>{origin=s.value;render()};hb.append(s)}
     const parts=[head];if(graphOpen&&L.nodes.length){parts.push(drawGraph(L));if(L.total>L.nodes.length)parts.push(el("div","empty","Showing the "+L.nodes.length+" most linked notes of "+L.total+"."))}
