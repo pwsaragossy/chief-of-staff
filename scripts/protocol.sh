@@ -198,7 +198,9 @@ $p"; fi ;;
             gv=$(printf '%s' "$lc" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | head -n 1 | LC_ALL=C awk "$GV")
             # grep -q exits 2 on a broken pattern: count that as a match, never as a pass
             hit() { grep -Eq "$LIT|$GLOB"; [ $? != 1 ]; }
+            # the names also as the shell joins them (.owner-"ok" is .owner-ok): gv marks that quote as a path start
             sus=; printf '%s\n' "$gv" | hit && sus=1
+            printf '%s\n' "$uq" | grep -Eq "$LIT"; [ $? != 1 ] && sus=1
             # $'\056library': only a numeric, \x or \u escape can spell a dot or a letter ($'a\nb' cannot)
             printf '%s' "$cq" | grep -Eq "\\\$'[^']*\\\\[0-7xu]" && sus=1
             # a brace builds names: expand every one, nested and ranges too, and test what it makes. A range over
@@ -257,11 +259,11 @@ $p"; fi ;;
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this records YOUR OK on a project step (scope freeze, submission, or the target and check, which approves and later runs the check command shown in its output). Only approve if you gave that OK."}}'; exit 0
               fi
               # a script called with a list of words (subprocess.run([sh,track.sh,ok]), spawn(sh,[library.sh,use])):
-              # no space after its name, so its subcommand may be any later word. A grep runs nothing (unless it has a
-              # filter: ugrep --filter runs a command). With a space after the name the word right after it is the
+              # no space after its name, so its subcommand may be any later word. A plain grep runs nothing (not with a
+              # filter, ugrep --filter runs a command, nor with $(...), backticks or <(...) inside). With a space after the name the word right after it is the
               # subcommand, handled above (track.sh dispatches on $1 only, so sh track.sh x y ok records nothing)
               segs=$(printf '%s\n' "$nq" | tr ';&|' '\n\n\n')
-              case $nq in *--filter*|*--pre*) ;; *) segs=$(printf '%s\n' "$segs" | grep -Ev '^[ (]*([^ ]*/)?[ef]?grep ') ;; esac
+              case $nq in *--filter*|*--pre*) ;; *) segs=$(printf '%s\n' "$segs" | grep -Ev '^[ (]*([^ ]*/)?[ef]?grep [^$`(){}<>]*$') ;; esac
               if printf '%s\n' "$segs" | grep -Eq 'track\.sh[^ a-z0-9_.-](.*[^a-z0-9_.-])?ok([^a-z0-9_.-]|$)'; then
                 case $rel in central|central/*) ;; *) echo "Blocked by chief-of-staff: only the central session records the owner's OK. Write the request on the project's card; central asks the owner. (To read track.sh, use the Read or Grep tool.)" >&2; exit 2 ;; esac
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this may record YOUR OK on a project step. Only approve if you gave that OK."}}'; exit 0
