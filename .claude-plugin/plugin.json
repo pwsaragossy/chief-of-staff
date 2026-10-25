@@ -1,6 +1,6 @@
 {
   "name": "chief-of-staff",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "An AI chief of staff for Claude Code: one door to the owner, a fixed project playbook, standard handoffs between sessions, senior specialists with an independent reviewer, and a knowledge base that gets used.",
   "author": { "name": "chief-of-staff maintainers" }
 }
