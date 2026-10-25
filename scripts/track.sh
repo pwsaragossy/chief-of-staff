@@ -271,7 +271,7 @@ case $cmd in
     ;;
   ok)
     # the owner's OK on an item: only central records it, and the PreToolUse hook makes the owner approve the command
-    case ${CLAUDE_PROJECT_DIR:-} in */central|*/central/*) ;; *) echo "track.sh ok: only central records the owner's OK" >&2; exit 1 ;; esac
+    case ${CLAUDE_PROJECT_DIR:-$PWD} in */central|*/central/*) ;; *) echo "track.sh ok: only central records the owner's OK" >&2; exit 1 ;; esac
     id=${3:-}; shift 3 2>/dev/null || { echo "usage: track.sh ok <project_dir> <item|check|delivery> <the owner's words>" >&2; exit 2; }
     case $id in
       check) [ -n "$has_tc" ] && [ -n "$tgt" ] && [ -n "$chk" ] || { echo "track.sh ok: write target: and check: in TRACK.md first" >&2; exit 1; } ;;

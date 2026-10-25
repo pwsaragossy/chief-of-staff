@@ -119,7 +119,9 @@ $p"; fi ;;
           *.md\"*|*.html\"*|*.pptx\"*|*.docx\"*|*.pdf\"*) case $in in *STATE.md\"*|*"/board/"*) ;; *) ctl=; fp=$(jget file_path); r=${fp#"$root/projects/"}
               # only a project's own TRACK.md / DELIVERY.md (projects/<slug>/FILE) is a control file; the path comes from file_path, not from the content
               # jget stops at , } or a quote: trust fp only if the raw input closes the string right after it
-              case $in in *"\"file_path\":\"$fp\""*|*"\"file_path\": \"$fp\""*) ;; *) r= ;; esac
+              case $in in *"\"file_path\":\"$fp\""*|*"\"file_path\": \"$fp\""*)
+                # the workspace's own settings and Claude's memory (an owner preference) are not deliverables
+                case $fp in */CLAUDE.md|*/.claude/*|"$root/central/"*|"$root/specialists/"*|"$root/ROUTING.md") ctl=1 ;; esac ;; *) r= ;; esac
               case $r in */*/*|.*) ;; */TRACK.md|*/DELIVERY.md) [ "$r" != "$fp" ] && ctl=1 ;; esac
               [ -n "$ctl" ] || mark deliverable ;; esac ;;
         esac ;; esac ;;
@@ -167,8 +169,12 @@ $p"; fi ;;
             case $cq in *"\$'"*) sus=1 ;; esac   # $'\056library' (quotes are gone from uq)
             # whole words only: a folder named "firmware" or a random temp name is not rm
             # 2>&1 and >/dev/null write nothing
-            case $sus in 1) case $(printf '%s' "$uq" | sed 's|[0-9]*>&[0-9]||g; s|[0-9]*>> */dev/null||g; s|[0-9]*> */dev/null||g') in *">"*) blk=1 ;; *) printf ' %s \n' "$uq" |
-              grep -Eq '[^a-z0-9_.-](tee|sed|mv|cp|rm|perl[0-9.]*|python[0-9.]*|ln|dd|install|rsync|touch|g?awk|truncate|chmod|chflags|unlink|node|ruby|php|git|ed|ex)([^a-z0-9_.-]|$)' && blk=1 ;; esac ;; esac
+            # reading them is fine: sed without -i or a w/e command, awk without system or a pipe out, and
+            # git log/show/status/blame/ls-files/cat-file/rev-parse/diff (no --output) count as reads
+            case $sus in 1) case $(printf '%s' "$uq" | sed 's|[0-9]*>&[0-9]||g; s|[0-9]*>> */dev/null||g; s|[0-9]*> */dev/null||g') in *">"*) blk=1 ;; *)
+              printf ' %s \n' "$uq" | grep -Eq '[^a-z0-9_.-]sed( .*)?( -[a-z]*i|--in-place|[[:space:];{}/0-9$!][we]([^a-z0-9_-]|$))|system|--output|\| *(ba|da|z)?sh([^a-z0-9_.-]|$)' && blk=1
+              printf ' %s \n' "$uq" | sed -E 's/(^|[^a-z0-9_.-])(sed|g?awk)([^a-z0-9_.-]|$)/\1 \3/g; s/(^|[^a-z0-9_.-])git( +-C +[^ ]+)* +(log|show|status|blame|ls-files|cat-file|rev-parse|diff)([^a-z0-9_.-]|$)/\1 \4/g' |
+              grep -Eq '[^a-z0-9_.-](tee|mv|cp|rm|perl[0-9.]*|python[0-9.]*|ln|dd|install|rsync|touch|truncate|chmod|chflags|unlink|node|ruby|php|git|ed|ex)([^a-z0-9_.-]|$)' && blk=1 ;; esac ;; esac
             if [ -z "$blk" ]; then
               # ponytail: a word match, not a shell parser (a renamed copy of library.sh is not seen). Quotes,
               # backslashes and tabs are dropped first, so u''se or "join" count; a subcommand from a variable,

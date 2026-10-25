@@ -841,4 +841,13 @@ check "a closed card leaves the team board" 'inteam "board/Pa demo.md" && rm "$S
 git -C "$SW/evil" checkout -q --orphan other && git -C "$SW/evil" rm -rqf . && mkdir -p "$SW/evil/.CLAUDE" && printf '{}\n' > "$SW/evil/.CLAUDE/settings.json" && git -C "$SW/evil" add -A && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm other && git -C "$SW/evil" push -q origin other 2>/dev/null
 check "a remote with no shared history is refused, not pulled" 'git -C "$SW/b" fetch -q && git -C "$SW/b" branch -q -u origin/other && sh "$here/sync.sh" pull "$SW/b"; [ ! -e "$SW/b/.CLAUDE/settings.json" ] && grep -q "pull refused: .*changes that cannot be listed" "$SW/b/.git/cos-sync"'
 
+# central in real use: the Bash tool has no CLAUDE_PROJECT_DIR, reads of protected files pass, settings are no deliverable
+OP="$W/projects/okp"; mkdir -p "$OP"; cp "$here/../templates/tracks/hackathon.md" "$OP/TRACK.md"; printf -- '---\nstatus: in-progress\n---\n' > "$OP/STATE.md"
+check "track.sh ok works from central.s shell, without CLAUDE_PROJECT_DIR" '(cd "$W/central" && env -u CLAUDE_PROJECT_DIR sh "$here/track.sh" ok "$OP" scope yes >/dev/null 2>&1) && [ -e "$OP/.owner-ok" ]'
+check "and stays refused from a project.s shell" '! (cd "$OP" && env -u CLAUDE_PROJECT_DIR sh "$here/track.sh" ok "$OP" submit yes >/dev/null 2>&1)'
+bq() { rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$1\"}")" "$W/central"; }
+check "reading a protected file is not blocked" '( for c in "sed -n 1p projects/p/.owner-ok" "awk 1 projects/p/.owner-ok" "git log -- projects/p/.library" "cat .chief-of-staff | sed -n 2p" "git show HEAD:.chief-of-staff"; do [ "$(bq "$c")" = 0 ] || { echo "blocked: $c"; exit 1; }; done )'
+check "writing one through sed, awk or git still is" '( for c in "sed -i s/a/b/ .owner-ok" "sed -n w/x .owner-ok" "sed 1w.owner-ok x" "git checkout .chief-of-staff" "git diff --output=.owner-ok" "awk BEGIN{system(x)} .owner-ok" "cat .owner-ok | sh"; do [ "$(bq "$c")" = 2 ] || { echo "not blocked: $c"; exit 1; }; done )'
+check "saving a preference or a workspace setting needs no specialists" '( for f in "$HOME/.claude/projects/x/memory/pref.md" "$W/central/CLAUDE.md" "$W/central/prefs.md" "$W/ROUTING.md" "$W/specialists/legal.md"; do h "$(ev UserPromptSubmit)" "$W/central" >/dev/null; h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$f\"}")" "$W/central" >/dev/null 2>&1; [ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$W/central")" = 0 ] || { echo "asked specialists: $f"; exit 1; }; done )'
+
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }
