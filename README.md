@@ -1,7 +1,7 @@
 # chief-of-staff
 
 An AI chief of staff for [Claude Code](https://code.claude.com): a small company of agents that
-works for one owner, or for a team. Version 0.4.
+works for one owner, or for a team. Version 0.4.4.
 
 What it gives you:
 
@@ -21,7 +21,9 @@ What it gives you:
   role cards (`specialists/`: researcher, product, engineer, designer, finance, legal, marketing,
   security, reviewer) say what each senior specialist gathers first, its method, its toolbox and when to use
   each tool, what it never skips, its evidence standard and output format. A substantive turn
-  cannot end without at least one specialist and the reviewer.
+  cannot end without at least one specialist and the reviewer. In hackathon pace (`pace: fast` in
+  the workspace's `.chief-of-staff`, set by the owner) internal work needs one specialist, and the
+  reviewer runs only on what goes outside: the submission, the video, the README, messages to judges.
 - **A company library (second brain), enforced by hooks.** One note per file in `knowledge/notes/`,
   readable in Obsidian: findings, decisions, how-tos and formats, options, topics. Each note carries
   its origin (project or research) but every project uses every note. Links are inline `[[id]]`;
@@ -301,3 +303,7 @@ What is ours, with no equivalent found in ECC:
 sh scripts/selftest.sh
 claude plugin validate .
 ```
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
