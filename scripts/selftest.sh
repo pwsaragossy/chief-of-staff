@@ -688,6 +688,10 @@ printf -- "---\nstatus: in-progress\nproject: p\nupdated: 2026-10-25\n---\n## Su
 printf -- "---\nstatus: waiting-owner\nproject: p\n---\n- 2026-10-25 11:50 UTC (session-p): track 8/22\n" > "$d/board/b.md"
 printf -- "---\nstatus: done\nproject: p\n---\n- 2026-10-26 09:00 UTC (x): closed card\n" > "$d/board/c.md"
 python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; g = panel.progress(sys.argv[2], \"p\"); assert [x[\"card\"] for x in g] == [\"b\", \"a\"], g; assert g[1][\"what\"] == \"contract and 16 tests\" and g[1][\"who\"] == \"agent-a\", g" "$here" "$d"; r=$?; rm -rf "$d"; exit $r )'
+check "panel lists ## Tasks lines by person, from open cards only" '( d=$(mktemp -d); mkdir -p "$d/board"; touch "$d/.chief-of-staff"
+printf -- "---\nstatus: in-progress\nproject: p\n---\n## Tasks\n- (template line)\n- Leo, now: deploy by 13:00\n- Vhendala: video cut\n- check the page\n## For the owner to decide\n- Pedro: title A or B?\n" > "$d/board/a.md"
+printf -- "---\nstatus: done\nproject: p\n---\n## Tasks\n- Leo: old task\n" > "$d/board/b.md"
+python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; g = {x[\"who\"]: [i[\"task\"] for i in x[\"items\"]] for x in panel.tasks(sys.argv[2])}; assert g == {\"Leo\": [\"deploy by 13:00\"], \"Vhendala\": [\"video cut\"], \"Unassigned\": [\"check the page\"]}, g" "$here" "$d"; r=$?; rm -rf "$d"; exit $r )'
 # panel: token, Host check, api, import (only where python3 and curl exist)
 if command -v python3 >/dev/null && command -v curl >/dev/null; then
   python3 "$here/panel.py" "$W" > "$W/panel.out" 2>&1 &

@@ -14,6 +14,9 @@ updated: {{DATE}}
 
 State in [STATE.md](../projects/{{PROJECT_SLUG}}/STATE.md).
 
+## Tasks
+- (one line per task: who: what, by when. The panel lists them by person, with no wait timer)
+
 ## For the owner to decide (central asks, all at once)
 - (one line per open question, recommendation first; empty when nothing waits on the owner)
 

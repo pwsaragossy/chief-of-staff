@@ -103,6 +103,42 @@ def progress(root, slug, keep=3):
     return out[:keep]
 
 
+def tasks(root):
+    """Every open card's "## Tasks" lines ("Leo: deploy by 13:00"), grouped by who does them. Unlike
+    "For the owner to decide" they carry no wait timer and no colour: they are work, not questions."""
+    who = {}
+    board = os.path.join(root, "board")
+    try:
+        names = sorted(n for n in os.listdir(board) if n.endswith(".md"))
+    except OSError:
+        return []
+    for n in names:
+        path = os.path.join(board, n)
+        fm = front_matter(path)
+        if fm.get("status", "") in ("done", "closed", "cancelled", "dropped"):
+            continue
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                lines = f.read().split("\n")
+        except OSError:
+            continue
+        on = False
+        for line in lines:
+            if line.startswith("## "):
+                on = line.strip().lower() == "## tasks"
+                continue
+            t = re.sub(r"^\s*[-*] +", "", line).strip() if on else ""
+            if not t or t.startswith("("):
+                continue
+            t = re.sub(r"[\x00-\x1f`*]", "", t)
+            name, sep, rest = t.partition(":")
+            if not sep or len(name) > 40:
+                name, rest = "Unassigned", t
+            name = name.split(",")[0].strip() or "Unassigned"
+            who.setdefault(name, []).append({"task": rest.strip()[:300], "card": n[:-3], "project": fm.get("project", "")})
+    return [{"who": k, "items": v} for k, v in sorted(who.items(), key=lambda kv: (kv[0] == "Unassigned", kv[0].lower()))]
+
+
 def libraries(root):
     """Every library (personal and each team's): name, folder, state, notes, last sync."""
     out = []
@@ -205,6 +241,7 @@ def snapshot(root, libname="personal"):
     rank = {"red": 2, "yellow": 1, "green": 0}
     overall = max([p["color"] for p in projects] + [lib["color"]], key=lambda c: rank.get(c, 0))
 
+    todo = tasks(root)
     cards = []  # what waits on the owner, from health.sh (the one place that times and colors it)
     for line in rows(sh("health.sh", "cards", root)):
         f = (line.split(US) + [""] * 11)[:11]
@@ -232,7 +269,7 @@ def snapshot(root, libname="personal"):
     sh_ws = shared(root)
     rank_c = [c["color"] for c in cards] + [x["sync_color"] for x in libs] + ([sh_ws["color"]] if sh_ws else [])
     overall = max([overall] + rank_c, key=lambda c: rank.get(c, 0))
-    return {"library": lib, "libs": libs, "workspace": root, "overall": overall, "projects": projects, "cards": cards,
+    return {"library": lib, "libs": libs, "workspace": root, "overall": overall, "projects": projects, "cards": cards, "tasks": todo,
             "counts": counts, "shared": sh_ws,
             "inbox": n_inbox, "notes": n_notes, "time": time.strftime("%H:%M:%S")}
 
@@ -301,6 +338,7 @@ select{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--line);
 <div id="ws" class="muted"></div>
 <h2>Projects</h2><div id="projects" class="box"></div>
 <h2>Waiting on the owner</h2><div id="cards" class="box"></div>
+<h2>Tasks</h2><div id="tasks" class="box"></div>
 <h2>Import knowledge</h2>
 <div id="drop" class="box">Drop files here or click to choose<input id="file" type="file" multiple hidden></div>
 <form id="linkform"><input id="link" type="text" placeholder="Link or text" aria-label="Link or text"><button>Save</button></form>
@@ -382,6 +420,10 @@ function render(){
     b.append(el("div","name",c.title+(c.project?" ("+c.project+")":"")+(c.member?" · "+c.member:"")));
     if(c.questions.length){const u=el("ul","q");c.questions.forEach(x=>u.append(el("li","",x)));b.append(u)}
     row.append(el("span",c.color==="red"?"":"muted","Waiting "+ago(c.waited)+(c.color==="red"?", past "+c.limit+" min":"")));return row}));
+  const K=document.getElementById("tasks");
+  if(!(d.tasks||[]).length)empty(K,"No tasks");else K.replaceChildren(...d.tasks.map(g=>{
+    const row=el("div","row"),b=el("div","grow");row.append(b);b.append(el("div","name",g.who));
+    const u=el("ul","q");g.items.forEach(x=>u.append(el("li","",x.task+" · "+x.card)));b.append(u);return row}));
   document.getElementById("lib").textContent=d.inbox+" item(s) in the inbox, "+d.notes+" note(s) in the library.";
   const B=document.getElementById("library"),L=d.library,head=el("div","row"),hb=el("div","grow");head.append(el("span","dot "+L.color),hb);
   if(d.libs.length>1){const s=el("select");s.setAttribute("aria-label","Library");d.libs.forEach(x=>{const o=el("option","",x.name+(x.name==="personal"?"":" (team)")+", "+x.notes+" notes");o.value=x.name;if(x.name===L.name)o.selected=true;s.append(o)});
