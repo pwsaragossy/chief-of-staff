@@ -857,9 +857,15 @@ quiet() { o=$(h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$(JQ "$
 check "searching the library through a variable, grepping track.sh, regexes and code braces pass silently" '( for c in "L=/x/scripts/library.sh; cd /w; sh \"\$L\" search intake form; echo ---; sh \"\$L\" search paste" "grep -n -A40 \"^  ok)\" /x/track.sh | head -70" "rm -rf \"\$D\"; python3 - <<EOF
 import re
 paras = re.findall(r\"<a:p>.*?</a:p>\", x)
-EOF" "awk \"{for(i=1;i<=NF;i++){split(\$i,a,\\\"=\\\");if(a[2]+0>0)c[a[1]]++}}\" .protocol.log" "chmod +x d/gh; python3 -c \"print({1: 2, 3: 4})\" > d/dup.json" "python3 - <<EOF
-s = s.replace(\"see library.sh to use it\", \"\")
-EOF"; do quiet "$c" || { echo "not quiet: $c"; exit 1; }; done )'
+EOF" "awk \"{for(i=1;i<=NF;i++){split(\$i,a,\\\"=\\\");if(a[2]+0>0)c[a[1]]++}}\" .protocol.log" "chmod +x d/gh; python3 -c \"print({1: 2, 3: 4})\" > d/dup.json"; do quiet "$c" || { echo "not quiet: $c"; exit 1; }; done )'
 check "a library.sh held in a variable still asks for use and for a subcommand from a variable" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$(JQ "L=/x/library.sh; sh \"\$L\" use t1")")" "$W/central" | grep -q "\"ask\"" && h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$(JQ "T=/x/track.sh; sh \$T ok p scope yes")")" "$W/central" | grep -q "\"ask\""'
+
+# the forms a security review found: whatever the old whole-command rules caught still asks or blocks
+asks() { h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$(JQ "$1")")" "$W/central" 2>/dev/null | grep -q "\"ask\""; }
+check "library.sh and track.sh run in any form still ask" '( for c in "/bin/sh /x/library.sh use t1" "if sh /x/library.sh use t1; then :; fi" "timeout 5 sh /x/library.sh --lib x join u" "sh /x/library.sh --lib x \\
+use t1" "echo use | xargs sh /x/library.sh" "echo ok | xargs sh /x/track.sh" "cat /x/track.sh | sh -s ok p scope yes" "python3 - <<EOF
+s = s.replace(\"see library.sh to use it\", \"\")
+EOF"; do asks "$c" || { echo "no ask: $c"; exit 1; }; done ) && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$(JQ "echo ok | xargs sh /x/track.sh")")" "$OP")" = 2 ]'
+check "a glob that reaches a protected file blocks with any writer" '( for c in "python3 -c \"import glob,os; os.chmod(glob.glob(\\\".ow*\\\")[0], 420)\"" "sed -i s/a/b/ .ow*" "cat x >.ow*" "echo x >.[o]wner-ok" "git checkout -- .[c]hief-of-staff" "perl -pi -e s/a/b/ projects/a/?library"; do [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$(JQ "$c")")" "$W/central")" = 2 ] || { echo "not blocked: $c"; exit 1; }; done )'
 
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }

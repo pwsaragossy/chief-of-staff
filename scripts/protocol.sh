@@ -162,53 +162,48 @@ $p"; fi ;;
             # the command alone, JSON escapes undone enough for matching (\t, \n, \" become plain)
             cq=$(printf '%s' "$lc" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | sed 's/\\[tn]/ /g; s/\\"/"/g' | head -n 1)
             uq=$(printf '%s' "$cq" | tr -d "\"'\\\\")
-            # the names (sus=1), or a glob or brace that could spell them (.[c]hief, .l*, ?library, {.,x}library: sus=2)
+            # the names, or a glob or brace that could spell them (.[c]hief, .l*, ?library, {.,x}library)
             # ponytail: a name built in a variable (a=.chi; ...${a}ef) is not seen; the files are read-only on disk
             sus=; case $uq in *.chief*|*.library*|*cos-foreign*|*cos-cfg*|*owner-ok*|*owner-items*) sus=1 ;; esac   # not "chief-of-staff": the plugin's own folder has that name
             case $cq in *"\$'"*) sus=1 ;; esac   # $'\056library' (quotes are gone from uq)
-            # a regex .* (foo.*bar) or a code brace ({a: 1, b: 2}) is not a glob: only a path-start glob or a
-            # brace that holds or builds a dotted name counts
-            [ -z "$sus" ] && printf '%s\n' "$uq" | grep -Eq '(^|[ /=])\.[][?*]|(^|[^a-z0-9_.-])\.(c(h(i(e(f)?)?)?)?|l(i(b(r(a(r(y)?)?)?)?)?)?)([^a-z0-9_-]|$)|[][?*](l?ibrary|c?hief)|(^|[^$])\{[^{}]*\.[^{}]*,[^{}]*\}|(^|[^$])\{[^{}]*,[^{}]*\.[^{}]*\}|(^|[^a-z0-9_])\.[a-z-]*\{[^{}]*,[^{}]*\}|\{[^{}]*,[^{}]*\}[a-z-]*(library|chief|ok|items)|\.o[a-z-]*[][?*]|[][?*][a-z]*-(ok|items)([^a-z0-9_-]|$)' && sus=2
+            # a regex .* inside a word (foo.*bar, (.*?), <a:p>.*) or a code brace ({a: 1, b: 2}) is not a glob:
+            # a glob counts at the start of a path or right after a redirect, a brace when it holds or builds a dotted name
+            # a glob or brace inside quotes is plain text to the shell: look for them outside quotes only
+            [ -z "$sus" ] && printf '%s\n' "$cq" | sed "s/'[^']*'//g; s/\"[^\"]*\"//g" | grep -Eq '(^|[ /=]|(^|[^a-z_:-])[0-9]*>+ *)\.[][?*]|(^|[^a-z0-9_.-])\.(c(h(i(e(f)?)?)?)?|l(i(b(r(a(r(y)?)?)?)?)?)?)([^a-z0-9_-]|$)|[][?*](l?ibrary|c?hief)|(^|[^$])\{[^{}]*\.[^{}]*,[^{}]*\}|(^|[^$])\{[^{}]*,[^{}]*\.[^{}]*\}|(^|[^a-z0-9_])\.[a-z-]*\{[^{}]*,[^{}]*\}|\{[^{}]*,[^{}]*\}[a-z-]*(library|chief|ok|items)|\.o[a-z-]*[][?*]|[][?*][a-z]*-(ok|items)([^a-z0-9_-]|$)' && sus=1
             # 2>&1 and >/dev/null write nothing. Whole words only: a folder named "firmware" is not rm.
-            # A glob can only reach a file that exists, so it counts with a redirect or a file command;
-            # a plain name also counts with sed -i or a w/e command, awk system(), --output, a pipe into sh,
-            # an interpreter or a git command other than log/show/status/blame/ls-files/cat-file/rev-parse/diff/branch
+            # Reading them is fine: sed without -i or a w/e command, awk without system() or a pipe into sh, and git log/show/status/blame/ls-files/
+            # cat-file/rev-parse/diff/branch without --output, count as reads
             if [ -n "$sus" ]; then
               case $(printf '%s' "$uq" | sed 's|[0-9]*>&[0-9]||g; s|[0-9]*>> */dev/null||g; s|[0-9]*> */dev/null||g') in *">"*) blk=1 ;; esac
-              fw='tee|mv|cp|rm|ln|dd|install|rsync|touch|truncate|chmod|chflags|unlink'
-              [ "$sus" = 1 ] && { fw="$fw|perl[0-9.]*|python[0-9.]*|node|ruby|php|git|ed|ex"
-                printf ' %s \n' "$uq" | grep -Eq '[^a-z0-9_.-]sed( .*)?( -[a-z]*i|--in-place|[[:space:];{}/0-9$!][we]([^a-z0-9_-]|$))|system|--output|\| *(ba|da|z)?sh([^a-z0-9_.-]|$)' && blk=1; }
-              printf ' %s \n' "$uq" | sed -E 's/(^|[^a-z0-9_.-])git( +-C +[^ ]+)* +(log|show|status|blame|ls-files|cat-file|rev-parse|diff|branch)([^a-z0-9_.-]|$)/\1 \4/g' |
-                grep -Eq "[^a-z0-9_.-]($fw)([^a-z0-9_.-]|\$)" && blk=1
+              printf ' %s \n' "$uq" | grep -Eq '[^a-z0-9_.-]sed( .*)?( -[a-z]*i|--in-place|[[:space:];{}/0-9$!][we]([^a-z0-9_-]|$))|system|--output|\| *(ba|da|z)?sh([^a-z0-9_.-]|$)' && blk=1
+              printf ' %s \n' "$uq" | sed -E 's/(^|[^a-z0-9_.-])git( +-c +[^ ]+)* +(log|show|status|blame|ls-files|cat-file|rev-parse|diff|branch)([^a-z0-9_.-]|$)/\1 \4/g' |
+                grep -Eq '[^a-z0-9_.-](tee|mv|cp|rm|perl[0-9.]*|python[0-9.]*|ln|dd|install|rsync|touch|truncate|chmod|chflags|unlink|node|ruby|php|git|ed|ex)([^a-z0-9_.-]|$)' && blk=1
             fi
             if [ -z "$blk" ]; then
-              # ponytail: a word match, not a shell parser. Quotes and backslashes are dropped first, so u''se or
-              # "join" count. Each simple command (split at ; & | and line breaks) is read on its own, so a grep
-              # that mentions track.sh, or a string that says "library.sh ... use", asks nothing. A command runs the script when it
-              # names it or a variable that holds it (L=.../library.sh; sh "$L" ...); a subcommand from a variable
-              # or $(...), or none at all (stdin, xargs), asks too
-              segs=$(printf '%s' "$lc" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | head -n 1 |
-                sed 's/\\n/'"$(printf '\001')"'/g; s/\\t/ /g' | tr -d "\"'\\\\" | tr '\001;&|' '\n\n\n\n')
-              # the script must be what the command runs (first word, or after sh, xargs, env...), not a word in a string
-              _w='then|do|else|eval|exec|time|nohup|command|env|xargs|sudo|source|\.|sh|bash|zsh|dash|ksh'
-              run() { _p="$1"; for _v in $(printf '%s\n' "$segs" | grep -oE "[a-z_][a-z0-9_]*=[^ ]*$1" | sed 's/=.*//' | sort -u); do
-                  _p="$_p|\\\$\\{?$_v\\}?"; done
-                printf '%s\n' "$segs" | grep -vE "^ *[a-z_][a-z0-9_]*=[^ ]*$1 *\$" |
-                  grep -E "^[ ({!]*(($_w|[a-z_][a-z0-9_]*=[^ ]*|-[^ ]+) +)*[^ ]*($_p)([^a-z0-9_.-]|\$)" | sed -E "s/.*(^|[^a-z0-9_.-])($_p)/@/"; }   # @ then what follows the script
-              # the owner's OK on a project step: ok (or a subcommand from a variable) right after track.sh;
-              # any script run with ok as its first argument (a renamed copy of track.sh) too
-              { run 'track\.sh' | grep -Eq '^@ +(ok([^a-z0-9_.-]|$)|[$`])' || printf '%s\n' "$segs" | grep -Eq '[^ ]\.sh +ok([^a-z0-9_.-]|$)'; } && {
+              # ponytail: a word match on the whole command, not a shell parser (a renamed copy of library.sh is not
+              # seen). Quotes, backslashes and tabs are dropped first, so u''se or "join" count; a subcommand from a
+              # variable, $(...), stdin or another command after library.sh asks too
+              nq=$(printf '%s' "$cq" | tr -d "\"'\\\\")
+              # a variable that holds a script (L=.../library.sh) is that script wherever it is used, and the
+              # assignment alone runs nothing: rewrite "$L" as library.sh and drop the assignment, then match as usual
+              for _s in library track; do
+                for _v in $(printf '%s\n' "$nq" | grep -oE "(^|[^a-z0-9_])[a-z_][a-z0-9_]*=[^ ;&|]*$_s\\.sh" | sed -E 's/^[^a-z_]*//; s/=.*//' | sort -u); do
+                  nq=$(printf '%s\n' "$nq" | sed -E "s/(^|[^a-z0-9_])$_v=[^ ;&|]*$_s\\.sh/\\1$_v=/g; s/\\\$\\{?$_v\\}?([^a-z0-9_]|\$)/$_s.sh\\1/g")
+                done
+              done
+              # the owner's OK on a project step: the word ok after track.sh, a subcommand from a variable, track.sh
+              # run by a shell or xargs with its arguments from stdin, and any script run with ok as its first argument
+              # (a renamed copy of track.sh)
+              printf '%s\n' "$nq" | grep -Eq 'track\.sh(.*[^a-z0-9_.-]ok([^a-z0-9_.-]|$)|[^;&|]*[$`])|[^ ]\.sh +ok([^a-z0-9_.-]|$)|(^|[^a-z0-9_.-])(xargs|sh|bash|zsh|dash|ksh|source|exec|eval|env)( [^;&|]*)? [^ ;&|]*track\.sh *\)* *([;&|]|$)' && {
                 # the session's own folder comes from Claude Code, not from the shell: a cd cannot fake central
-                case $rel in central|central/*) ;; *) echo "Blocked by chief-of-staff: only the central session records the owner's OK. Write the request on the project's card; central asks the owner." >&2; exit 2 ;; esac
+                case $rel in central|central/*) ;; *) echo "Blocked by chief-of-staff: only the central session records the owner's OK. Write the request on the project's card; central asks the owner. (To read track.sh, use the Read or Grep tool.)" >&2; exit 2 ;; esac
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this records YOUR OK on a project step (scope freeze, submission, or the target and check, which approves and later runs the check command shown in its output). Only approve if you gave that OK."}}'; exit 0; }
-              la=$(run 'library\.sh')
               # moving the library sends every note somewhere: the owner confirms each time
-              if printf '%s\n' "$la" | grep -q '^@.*off'; then
-                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this moves the whole library (and may push it to a git remote). Only approve if you asked for it."}}'
-              # use, join, leave or trust anywhere in the call (a search for "use" asks too: rare, and safe)
-              elif printf '%s\n' "$la" | grep -Eq '[^a-z0-9_-](use|join|leave|trust)([^a-z0-9_-]|$)|^@ +[$`]|^@ *$|\$\(|`'; then
-                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this changes which library a project uses, or connects or disconnects a team library: what is shared with whom. Only approve if you asked for it."}}'
-              fi
+              case $nq in *library.sh*off*|*offload*)
+                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this moves the whole library (and may push it to a git remote). Only approve if you asked for it."}}' ;;
+              # any use, join or leave word after library.sh (a search for "use" asks too: rare, and safe)
+              *) printf '%s\n' "$nq" | grep -Eq 'library\.sh(.*[^a-z0-9_-](use|join|leave|trust)([^a-z0-9_-]|$)|[^;&|]*[$`]| *([;&|)]|$))' &&
+                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this changes which library a project uses, or connects or disconnects a team library: what is shared with whom. Only approve if you asked for it."}}' ;; esac
               exit 0
             fi ;;
           *) # each session writes only its own library: a team's notes never come from a personal or another
