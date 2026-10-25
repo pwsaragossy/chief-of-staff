@@ -851,4 +851,15 @@ check "reading a protected file is not blocked" '( for c in "sed -n 1p projects/
 check "writing one through sed, awk or git still is" '( for c in "sed -i s/a/b/ .owner-ok" "sed -n w/x .owner-ok" "sed 1w.owner-ok x" "git checkout .chief-of-staff" "git diff --output=.owner-ok" "awk BEGIN{system(x)} .owner-ok" "cat .owner-ok | sh"; do [ "$(bq "$c")" = 2 ] || { echo "not blocked: $c"; exit 1; }; done )'
 check "saving a preference or a workspace setting needs no specialists" '( for f in "$HOME/.claude/projects/x/memory/pref.md" "$W/central/CLAUDE.md" "$W/central/prefs.md" "$W/ROUTING.md" "$W/specialists/legal.md"; do h "$(ev UserPromptSubmit)" "$W/central" >/dev/null; h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$f\"}")" "$W/central" >/dev/null 2>&1; [ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$W/central")" = 0 ] || { echo "asked specialists: $f"; exit 1; }; done )'
 
+# commands seen in real sessions that asked or blocked for nothing
+JQ() { python3 -c 'import json,sys; print(json.dumps({"command": sys.argv[1]}))' "$1"; }
+quiet() { o=$(h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$(JQ "$1")")" "$W/central" 2>&1); r=$?; [ $r = 0 ] && ! printf '%s' "$o" | grep -q permissionDecision; }
+check "searching the library through a variable, grepping track.sh, regexes and code braces pass silently" '( for c in "L=/x/scripts/library.sh; cd /w; sh \"\$L\" search intake form; echo ---; sh \"\$L\" search paste" "grep -n -A40 \"^  ok)\" /x/track.sh | head -70" "rm -rf \"\$D\"; python3 - <<EOF
+import re
+paras = re.findall(r\"<a:p>.*?</a:p>\", x)
+EOF" "awk \"{for(i=1;i<=NF;i++){split(\$i,a,\\\"=\\\");if(a[2]+0>0)c[a[1]]++}}\" .protocol.log" "chmod +x d/gh; python3 -c \"print({1: 2, 3: 4})\" > d/dup.json" "python3 - <<EOF
+s = s.replace(\"see library.sh to use it\", \"\")
+EOF"; do quiet "$c" || { echo "not quiet: $c"; exit 1; }; done )'
+check "a library.sh held in a variable still asks for use and for a subcommand from a variable" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$(JQ "L=/x/library.sh; sh \"\$L\" use t1")")" "$W/central" | grep -q "\"ask\"" && h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$(JQ "T=/x/track.sh; sh \$T ok p scope yes")")" "$W/central" | grep -q "\"ask\""'
+
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }
