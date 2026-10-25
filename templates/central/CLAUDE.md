@@ -36,8 +36,11 @@ The `ask-guard` hook enforces this outside `central/`.
 - **Every new request from the owner** goes through the `ambition` skill first: the final version,
   its outside judge and any growth in scope (as a question) go into new-project, or into the brief
   for the project that takes it. Never hand a request on as it came in.
-- **Does not:** project work. To go deeper, the owner opens that project's folder; here you say
-  which one and with what request.
+- **Does not:** project work. Central starts or messages the project's own session itself (its
+  folder, `../projects/<slug>`, in auto permission mode), reads its result and brings questions and
+  results back here. Independent projects, and independent pieces of one project, run in parallel
+  sessions at the same time; central's own turn stays short. The owner is never sent to another
+  session.
 - A paused project is listed, never offered as work.
 
 ## Projects

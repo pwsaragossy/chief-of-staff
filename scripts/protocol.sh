@@ -71,6 +71,7 @@ case $(jget hook_event_name) in
       { git -C "$q" rev-parse -q --verify HEAD; git -C "$q" status --porcelain -uall --no-renames; } > "$st/snap-$n" 2>/dev/null; done
     echo "Chief-of-staff protocol for this request (checked by hooks at the end of the turn):"
     echo "- A deliverable for other people, a decision that crosses areas, or research goes through the specialists skill: at least one specialist and the independent reviewer, as subagents, each briefed with its role card from $root/specialists/ (the brief contains the line 'Role card: <role>' and the card's text, a 'Library:' line and an 'Ambition: <goal behind the goal> | judge: <outside judge>' line). A new request from the owner goes through the ambition skill first."
+    cos_fast "$root" && echo "- Hackathon pace (pace: fast): internal work (plans, code, cards, research for the team) needs one specialist subagent, no reviewer. The independent reviewer runs only on what goes outside: the submission, the video, the README, messages to judges, partners or users. Independent work goes to parallel sessions, not one long turn."
     echo "- Research starts in the library: sh \"$L\" search <terms> (workspace: $root). Web search only for what the library lacks. Every new finding, decision, how-to or option becomes a note: sh \"$L\" new <finding|decision|howto|option|topic> <origin> <title>, then fill it. Hooks check every note."
     [ $lst = 0 ] || { sh "$L" where | sed -n 2p; exit 0; }
     # what the company already knows about this request; skipped for an external or very large library (hook time budget)
@@ -331,7 +332,11 @@ $p"; fi ;;
     { [ -f "$st/deliverable" ] || [ -f "$st/web" ] || [ "$size" -gt 2500 ]; } && substantive=1
     agents=$(count agent); specialists=$(count specialist); reviewers=$(count reviewer)
     reason=
-    [ "$substantive" = 1 ] && { [ "$specialists" -lt 1 ] || [ "$reviewers" -lt 1 ]; } && reason="This turn produced a deliverable, research or a long answer with $specialists specialist(s) and $reviewers reviewer(s). Before finishing, run the specialists skill: at least one senior specialist and the independent reviewer as subagents, each briefed with its role card from $root/specialists/, then revise the answer with what they found."
+    if cos_fast "$root"; then
+      [ "$substantive" = 1 ] && [ $((specialists + reviewers)) -lt 1 ] && reason="This turn produced a deliverable, research or a long answer with no specialist. Before finishing, run one senior specialist as a subagent, briefed with its role card from $root/specialists/ (and the independent reviewer too if this goes outside: submission, video, README, a message to judges or partners), then revise the answer with what it found."
+    else
+      [ "$substantive" = 1 ] && { [ "$specialists" -lt 1 ] || [ "$reviewers" -lt 1 ]; } && reason="This turn produced a deliverable, research or a long answer with $specialists specialist(s) and $reviewers reviewer(s). Before finishing, run the specialists skill: at least one senior specialist and the independent reviewer as subagents, each briefed with its role card from $root/specialists/, then revise the answer with what they found."
+    fi
     [ -f "$st/web" ] && [ ! -f "$st/saved" ] && [ $lst = 0 ] && reason="${reason:+$reason }This turn searched the web but saved nothing to the library. Save each new finding as a note in $lib/notes/ (sh \"$L\" new ...) before finishing."
     lgaps=; push=
     gap() { lgaps="${lgaps:+$lgaps

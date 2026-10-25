@@ -29,6 +29,9 @@ use each, the checks a senior professional never skips, the evidence standard an
 4. **Review.** A separate subagent with `Role card: reviewer` (and that card's text) receives the
    specialists' role cards and their full outputs, not your summary. It checks every never-skip item,
    attacks the premises, recomputes the numbers and returns a verdict.
+   In hackathon pace (`pace: fast` in the workspace's `.chief-of-staff`, set by the owner) skip this
+   step for internal work (plans, code, cards, research for the team); run it on what goes outside:
+   the submission, the video, the README, messages to judges, partners or users.
 5. **Merge**: fix what the reviewer proved; record what stays open in STATE.md section 7. Only then
    does anything go to the owner, through the card if it needs a decision.
 

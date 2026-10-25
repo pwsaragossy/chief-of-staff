@@ -84,7 +84,8 @@ cos_libpath() {
 }
 # cos_cfg ROOT -> one checksum of every library setting (the marker and each project's .library); library.sh
 # records it after join, use, leave and offload, so a change made any other way shows at the turn end
-cos_cfg() { { cat "$1/.chief-of-staff"; for _f in "$1"/projects/*/.library; do [ -f "$_f" ] && { printf '%s\n' "$_f"; cat "$_f"; }; done; } 2>/dev/null | cksum | tr -d ' \t'; }
+# (pace: is not a library setting; the marker itself is protected from edits)
+cos_cfg() { { grep -v "^pace: " "$1/.chief-of-staff"; for _f in "$1"/projects/*/.library; do [ -f "$_f" ] && { printf '%s\n' "$_f"; cat "$_f"; }; done; } 2>/dev/null | cksum | tr -d ' \t'; }
 cos_cfgrec() { printf '%s/cos-cfg-%s' "${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"; }
 cos_cfgsave() { _c=$(cos_cfgrec "$1"); mkdir -p "$(dirname "$_c")" && { [ -f "$_c" ] && chmod u+w "$_c"; cos_cfg "$1" > "$_c"; chmod 444 "$_c"; }; }
 # cos_libof ROOT FILE -> "name<TAB>path" of the library whose notes/ holds FILE (empty when none)
@@ -116,5 +117,8 @@ cos_questions() {
 }
 # cos_shared ROOT -> true when the workspace is shared by a team (setup.sh create --share, or join)
 cos_shared() { grep -qx 'shared: yes' "$1/.chief-of-staff" 2>/dev/null; }
+# cos_fast ROOT -> true in hackathon pace (pace: fast in the marker, which only the owner can write):
+# internal work needs one specialist or the reviewer; the reviewer is for what goes outside
+cos_fast() { grep -qx 'pace: fast' "$1/.chief-of-staff" 2>/dev/null; }
 # cos_member ROOT -> this person's name in a shared workspace (git config cos.member, local to this computer)
 cos_member() { git -C "$1" config cos.member 2>/dev/null | tr -d '\000-\037' | cut -c1-60; }
