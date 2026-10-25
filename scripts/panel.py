@@ -56,10 +56,15 @@ def sh(script, *args, cwd=None, strict=False):
 MAX_NODES = 300  # an SVG graph of thousands of notes freezes the browser; the lists below stay complete
 
 
+
+def rows(text):
+    """Lines of a script's output. Not str.splitlines(): that also splits on \x1c-\x1e, which rows use inside fields."""
+    return [l for l in text.split("\n") if l]
+
 def libraries(root):
     """Every library (personal and each team's): name, folder, state, notes, last sync."""
     out = []
-    for line in sh("library.sh", "libs", cwd=os.path.join(root, "central")).splitlines():
+    for line in rows(sh("library.sh", "libs", cwd=os.path.join(root, "central"))):
         f = line.split("\t")
         if len(f) >= 5:
             out.append({"name": f[0], "path": f[1], "state": f[2], "notes": f[3], "sync": f[4],
@@ -69,7 +74,7 @@ def libraries(root):
 
 def library(root, name="personal"):
     """The library view, computed on demand from library.sh (graph + where): never a stored index."""
-    where = sh("library.sh", "--lib", name, "where", cwd=root).splitlines()
+    where = rows(sh("library.sh", "--lib", name, "where", cwd=root))
     path = where[0] if where else os.path.join(root, "knowledge")
     if len(where) > 1:
         return {"state": "offline" if "offline" in where[1] else "error", "path": path, "message": where[1],
@@ -80,7 +85,7 @@ def library(root, name="personal"):
     except TimeoutError:
         return {"state": "error", "path": path, "message": "Checking the library took over 20 s; run library.sh doctor.",
                 "color": "yellow", "nodes": [], "edges": [], "problems": [], "dangling": [], "stale": [], "pairs": []}
-    for line in graph.splitlines():
+    for line in rows(graph):
         f = line.split("\t")
         if f[0] == "N" and len(f) >= 9:
             nodes.append({"id": f[1], "title": f[2], "type": f[3], "state": f[4], "origin": f[5], "group": f[6],
@@ -127,12 +132,12 @@ def sync_color(text):
 
 def snapshot(root, libname="personal"):
     projects = []
-    for line in sh("health.sh", root).splitlines():
+    for line in rows(sh("health.sh", root)):
         f = (line.split(US) + [""] * 16)[:16]
         slug, color, reason, stage, stages, closed, total, delivery, delivered, baseline, baseline_delivery, deadline, member, target, check, runs = f
         pdir = os.path.join(root, "projects", slug)
         stage_names, items = [], []
-        for row in sh("track.sh", "items", pdir).splitlines():
+        for row in rows(sh("track.sh", "items", pdir)):
             r = row.split(US)
             if r[0] == "S" and len(r) >= 3:
                 stage_names.append({"n": r[1], "name": r[2]})
@@ -146,7 +151,7 @@ def snapshot(root, libname="personal"):
             "deadline": int(deadline) if deadline.isdigit() else None, "member": member,
             "target": target, "check": check, "runs": runs,
             "stage_names": stage_names, "items": items,
-            "brief": " ".join(l for l in sh("track.sh", "brief", pdir).splitlines() if not l.startswith("Target: ")).strip().split(" Waiting on prerequisites:")[0],
+            "brief": " ".join(l for l in rows(sh("track.sh", "brief", pdir)) if not l.startswith("Target: ")).strip().split(" Waiting on prerequisites:")[0],
             "next": front_matter(os.path.join(pdir, "STATE.md")).get("next", ""),
         })
     libs = libraries(root)
@@ -158,7 +163,7 @@ def snapshot(root, libname="personal"):
     overall = max([p["color"] for p in projects] + [lib["color"]], key=lambda c: rank.get(c, 0))
 
     cards = []  # what waits on the owner, from health.sh (the one place that times and colors it)
-    for line in sh("health.sh", "cards", root).splitlines():
+    for line in rows(sh("health.sh", "cards", root)):
         f = (line.split(US) + [""] * 11)[:11]
         if f[0] == "C" and f[3] == "waiting-owner":
             cards.append({"title": f[1], "project": f[2], "member": f[4], "color": f[5], "waited": int(f[6] or 0),
@@ -437,7 +442,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.deny(400, "Nothing to save: choose a file or paste a link.")
             data = ("---\nsource: %s\nreceived: %s\nvia: panel\n---\n" % (text.splitlines()[0][:300], time.strftime("%Y-%m-%d"))
                     + text + "\n").encode()
-        where = sh("library.sh", "where", cwd=self.root).splitlines()
+        where = rows(sh("library.sh", "where", cwd=self.root))
         if len(where) != 1:
             return self.deny(503, where[1] if len(where) > 1 else "The library is not reachable.")
         inbox = os.path.join(where[0], "inbox")
