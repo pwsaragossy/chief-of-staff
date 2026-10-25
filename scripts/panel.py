@@ -247,6 +247,19 @@ def team_view(root):
             VIEW["fetched"] = time.strftime("%H:%M:%S")
         if not VIEW["dir"] or not os.path.isfile(os.path.join(VIEW["dir"], ".chief-of-staff")):
             return root, {"error": VIEW["error"] or "No GitHub state yet, showing this computer's copy"}
+        # the owner's OKs never leave this computer (the sync skips them), so the export has none: bring this
+        # computer's copies, read fresh each time, or every track with owner items reads as tampered
+        for slug in os.listdir(os.path.join(root, "projects")) if os.path.isdir(os.path.join(root, "projects")) else []:
+            dst = os.path.join(VIEW["dir"], "projects", slug)
+            for name in (".owner-ok", ".owner-items", ".check-runs"):
+                src = os.path.join(root, "projects", slug, name)
+                if os.path.isfile(src) and os.path.isdir(dst):
+                    try:
+                        if os.path.exists(os.path.join(dst, name)):
+                            os.chmod(os.path.join(dst, name), 0o644)
+                        shutil.copyfile(src, os.path.join(dst, name))
+                    except OSError:
+                        pass
         return VIEW["dir"], {"commit": VIEW["commit"][:7], "fetched": VIEW.get("fetched", ""), "error": VIEW["error"]}
 
 
