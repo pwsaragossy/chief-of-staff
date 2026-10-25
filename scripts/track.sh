@@ -105,8 +105,10 @@ teamsent() { cos_shared "$(cos_root "$dir")" 2>/dev/null || return 1
 # runcheck: rc (0 met, 1 not met, 124 timed out, other could not run) and val (the last output line)
 runcheck() {
   _o=$(mktemp); _lim=${COS_CHECK_TIMEOUT:-120}; case $_lim in ''|*[!0-9]*) _lim=120 ;; esac
-  # the check runs in its own process group (set -m), so the timeout stops what it started too (a pipe, a server)
-  set -m; ( cd "$dir" && exec sh -c "$chk" ) > "$_o" 2>&1 < /dev/null & _p=$!; set +m
+  # the check runs in its own process group, so the timeout stops what it started too (a pipe, a server).
+  # setsid where it exists (Linux: dash refuses set -m without a tty, from a hook), set -m otherwise (macOS)
+  if command -v setsid > /dev/null 2>&1; then ( cd "$dir" && exec setsid sh -c "$chk" ) > "$_o" 2>&1 < /dev/null & _p=$!
+  else set -m; ( cd "$dir" && exec sh -c "$chk" ) > "$_o" 2>&1 < /dev/null & _p=$!; set +m; fi
   ( trap 'kill $_s 2>/dev/null; exit 0' TERM; sleep "$_lim" & _s=$!; wait $_s; { kill -TERM -"$_p" || kill "$_p"; } 2>/dev/null && : > "$_o.to" ) > /dev/null 2>&1 & _k=$!
   { wait "$_p"; rc=$?; kill "$_k"; wait "$_k"; } 2>/dev/null   # waiting on the stopped timer keeps the shell's "Terminated" notice quiet
   _to=; [ -f "$_o.to" ] && _to=1
