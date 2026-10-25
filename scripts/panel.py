@@ -208,16 +208,16 @@ VIEW = {"at": 0, "commit": "", "dir": "", "error": ""}
 VIEW_LOCK = threading.Lock()
 
 
-def team_view(root):
+def team_view(root, fetch=False):
     """In a shared workspace, the projects, cards and tasks as GitHub has them, so every member sees the
-    same state: fetch the upstream at most every 30 s, export that commit to a cache folder and read
-    from there. The working folder and its branch are never touched. Without an upstream: the local folder."""
+    same state: fetch the upstream when the owner presses Fetch (and once at start), export that commit
+    to a cache folder and read from there. The working folder and its branch are never touched. Without an upstream: the local folder."""
     if not shared(root):
         return root, None
     git = ["git", "-C", root]
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
     with VIEW_LOCK:
-        if time.time() - VIEW["at"] >= 30:
+        if fetch or not VIEW["dir"]:
             VIEW["at"] = time.time()
             try:
                 up = subprocess.run(git + ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
@@ -235,8 +235,9 @@ def team_view(root):
                         tar = subprocess.run(git + ["archive", "--format=tar", commit], capture_output=True, timeout=30).stdout
                         tmp = new + ".tmp"
                         shutil.rmtree(tmp, ignore_errors=True)
+                        # links are dropped: the export is the team's content and is never followed out
                         with tarfile.open(fileobj=io.BytesIO(tar)) as t:
-                            t.extractall(tmp, filter="data")
+                            t.extractall(tmp, filter=lambda m, path: None if (m.issym() or m.islnk()) else tarfile.data_filter(m, path))
                         os.replace(tmp, new)
                     for old in os.listdir(base):  # keep only the commit shown
                         if old != commit:
@@ -251,15 +252,23 @@ def team_view(root):
         # computer's copies, read fresh each time, or every track with owner items reads as tampered
         for slug in os.listdir(os.path.join(root, "projects")) if os.path.isdir(os.path.join(root, "projects")) else []:
             dst = os.path.join(VIEW["dir"], "projects", slug)
+            # the export is the team's content: never follow a link a teammate committed in it
+            if os.path.islink(dst) or not os.path.isdir(dst) or \
+                    not os.path.realpath(dst).startswith(os.path.realpath(VIEW["dir"]) + os.sep):
+                continue
             for name in (".owner-ok", ".owner-items", ".check-runs"):
-                src = os.path.join(root, "projects", slug, name)
-                if os.path.isfile(src) and os.path.isdir(dst):
-                    try:
-                        if os.path.exists(os.path.join(dst, name)):
-                            os.chmod(os.path.join(dst, name), 0o644)
-                        shutil.copyfile(src, os.path.join(dst, name))
-                    except OSError:
-                        pass
+                src, target = os.path.join(root, "projects", slug, name), os.path.join(dst, name)
+                try:
+                    if os.path.lexists(target):
+                        os.unlink(target)
+                    if os.path.isfile(src):
+                        with open(src, "rb") as f:
+                            data = f.read()
+                        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+                        with os.fdopen(fd, "wb") as f:
+                            f.write(data)
+                except OSError:
+                    pass
         return VIEW["dir"], {"commit": VIEW["commit"][:7], "fetched": VIEW.get("fetched", ""), "error": VIEW["error"]}
 
 
@@ -267,8 +276,8 @@ def sync_color(text):
     return "red" if ("conflict" in text or "failed" in text) else "yellow" if ("never" in text or "busy" in text) else "green"
 
 
-def snapshot(root, libname="personal"):
-    view, source = team_view(root)   # projects, cards and tasks as the team sees them; library and log stay local
+def snapshot(root, libname="personal", fetch=False):
+    view, source = team_view(root, fetch)   # projects, cards and tasks as the team sees them; library and log stay local
     projects = []
     for line in rows(sh("health.sh", view)):
         f = (line.split(US) + [""] * 16)[:16]
@@ -395,7 +404,7 @@ svg.lgraph text{font-size:10px;fill:var(--muted)}
 select{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);margin-left:8px}
 </style></head><body><main>
 <div class="top"><span id="overall" class="dot"></span><h1>Chief of staff</h1><span class="grow"></span><span id="time" class="muted"></span></div>
-<div id="ws" class="muted"></div>
+<div id="ws" class="muted"></div><button id="fetch" class="toggle" hidden>Fetch</button>
 <h2>Projects</h2><div id="projects" class="box"></div>
 <h2>Waiting on the owner</h2><div id="cards" class="box"></div>
 <h2>Tasks</h2><div id="tasks" class="box"></div>
@@ -458,6 +467,7 @@ function render(){
   document.getElementById("ws").textContent=d.workspace+(d.shared?" · shared, you are "+(d.shared.member||"unnamed")+" · last sync "+d.shared.sync:"");
   document.getElementById("ws").style.color=d.shared&&d.shared.color!=="green"?"var(--"+d.shared.color+")":"";
   if(d.source)document.getElementById("ws").textContent+=d.source.commit?" · showing GitHub at "+d.source.commit+", fetched "+d.source.fetched+(d.source.error?" ("+d.source.error+")":""):" · "+d.source.error;
+  document.getElementById("fetch").hidden=!d.source;
   const P=document.getElementById("projects");
   if(!d.projects.length)empty(P,"No projects");else P.replaceChildren(...d.projects.map(p=>{
     const row=el("div","row"),body=el("div","grow");row.append(el("span","dot "+p.color),body);
@@ -514,6 +524,8 @@ drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");[...e.dataTrans
 document.getElementById("linkform").onsubmit=e=>{e.preventDefault();const v=document.getElementById("link").value.trim();
   if(v){send(v,"link.md","text");document.getElementById("link").value=""}};
 load();setInterval(load,30000);
+document.getElementById("fetch").onclick=async e=>{const b=e.target;b.disabled=true;b.textContent="Fetching…";
+  try{const r=await fetch("fetch?t="+encodeURIComponent(T)+"&lib="+encodeURIComponent(libName),{method:"POST"});if(r.ok)await load()}finally{b.disabled=false;b.textContent="Fetch"}};
 </script></body></html>"""
 
 
@@ -569,6 +581,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.allowed():
             return
+        if urllib.parse.urlparse(self.path).path == "/fetch":
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            return self.reply("application/json", json.dumps(snapshot(self.root, (q.get("lib") or ["personal"])[0], fetch=True)).encode())
         if urllib.parse.urlparse(self.path).path != "/import":
             return self.deny(404, "Not found.")
         try:
