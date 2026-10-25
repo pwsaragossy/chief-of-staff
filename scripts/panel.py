@@ -5,7 +5,7 @@ knowledge/inbox/. Standard library only. Listens on 127.0.0.1; every request nee
 
 Usage: python3 panel.py <workspace> [port]     (port 0 or omitted = a free port)
 """
-import http.server, json, os, re, secrets, subprocess, sys, time, urllib.parse
+import hashlib, http.server, io, json, os, re, secrets, shutil, subprocess, sys, tarfile, threading, time, urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAX_UPLOAD = 50 * 1024 * 1024
@@ -204,16 +204,63 @@ def shared(root):
     return {"member": me, "sync": sync or "never", "color": sync_color(sync or "never")}
 
 
+VIEW = {"at": 0, "commit": "", "dir": "", "error": ""}
+VIEW_LOCK = threading.Lock()
+
+
+def team_view(root):
+    """In a shared workspace, the projects, cards and tasks as GitHub has them, so every member sees the
+    same state: fetch the upstream at most every 30 s, export that commit to a cache folder and read
+    from there. The working folder and its branch are never touched. Without an upstream: the local folder."""
+    if not shared(root):
+        return root, None
+    git = ["git", "-C", root]
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    with VIEW_LOCK:
+        if time.time() - VIEW["at"] >= 30:
+            VIEW["at"] = time.time()
+            try:
+                up = subprocess.run(git + ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+                                    capture_output=True, text=True, timeout=10).stdout.strip()
+                if not up:
+                    return root, None
+                f = subprocess.run(git + ["fetch", "--quiet", up.split("/")[0]], capture_output=True, text=True, timeout=20, env=env)
+                VIEW["error"] = "" if f.returncode == 0 else "GitHub fetch failed, showing the last state fetched"
+                commit = subprocess.run(git + ["rev-parse", up], capture_output=True, text=True, timeout=10).stdout.strip()
+                if commit and commit != VIEW["commit"]:
+                    base = os.path.join(os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.expanduser("~/.cache/chief-of-staff"),
+                                        "team-view-" + hashlib.sha1(root.encode()).hexdigest()[:10])
+                    new = os.path.join(base, commit)
+                    if not os.path.isdir(new):
+                        tar = subprocess.run(git + ["archive", "--format=tar", commit], capture_output=True, timeout=30).stdout
+                        tmp = new + ".tmp"
+                        shutil.rmtree(tmp, ignore_errors=True)
+                        with tarfile.open(fileobj=io.BytesIO(tar)) as t:
+                            t.extractall(tmp, filter="data")
+                        os.replace(tmp, new)
+                    for old in os.listdir(base):  # keep only the commit shown
+                        if old != commit:
+                            shutil.rmtree(os.path.join(base, old), ignore_errors=True)
+                    VIEW.update(commit=commit, dir=new)
+            except (subprocess.TimeoutExpired, OSError, tarfile.TarError, TypeError) as e:
+                VIEW["error"] = "GitHub view failed (%s), showing the last state fetched" % type(e).__name__
+            VIEW["fetched"] = time.strftime("%H:%M:%S")
+        if not VIEW["dir"] or not os.path.isfile(os.path.join(VIEW["dir"], ".chief-of-staff")):
+            return root, {"error": VIEW["error"] or "No GitHub state yet, showing this computer's copy"}
+        return VIEW["dir"], {"commit": VIEW["commit"][:7], "fetched": VIEW.get("fetched", ""), "error": VIEW["error"]}
+
+
 def sync_color(text):
     return "red" if ("conflict" in text or "failed" in text) else "yellow" if ("never" in text or "busy" in text) else "green"
 
 
 def snapshot(root, libname="personal"):
+    view, source = team_view(root)   # projects, cards and tasks as the team sees them; library and log stay local
     projects = []
-    for line in rows(sh("health.sh", root)):
+    for line in rows(sh("health.sh", view)):
         f = (line.split(US) + [""] * 16)[:16]
         slug, color, reason, stage, stages, closed, total, delivery, delivered, baseline, baseline_delivery, deadline, member, target, check, runs = f
-        pdir = os.path.join(root, "projects", slug)
+        pdir = os.path.join(view, "projects", slug)
         stage_names, items = [], []
         for row in rows(sh("track.sh", "items", pdir)):
             r = row.split(US)
@@ -231,7 +278,7 @@ def snapshot(root, libname="personal"):
             "stage_names": stage_names, "items": items,
             "brief": " ".join(l for l in rows(sh("track.sh", "brief", pdir)) if not l.startswith("Target: ")).strip().split(" Waiting on prerequisites:")[0],
             "next": front_matter(os.path.join(pdir, "STATE.md")).get("next", ""),
-            "progress": progress(root, slug),
+            "progress": progress(view, slug),
         })
     libs = libraries(root)
     if libname not in [x["name"] for x in libs]:
@@ -241,9 +288,9 @@ def snapshot(root, libname="personal"):
     rank = {"red": 2, "yellow": 1, "green": 0}
     overall = max([p["color"] for p in projects] + [lib["color"]], key=lambda c: rank.get(c, 0))
 
-    todo = tasks(root)
+    todo = tasks(view)
     cards = []  # what waits on the owner, from health.sh (the one place that times and colors it)
-    for line in rows(sh("health.sh", "cards", root)):
+    for line in rows(sh("health.sh", "cards", view)):
         f = (line.split(US) + [""] * 11)[:11]
         if f[0] == "C" and f[3] == "waiting-owner":
             cards.append({"title": f[1], "project": f[2], "member": f[4], "color": f[5], "waited": int(f[6] or 0),
@@ -269,7 +316,7 @@ def snapshot(root, libname="personal"):
     sh_ws = shared(root)
     rank_c = [c["color"] for c in cards] + [x["sync_color"] for x in libs] + ([sh_ws["color"]] if sh_ws else [])
     overall = max([overall] + rank_c, key=lambda c: rank.get(c, 0))
-    return {"library": lib, "libs": libs, "workspace": root, "overall": overall, "projects": projects, "cards": cards, "tasks": todo,
+    return {"library": lib, "libs": libs, "workspace": root, "overall": overall, "projects": projects, "cards": cards, "tasks": todo, "source": source,
             "counts": counts, "shared": sh_ws,
             "inbox": n_inbox, "notes": n_notes, "time": time.strftime("%H:%M:%S")}
 
@@ -397,6 +444,7 @@ function render(){
   document.getElementById("time").textContent="Updated "+d.time;
   document.getElementById("ws").textContent=d.workspace+(d.shared?" · shared, you are "+(d.shared.member||"unnamed")+" · last sync "+d.shared.sync:"");
   document.getElementById("ws").style.color=d.shared&&d.shared.color!=="green"?"var(--"+d.shared.color+")":"";
+  if(d.source)document.getElementById("ws").textContent+=d.source.commit?" · showing GitHub at "+d.source.commit+", fetched "+d.source.fetched+(d.source.error?" ("+d.source.error+")":""):" · "+d.source.error;
   const P=document.getElementById("projects");
   if(!d.projects.length)empty(P,"No projects");else P.replaceChildren(...d.projects.map(p=>{
     const row=el("div","row"),body=el("div","grow");row.append(el("span","dot "+p.color),body);

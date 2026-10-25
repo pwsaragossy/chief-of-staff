@@ -692,6 +692,12 @@ check "panel lists ## Tasks lines by person, from open cards only" '( d=$(mktemp
 printf -- "---\nstatus: in-progress\nproject: p\n---\n## Tasks\n- (template line)\n- Leo, now: deploy by 13:00\n- Vhendala: video cut\n- check the page\n## For the owner to decide\n- Pedro: title A or B?\n" > "$d/board/a.md"
 printf -- "---\nstatus: done\nproject: p\n---\n## Tasks\n- Leo: old task\n" > "$d/board/b.md"
 python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; g = {x[\"who\"]: [i[\"task\"] for i in x[\"items\"]] for x in panel.tasks(sys.argv[2])}; assert g == {\"Leo\": [\"deploy by 13:00\"], \"Vhendala\": [\"video cut\"], \"Unassigned\": [\"check the page\"]}, g" "$here" "$d"; r=$?; rm -rf "$d"; exit $r )'
+check "panel shows a shared workspace as GitHub has it, without touching the local folder" '( d=$(mktemp -d); g() { git -c user.email=t@t -c user.name=t "$@" >/dev/null 2>&1; }
+git init -q --bare "$d/o.git"; g clone "$d/o.git" "$d/a"; mkdir -p "$d/a/central" "$d/a/board"; printf "chief-of-staff workspace v0.1\nshared: yes\n" > "$d/a/.chief-of-staff"; touch "$d/a/central/.gitkeep"
+g -C "$d/a" add -A; g -C "$d/a" commit -m seed; g -C "$d/a" push origin HEAD; g clone "$d/o.git" "$d/ws"; g clone "$d/o.git" "$d/b"
+mkdir -p "$d/b/board"; printf -- "---\nstatus: in-progress\nproject: p\n---\n## Tasks\n- Leo: deploy\n" > "$d/b/board/t.md"; g -C "$d/b" add -A; g -C "$d/b" commit -m card; g -C "$d/b" push origin HEAD
+CLAUDE_PLUGIN_DATA="$d/data" python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; v, src = panel.team_view(sys.argv[2]); assert src and src.get(\"commit\") and not src.get(\"error\"), src; assert [x[\"who\"] for x in panel.tasks(v)] == [\"Leo\"]; assert panel.tasks(sys.argv[2]) == []" "$here" "$d/ws"; r=$?
+[ ! -e "$d/ws/board/t.md" ] && [ -z "$(git -C "$d/ws" status --porcelain)" ] || r=1; rm -rf "$d"; exit $r )'
 # panel: token, Host check, api, import (only where python3 and curl exist)
 if command -v python3 >/dev/null && command -v curl >/dev/null; then
   python3 "$here/panel.py" "$W" > "$W/panel.out" 2>&1 &
