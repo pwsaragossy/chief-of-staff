@@ -184,6 +184,8 @@ $p"; fi ;;
               # the owner's OK on a project step: the word ok after track.sh, or a subcommand from a variable
               # (and any script run with ok as its first argument: a renamed copy of track.sh)
               printf '%s\n' "$nq" | grep -Eq 'track\.sh(.*[^a-z0-9_.-]ok([^a-z0-9_.-]|$)|[^;&|]*[$`])|[^ ]\.sh +ok([^a-z0-9_.-]|$)' && {
+                # the session's own folder comes from Claude Code, not from the shell: a cd cannot fake central
+                case $rel in central|central/*) ;; *) echo "Blocked by chief-of-staff: only the central session records the owner's OK. Write the request on the project's card; central asks the owner." >&2; exit 2 ;; esac
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this records YOUR OK on a project step (scope freeze, submission, or the target and check, which approves and later runs the check command shown in its output). Only approve if you gave that OK."}}'; exit 0; }
               case $nq in *library.sh*off*|*offload*)
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this moves the whole library (and may push it to a git remote). Only approve if you asked for it."}}' ;;
