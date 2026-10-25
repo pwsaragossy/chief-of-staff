@@ -61,6 +61,48 @@ def rows(text):
     """Lines of a script's output. Not str.splitlines(): that also splits on \x1c-\x1e, which rows use inside fields."""
     return [l for l in text.split("\n") if l]
 
+# a progress line on a card: "- [2026-10-25] [11:30 UTC] (who): what happened", with a date or a time or both
+PROGRESS = re.compile(r"^\s*[-*] \**((\d{4}-\d{2}-\d{2})?\s*(\d{1,2}:\d{2})?)(?: ?[A-Z]{2,4})?(?: check)?\**\s*\(([^)]{1,80})\):\s*(.+)$")
+
+
+def progress(root, slug, keep=3):
+    """The latest progress line of each open card of a project, newest card first, so the panel moves
+    before a whole track item closes. ponytail: a line without a date counts as the card's updated: day."""
+    out = []
+    board = os.path.join(root, "board")
+    try:
+        names = [n for n in os.listdir(board) if n.endswith(".md")]
+    except OSError:
+        return out
+    for n in names:
+        path = os.path.join(board, n)
+        fm = front_matter(path)
+        if fm.get("project") != slug or fm.get("status", "") in ("done", "closed", "cancelled", "dropped"):
+            continue
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError:
+            continue
+        best = None
+        for line in text.split("\n"):
+            m = PROGRESS.match(line)
+            if not m or not (m.group(2) or m.group(3)):
+                continue
+            day, hm = m.group(2) or fm.get("updated", ""), m.group(3) or ""
+            key = (day, hm.zfill(5))
+            if best is None or key > best[0]:
+                best = (key, hm, m.group(4), m.group(5))
+        if best:
+            what = re.sub(r"[`*]", "", best[3]).strip()
+            out.append({"card": n[:-3], "when": " ".join(x for x in (best[0][0], best[1]) if x), "who": best[2],
+                        "what": what[:180] + ("…" if len(what) > 180 else ""), "key": best[0]})
+    out.sort(key=lambda x: x["key"], reverse=True)
+    for x in out:
+        del x["key"]
+    return out[:keep]
+
+
 def libraries(root):
     """Every library (personal and each team's): name, folder, state, notes, last sync."""
     out = []
@@ -153,6 +195,7 @@ def snapshot(root, libname="personal"):
             "stage_names": stage_names, "items": items,
             "brief": " ".join(l for l in rows(sh("track.sh", "brief", pdir)) if not l.startswith("Target: ")).strip().split(" Waiting on prerequisites:")[0],
             "next": front_matter(os.path.join(pdir, "STATE.md")).get("next", ""),
+            "progress": progress(root, slug),
         })
     libs = libraries(root)
     if libname not in [x["name"] for x in libs]:
@@ -331,6 +374,7 @@ function render(){
       t.onclick=()=>{openMaps.has(p.slug)?openMaps.delete(p.slug):openMaps.add(p.slug);render()};body.append(t);
       if(openMaps.has(p.slug))body.append(drawMap(p))}
     else if(p.next)body.append(el("div","muted","Next: "+p.next));
+    (p.progress||[]).forEach(g=>body.append(el("div","muted","Latest on "+g.card+" ("+g.when+", "+g.who+"): "+g.what)));
     return row}));
   const C=document.getElementById("cards");
   if(!d.cards.length)empty(C,"Nothing waiting");else C.replaceChildren(...d.cards.map(c=>{
