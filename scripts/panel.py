@@ -405,8 +405,10 @@ PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <style>
 :root{--bg:#f6f6f4;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e3e3e0;
 --green:#2e9b55;--yellow:#c98a00;--red:#d6453d;--edge:#b9b9b4;
+--green-t:#1e7a3e;--yellow-t:#8a5d00;--red-t:#b3261e;
 --t-finding:#0072b2;--t-decision:#c4501a;--t-howto:#00806a;--t-option:#b0508a;--t-topic:#6b7280}
 @media (prefers-color-scheme:dark){:root{--bg:#161617;--fg:#f2f2f2;--muted:#a1a1a6;--card:#1f1f21;--line:#333;--edge:#56565c;
+--green-t:#4cc274;--yellow-t:#e0a526;--red-t:#ff6b5e;
 --t-finding:#56b4e9;--t-decision:#f08a4b;--t-howto:#2fc29a;--t-option:#e59ac8;--t-topic:#a3a8b0}}
 *{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 -apple-system,system-ui,sans-serif}
 main{max-width:980px;margin:0 auto;padding:24px 16px 48px}
@@ -447,8 +449,8 @@ button{padding:9px 16px;border:0;border-radius:8px;background:var(--fg);color:va
 .node.pre{outline:2px solid var(--fg);outline-offset:1px}.node.post{outline:2px dashed var(--fg);outline-offset:1px}
 .node:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
 .finish{flex:none;width:0;border-left:2px dashed var(--yellow);position:relative;z-index:1}
-.finish span{position:absolute;top:-20px;transform:translateX(-50%);font-size:11px;font-weight:600;color:var(--yellow);white-space:nowrap}
-.finish.reached{border-color:var(--green)}.finish.reached span{color:var(--green)}
+.finish span{position:absolute;top:-20px;transform:translateX(-50%);font-size:11px;font-weight:600;color:var(--yellow-t);white-space:nowrap}
+.finish.reached{border-color:var(--green)}.finish.reached span{color:var(--green-t)}
 .legend{font-size:12px;color:var(--muted);margin-top:4px}
 svg.edges{position:absolute;left:0;top:0;pointer-events:none;z-index:0;overflow:visible}
 svg.edges path{fill:none;stroke:var(--edge);stroke-width:1.5}
@@ -806,7 +808,7 @@ function render(){
   const B=document.getElementById("library"),L=d.library,head=el("div","row"),hb=el("div","grow");head.append(el("span","dot "+L.color),hb);
   if(d.libs.length>1){const s=el("select");s.setAttribute("aria-label","Library");d.libs.forEach(x=>{const o=el("option","",x.name+(x.name==="personal"?"":" (team)")+", "+x.notes+" notes");o.value=x.name;if(x.name===L.name)o.selected=true;s.append(o)});
     s.onchange=()=>{libName=s.value;origin="";G.sel=null;load()};hb.append(s);const cur=d.libs.find(x=>x.name===L.name);
-    if(cur&&cur.sync!=="-"){const y=el("div","","Last sync: "+cur.sync);y.style.color=cur.sync_color==="green"?"var(--muted)":"var(--"+cur.sync_color+")";hb.append(y)}}
+    if(cur&&cur.sync!=="-"){const y=el("div","","Last sync: "+cur.sync);y.style.color=cur.sync_color==="green"?"var(--muted)":"var(--"+cur.sync_color+"-t)";hb.append(y)}}
   // the graph element is never detached, so focus, camera, selection and positions survive the refresh
   if(!B.lslots){B.lslots=[el("div"),graphEl(),el("div"),el("div")];B.replaceChildren(...B.lslots)}
   const[hs,gr,more,lsl]=B.lslots;hs.replaceChildren(head);
@@ -818,7 +820,7 @@ function render(){
     ls.append(list("With problems",L.problems,title),list("Broken links",L.dangling,x=>title(x[0])+" → "+x[1]),
       list("Past review date",L.stale,title),list("Possible duplicates",L.pairs,x=>title(x[0])+" / "+title(x[1])));
     lsl.replaceChildren(ls)}
-  const U=document.getElementById("turns"),n=(v,t,c)=>{const x=el("div");const b=el("b","",String(v));if(c&&v)b.style.color="var(--"+c+")";x.append(b,el("span","muted",t));return x};
+  const U=document.getElementById("turns"),n=(v,t,c)=>{const x=el("div");const b=el("b","",String(v));if(c&&v)b.style.color="var(--"+c+"-t)";x.append(b,el("span","muted",t));return x};
   U.replaceChildren(n(d.counts.turns,"turns"),n(d.counts.violations,"broke the protocol","red"),n(d.counts.rejected,"notes rejected","yellow"));
 }
 async function send(body,name,kind){
