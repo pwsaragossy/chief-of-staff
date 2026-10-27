@@ -174,6 +174,17 @@ check "a specialist with its checklist and versions finishes" '[ "$(rc "$(ev Sub
 check "ambition: a version without the judge.s evidence cannot finish" 'h "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Versions v1 depth: judge fail ## Never-skip checklist ok\"")" "$P" 2>&1 | grep -q "never invent a failed version"'
 check "ambition: a first version that passed, with what the judge printed, finishes" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Versions v1 passed: sh check.sh printed 1.4 s ## Never-skip checklist ok\"")" "$P")" = 0 ]'
 check "a role card named by its path is allowed, a path outside the workspace is not" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: $W/specialists/researcher.md Library: none found for x Ambition: answer many lookups fast, not one | judge: sh check.sh under 3 s\"}")" "$P")" = 0 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: /tmp/evil/specialists/researcher.md Library: none found for x Ambition: answer many lookups fast, not one | judge: sh check.sh under 3 s\"}")" "$P")" = 2 ]'
+SP="$W/My Drive/ws"; mkdir -p "$SP/specialists" "$SP/projects/p"; : > "$SP/.chief-of-staff"; : > "$SP/specialists/researcher.md"
+check "a role card path with spaces is read up to .md; the block message says the role name is enough" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: $SP/specialists/researcher.md Library: none found for x Ambition: answer many lookups fast, not one | judge: sh check.sh under 3 s\"}")" "$SP/projects/p")" = 0 ] && h "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"do it\"}")" "$SP/projects/p" 2>&1 | grep -q "the role name is enough"'
+rm -rf "$W/My Drive"
+check "cos_limit stops a slow command, with timeout(1) and without it" '( . "$here/lib.sh"; s=$(date +%s); o=$(cos_limit 1 sh -c "sleep 6; echo late"); r=$?; [ $r = 124 ] && [ -z "$o" ] && [ $(($(date +%s) - s)) -lt 4 ] && [ "$(cos_limit 2 echo fast)" = fast ] ) && mkdir -p "$W/limbin" && for t in sleep mktemp cat rm sh; do ln -sf "$(command -v $t)" "$W/limbin/$t"; done && ( PATH="$W/limbin"; . "$here/lib.sh"; o=$(cos_limit 1 sh -c "sleep 6; echo late"); [ $? = 124 ] && [ -z "$o" ] && [ "$(cos_limit 2 sh -c "echo fast")" = fast ] )'
+SL="$W/slowplug"; cp -R "$here" "$SL"; printf '#!/bin/sh\nsleep 9\n' > "$SL/library.sh"
+check "a lookup slower than its budget is cut: the hook ends in time, the full protocol is out, and the next prompts skip it" 'rm -f "$CLAUDE_PLUGIN_DATA/turns/s7.seen"; s=$(date +%s); o=$(printf "%s" "{\"session_id\":\"s7\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"what is the tax rate on services?\"}" | CLAUDE_PROJECT_DIR="$P" sh "$SL/protocol.sh"); r=$?; e=$(date +%s); [ $r = 0 ] && [ $((e - s)) -lt 5 ] && printf "%s" "$o" | grep -q "the independent reviewer, as subagents" && [ -f "$CLAUDE_PLUGIN_DATA/turns/s7.seen" ] && printf "%s" "{\"session_id\":\"s7\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"what is the tax rate?\"}" | CLAUDE_PROJECT_DIR="$P" sh "$SL/protocol.sh" | grep -q "Library lookup skipped"'
+printf '#!/bin/sh\nsleep 9\n' > "$SL/track.sh"; printf '#!/bin/sh\nsleep 9\n' > "$SL/health.sh"
+check "a turn-end track check slower than its budget blocks in time and says what to run" 's=$(date +%s); o=$(printf "%s" "{\"session_id\":\"s7\",\"hook_event_name\":\"Stop\",\"stop_hook_active\":false}" | CLAUDE_PROJECT_DIR="$P" sh "$SL/protocol.sh" 2>&1); r=$?; [ $r = 2 ] && [ $(($(date +%s) - s)) -lt 5 ] && printf "%s" "$o" | grep -q "track.sh check did not finish in time"'
+check "a briefing whose board read runs out of time says so and ends in time" 's=$(date +%s); o=$(CLAUDE_PROJECT_DIR="$W/central" sh "$SL/briefing.sh"); [ $(($(date +%s) - s)) -lt 9 ] && printf "%s" "$o" | grep -q "board was not read in time"'
+rm -rf "$SL" "$CLAUDE_PLUGIN_DATA"/slow-*
+check "the panel writes state text in colors with 4.5:1 in both modes, and the version is 0.5.0 everywhere" 'grep -q ".finish span{[^}]*color:var(--yellow-t)" "$here/panel.py" && grep -q "finish.reached span{color:var(--green-t)}" "$here/panel.py" && grep -q -- "--yellow-t:#8a5d00" "$here/panel.py" && grep -q "\"version\": \"0.5.0\"" "$here/../.claude-plugin/plugin.json" && grep -q "Version 0.5.0\." "$here/../README.md"'
 check "the specialists skill names cards by path and never pastes them" 'grep -q "Do not paste the card" "$here/../skills/specialists/SKILL.md" && grep -q "never pasted" "$here/../templates/ROUTING.md"'
 check "ambition: a specialist cannot finish without its versions" 'h "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Never-skip checklist ok\"")" "$P" 2>&1 | grep -q "## Versions" && [ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Never-skip checklist ok\"")" "$P")" = 2 ]'
 check "ambition: the reviewer finishes without versions (it judges, it does not draft)" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: reviewer ## Never-skip checklist ok\"")" "$P")" = 0 ]'
@@ -636,6 +647,8 @@ check "the question text is shown without its stamp" 'b "$W/central" | grep -q "
 h "$(ev Stop ",\"stop_hook_active\":false")" "$W/central" >/dev/null 2>&1
 check "the Stop hook stamps each new question line and keeps the old stamps" 'grep -Eq "^- \(asked 20[0-9-]+ [0-9:]+ [+-][0-9]+\) New question about the video" "$W/board/Gamma.md" && [ "$(grep -c "(asked " "$W/board/Gamma.md")" = 2 ] && H gamma | grep -q "for 9 h"'
 check "an old card with asked: alone still counts" 'gcard "$(fut -1800)"; H gamma | grep -Eq "waited on the owner for 3[01] min"'
+gcard "$(fut -32400) $(date +%z)"; h "$(ev Stop ",\"stop_hook_active\":false")" "$W/central" >/dev/null 2>&1
+check "a v0.4 card is stamped with its asked: time, not the time of the upgrade" 'grep -q "^- (asked $(fut -32400) $(date +%z)) Freeze the scope" "$W/board/Gamma.md" && H gamma | grep -q "for 9 h"'
 fm_set "$G/TRACK.md" deputy bia; fm_set "$G/TRACK.md" deadline "$(fut 9000)"
 check "a late question under 3 h from the deadline goes to the deputy" 'H gamma | grep -q "escalate it to the deputy, bia: Gamma" && b "$W/central" | grep -q "the deputy bia decides"'
 fm_set "$G/TRACK.md" deadline "$(fut 30000)"
@@ -651,6 +664,10 @@ echo a > "$GR/f"; git -C "$GR" add f; git -C "$GR" commit -qm a; git -C "$GR" pu
 echo "network: testnet" > "$GR/f"; git -C "$GR" commit -qam b
 gp() { printf '%s' "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push\"}")" | CLAUDE_PROJECT_DIR="$G" sh -c "cd \"$GR\" && sh \"$here/protocol.sh\""; }
 check "a push that changes a guarded term asks first, other pushes pass silently" 'mv "$G/DECISIONS.md" "$G/D.bak"; [ -z "$(gp)" ] && mv "$G/D.bak" "$G/DECISIONS.md" && gp | grep -q "this push changes testnet"'
+git -C "$GR" checkout -q -b newbranch; echo "testnet again" >> "$GR/f"; git -C "$GR" commit -qam c
+check "a new branch with no upstream is compared with origin, not let through" 'gp | grep -q "this push changes testnet"'
+git -C "$GR" remote remove origin
+check "with no remote branch at all the guarded push asks" 'gp | grep -q "no remote branch to compare with"'
 rm -f "$G/DECISIONS.md"
 cp "$G/STATE.md" "$W/gs.bak"; awk '{ print } /^## 3\./ { print "- Production runs commit abc123 — curl https://x/version — verified: 2026-01-01 10:00"; print "- Balance is 12 XLM — stellar CLI" }' "$W/gs.bak" > "$G/STATE.md"
 check "facts checked long ago are flagged to re-verify, facts without a time are counted" 'o=$(b "$G"); printf "%s" "$o" | grep -q "Re-verify before repeating (1 fact(s)" && printf "%s" "$o" | grep -q "Production runs commit abc123" && printf "%s" "$o" | grep -q "1 fact(s) in STATE.md section 3 have no verified: time"'
@@ -672,8 +689,10 @@ cp "$G/TRACK.md" "$W/gt.bak"; printf 'Video for the submission: /home/someone/De
 check "a delivery that points outside the workspace is yellow" 'H gamma | grep -q "^yellow: the delivery points outside the workspace (/home/someone/Desktop/final-video.mp4)"'
 cp "$W/gt.bak" "$G/TRACK.md"
 h "$(ev UserPromptSubmit)" "$G" >/dev/null; : > "$G/THREE-MACHINES.md"; : > "$G/THREE-MACHINE.md"
-check "a file written beside one with nearly its name gets a warning; a distinct name does not" 'h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$G/THREE-MACHINE.md\"}")" "$G" 2>&1 | grep -q "nearly the same name as THREE-MACHINES.md" && : > "$G/report-v2.md" && [ "$(rc "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$G/report-v2.md\"}")" "$G")" = 0 ]'
-rm -f "$G/THREE-MACHINES.md" "$G/THREE-MACHINE.md" "$G/report-v2.md"
+check "a file written beside one with nearly its name gets a notice that does not block; a distinct name gets none" 'o=$(h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$G/THREE-MACHINE.md\"}")" "$G" 2>&1); [ $? = 0 ] && printf "%s" "$o" | grep -q "nearly the same name as THREE-MACHINES.md in the same folder: check whether one duplicates the other" && ! printf "%s" "$o" | grep -qi delete && : > "$G/report-v2.md" && [ -z "$(h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$G/report-v2.md\"}")" "$G" 2>&1)" ]'
+: > "$G/index.html"; : > "$G/index.js"
+check "files with the same name and another extension are not near duplicates" '[ -z "$(h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$G/index.js\"}")" "$G" 2>&1)" ]'
+rm -f "$G/THREE-MACHINES.md" "$G/THREE-MACHINE.md" "$G/report-v2.md" "$G/index.html" "$G/index.js"
 fm_set "$G/TRACK.md" deadline "$(fut 3600)"
 check "a deadline under 2 h with the delivery open is red, with the countdown" 'H gamma | grep -Eq "^red: deadline in ([0-9]+ h )?[0-9]+ min and the delivery is open"'
 fm_set "$G/TRACK.md" deadline "$(fut 14400)"

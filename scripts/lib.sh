@@ -88,6 +88,21 @@ cos_libpath() {
 cos_cfg() { { cat "$1/.chief-of-staff"; for _f in "$1"/projects/*/.library; do [ -f "$_f" ] && { printf '%s\n' "$_f"; cat "$_f"; }; done; } 2>/dev/null | cksum | tr -d ' \t'; }
 cos_cfgrec() { printf '%s/cos-cfg-%s' "${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"; }
 cos_cfgsave() { _c=$(cos_cfgrec "$1"); mkdir -p "$(dirname "$_c")" && { [ -f "$_c" ] && chmod u+w "$_c"; cos_cfg "$1" > "$_c"; chmod 444 "$_c"; }; }
+# cos_limit SECONDS CMD... -> CMD with its output, stopped after SECONDS (status 124, nothing printed then). A hook
+# that hits Claude Code's own limit is killed and loses all it printed, so slow steps run inside a smaller budget.
+# timeout(1) where it exists (it stops the whole process group); else the command runs in the background into a
+# file, so a grandchild left running cannot hold the hook's output open
+cos_limit() {
+  _s=$1; shift
+  command -v timeout >/dev/null 2>&1 && { timeout "$_s" "$@"; return; }
+  _o=$(mktemp "${TMPDIR:-/tmp}/cos-limit.XXXXXX") || { "$@"; return; }
+  "$@" > "$_o" 2>/dev/null & _p=$!; _n=0; _m=$(( ${_s%.*} * 5 + 2 ))
+  while kill -0 "$_p" 2>/dev/null; do
+    [ $_n -ge $_m ] && { kill "$_p" 2>/dev/null; rm -f "$_o"; return 124; }
+    if sleep 0.2 2>/dev/null; then _n=$((_n + 1)); else sleep 1; _n=$((_n + 5)); fi
+  done
+  wait "$_p"; _r=$?; cat "$_o"; rm -f "$_o"; return $_r
+}
 # cos_cache NAME KEY -> a file for this computer's cache (never in a library or the workspace), one per KEY
 cos_cache() { printf '%s/%s-%s' "${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}" "$1" "$(printf '%s' "$2" | cksum | cut -d' ' -f1)"; }
 # cos_ids LIB -> the note ids of LIB, one per line, from a cache that stays valid until notes/ changes (adding,

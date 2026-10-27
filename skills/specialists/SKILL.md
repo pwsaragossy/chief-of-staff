@@ -15,8 +15,8 @@ use each, the checks a senior professional never skips, the evidence standard an
    bear on the request. What it returns goes into every brief, so no specialist redoes research the
    workspace already has.
 3. **Brief each specialist as a subagent.** The brief contains, in this order:
-   - the line `Role card: <workspace>/specialists/<role>.md` (absolute path; the hook blocks a brief
-     without it) and "read your role card first and follow it". Do not paste the card: at 8-12 KB
+   - the line `Role card: <role>` or `Role card: <workspace>/specialists/<role>.md` (the role name is
+     enough; a path may hold spaces; the hook blocks a brief without it) and "read your role card first and follow it". Do not paste the card: at 8-12 KB
      each, pasted cards crowd the task out of the brief, and the subagent reads the file itself;
    - the line `Library: [[id]] [[id]] ...` with the notes found, or `Library: none found for <terms>`
      (the hook blocks a brief without it), the question, the files to read, and what to deliver;

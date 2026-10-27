@@ -64,8 +64,10 @@ case $rel in projects/?*) project=${rel#projects/}; project=${project%%/*} ;; *)
 jget() { printf '%s' "$in" | sed -n "s/.*\"$1\" *: *\"\{0,1\}\([^\",}]*\).*/\1/p" | head -n 1; }
 # the role a brief names: "Role card: <role>", or the card's path "Role card: <root>/specialists/<role>.md", which
 # the subagent reads itself (pasting 8-12 KB cards into every brief crowded out the task). A path elsewhere names no card
-roleof() { _r=$(printf '%s' "$in" | grep -o 'Role card: *[^ "\\]*' | head -n 1 | sed 's/^Role card: *//')
-  case $_r in "$root/specialists/"*.md) _r=${_r#"$root/specialists/"}; _r=${_r%.md} ;; */*) _r= ;; esac
+# A path may hold spaces (a folder in "My Drive"): it runs up to /specialists/<role>.md
+roleof() { _r=$(printf '%s' "$in" | grep -o 'Role card: */[^"\\]*/specialists/[a-z-]*\.md' | head -n 1 | sed 's/^Role card: *//')
+  if [ -n "$_r" ]; then case $_r in "$root/specialists/"*) _r=${_r#"$root/specialists/"}; _r=${_r%.md} ;; *) _r= ;; esac
+  else _r=$(printf '%s' "$in" | grep -o 'Role card: *[^ "\\]*' | head -n 1 | sed 's/^Role card: *//'); case $_r in */*) _r= ;; esac; fi
   printf '%s' "$_r" | sed 's/[^a-z-].*//'; }
 
 sid=$(jget session_id | tr -cd 'A-Za-z0-9_-')
@@ -79,29 +81,31 @@ case $(jget hook_event_name) in
   UserPromptSubmit)
     rm -f "$st"/*
     : > "$st/start"   # notes modified after this are the turn's notes (whatever tool or path wrote them)
+    # The full text once per session: at its first prompt and after a compaction or a new start (the briefing
+    # leaves $st.full); every other prompt gets one line. The text stays in context, and repeating 1-2 KB on
+    # every prompt crowded out the work itself
+    # The text goes out first, before any slow step, and is marked as seen only once it is out
+    if [ -f "$st.full" ] || [ ! -f "$st.seen" ]; then
+      pt=$( echo "Chief-of-staff protocol for this request (checked by hooks at the end of the turn):"
+      echo "- A deliverable for other people, a decision that crosses areas, or research goes through the specialists skill: at least one specialist and the independent reviewer, as subagents, each briefed with the line 'Role card: <role>' naming its card in $root/specialists/ (the subagent reads the card itself), a 'Library:' line and an 'Ambition: <goal behind the goal> | judge: <outside judge>' line. A new request from the owner goes through the ambition skill first."
+      cos_fast "$root" && echo "- Hackathon pace (pace: fast): internal work (plans, code, cards, research for the team) needs one specialist subagent, no reviewer. The independent reviewer runs only on what goes outside: the submission, the video, the README, messages to judges, partners or users. Independent work goes to parallel sessions, not one long turn."
+      echo "- Research starts in the library: sh \"$L\" search <terms> (workspace: $root). Web search only for what the library lacks. Every new finding, decision, how-to or option becomes a note: sh \"$L\" new <finding|decision|howto|option|topic> <origin> <title>, then fill it. Hooks check every note."
+      echo "- Facts that change (what runs in production, balances, public links, deploy state) are measured again before they are repeated, never copied from STATE.md or a card." )
+      # one write: a reader that stops at the first line (grep -q) cannot cut the text before it is marked seen
+      printf '%s\n' "$pt" && { rm -f "$st.full"; : > "$st.seen"; }
+    else
+      echo "Chief-of-staff protocol as stated at the start of this session (checked at the end of the turn): specialists and the reviewer for deliverables, research and cross-area decisions; the library first (sh \"$L\" search <terms>); each finding becomes a note.$(cos_fast "$root" && printf ' Hackathon pace: one specialist for internal work; the reviewer runs only on what goes outside.')"
+    fi
     # first use: trust the settings as they are, but only while there is no team to share with
     [ -f "$(cos_cfgrec "$root")" ] || cos_libs "$root" | cut -f1 | grep -qvx personal || cos_cfgsave "$root"
     # what each other team library holds now, so the turn end blames this session only for what it changed there
     cos_libs "$root" | while IFS="$TAB" read -r n q; do [ "$n" = personal ] || [ "$n" = "$lname" ] || [ ! -d "$q/.git" ] && continue
       { git -C "$q" rev-parse -q --verify HEAD; git -C "$q" status --porcelain -uall --no-renames; } > "$st/snap-$n" 2>/dev/null; done
-    # The full text once per session: at its first prompt and after a compaction or a new start (the briefing
-    # leaves $st.full); every other prompt gets one line. The text stays in context, and repeating 1-2 KB on
-    # every prompt crowded out the work itself
-    if [ -f "$st.full" ] || [ ! -f "$st.seen" ]; then
-      rm -f "$st.full"; : > "$st.seen"
-      echo "Chief-of-staff protocol for this request (checked by hooks at the end of the turn):"
-      echo "- A deliverable for other people, a decision that crosses areas, or research goes through the specialists skill: at least one specialist and the independent reviewer, as subagents, each briefed with the line 'Role card: <role>' naming its card in $root/specialists/ (the subagent reads the card itself), a 'Library:' line and an 'Ambition: <goal behind the goal> | judge: <outside judge>' line. A new request from the owner goes through the ambition skill first."
-      cos_fast "$root" && echo "- Hackathon pace (pace: fast): internal work (plans, code, cards, research for the team) needs one specialist subagent, no reviewer. The independent reviewer runs only on what goes outside: the submission, the video, the README, messages to judges, partners or users. Independent work goes to parallel sessions, not one long turn."
-      echo "- Research starts in the library: sh \"$L\" search <terms> (workspace: $root). Web search only for what the library lacks. Every new finding, decision, how-to or option becomes a note: sh \"$L\" new <finding|decision|howto|option|topic> <origin> <title>, then fill it. Hooks check every note."
-      echo "- Facts that change (what runs in production, balances, public links, deploy state) are measured again before they are repeated, never copied from STATE.md or a card."
-    else
-      echo "Chief-of-staff protocol as stated at the start of this session (checked at the end of the turn): specialists and the reviewer for deliverables, research and cross-area decisions; the library first (sh \"$L\" search <terms>); each finding becomes a note.$(cos_fast "$root" && printf ' Hackathon pace: one specialist for internal work; the reviewer runs only on what goes outside.')"
-    fi
     [ $lst = 0 ] || { sh "$L" where | sed -n 2p; exit 0; }
     # what the company already knows about this request; skipped for an external or very large library (hook time budget)
     case $lib in "$root"/*) ;; *) exit 0 ;; esac
     [ "$(cos_ids "$lib" | wc -l)" -le 3000 ] || exit 0
-    # a library whose last automatic lookup took 2 s or more (a slow disk) is skipped until a note is added
+    # a library whose automatic lookup did not finish inside its budget (a slow disk) is skipped until a note is added
     slow=$(cos_cache slow "$lib")
     [ "$slow" -nt "$lib/notes" ] && { echo "Library lookup skipped (too slow on this disk): run sh \"$L\" search <terms>."; exit 0; }
     q=$(printf '%s' "$in" | LC_ALL=C awk '{ s = s $0 " " } END {
@@ -111,8 +115,10 @@ case $(jget hook_event_name) in
         if (c == "\"") break; o = o c }
       print o }')
     [ -n "$q" ] || exit 0
-    t0=$(date +%s); sh "$L" search --auto "$q"
-    [ $(($(date +%s) - t0)) -ge 2 ] && { mkdir -p "${slow%/*}"; : > "$slow"; }
+    # The hook dies at 5 s and a killed hook loses everything it printed: the marker is written before the lookup
+    # and removed only when the lookup ends inside its 2.5 s budget, so a lookup cut short is not tried again
+    mkdir -p "${slow%/*}"; : > "$slow"
+    cos_limit 2.5 sh "$L" search --auto "$q" && rm -f "$slow"
     ;;
   PostToolUse)
     tool=$(jget tool_name)
@@ -158,12 +164,14 @@ $p"; fi ;;
         esac ;; esac ;;
     esac
     case $in in *library.sh*search*|*"$lib/"*|*"$root/knowledge"*) [ "$tool" = Write ] || [ "$tool" = Edit ] || mark library ;; esac
-    # a file written beside one with nearly its name (THREE-MACHINE.md next to THREE-MACHINES.md): two copies drift
-    # apart and each reader picks one. Same name once letter case, separators, the extension and a final s are dropped
+    # a file written beside one with nearly its name and the same extension (THREE-MACHINE.md next to
+    # THREE-MACHINES.md): two copies drift apart and each reader picks one. Same name once letter case, separators
+    # and a final s are dropped; index.js beside index.html is a different file. A notice, never a block
     if [ "$tool" = Write ] && [ "$ok" = 1 ]; then case $fp0 in "$wl/"*) ;; "$root"/*/*)
-      nd=$(ls -A "${fp0%/*}" 2>/dev/null | B="${fp0##*/}" LC_ALL=C awk 'function k(s) { s = tolower(s); sub(/\.[a-z0-9]+$/, "", s); gsub(/[^a-z0-9]/, "", s); sub(/s$/, "", s); return s }
-        BEGIN { t = k(ENVIRON["B"]) } $0 != ENVIRON["B"] && length(t) > 2 && k($0) == t { print; exit }')
-      [ -n "$nd" ] && { echo "Warning: ${fp0##*/} has nearly the same name as $nd in the same folder. If they are the same document, keep one (merge, then delete the other) so nobody reads a stale copy; if not, give one a name that says how it differs." >&2; exit 2; } ;; esac; fi
+      nd=$(ls -A "${fp0%/*}" 2>/dev/null | B="${fp0##*/}" LC_ALL=C awk 'function e(s) { s = tolower(s); return match(s, /\.[a-z0-9]+$/) ? substr(s, RSTART) : "" }
+        function k(s) { s = tolower(s); sub(/\.[a-z0-9]+$/, "", s); gsub(/[^a-z0-9]/, "", s); sub(/s$/, "", s); return s }
+        BEGIN { t = k(ENVIRON["B"]); x = e(ENVIRON["B"]) } $0 != ENVIRON["B"] && length(t) > 2 && e($0) == x && k($0) == t { print; exit }' | tr -d '"\\\000-\037')
+      [ -n "$nd" ] && printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"chief-of-staff: %s has nearly the same name as %s in the same folder: check whether one duplicates the other."}}\n' "$(printf '%s' "${fp0##*/}" | tr -d '"\\\000-\037')" "$nd" ;; esac; fi
     ;;
   PreToolUse)
     case $(jget tool_name) in
@@ -180,7 +188,7 @@ $p"; fi ;;
           exit 2
         fi
         cards=$(ls "$root/specialists" 2>/dev/null | sed -n 's/\.md$//p' | tr '\n' ' ')
-        echo "Blocked by chief-of-staff: every subagent brief names its role card. Add the line 'Role card: $root/specialists/<role>.md' (the subagent reads the card itself; do not paste it). Cards: ${cards:-none found}. For a search or file-reading helper, write 'Role card: utility'." >&2
+        echo "Blocked by chief-of-staff: every subagent brief names its role card. Add the line 'Role card: <role>' (the role name is enough, for example 'Role card: researcher'), and tell the subagent to read $root/specialists/<role>.md itself; do not paste the card. Cards: ${cards:-none found}. For a search or file-reading helper, write 'Role card: utility'." >&2
         exit 2 ;;
       WebSearch|WebFetch)
         [ -f "$st/library" ] && exit 0
@@ -318,7 +326,15 @@ $p"; fi ;;
               elif [ -n "$project" ] && [ -f "$root/projects/$project/DECISIONS.md" ] && printf '%s\n' "$nq" | grep -Eq '(^|[^a-z0-9_.-])git .*push([^a-z0-9_-]|$)'; then
                 gt=$(cos_decisions "$root/projects/$project/DECISIONS.md" | cut -f2 | sed -n 's/.*guard: *\([^;|)]*\).*/\1/p' | sed 's/ *$//' | grep .)
                 if [ -n "$gt" ]; then
-                  dv=$(git -C "$PWD" diff '@{u}..HEAD' 2>/dev/null | grep '^[-+]' | grep -v '^[-+][-+][-+] ')
+                  # what the push sends: past the branch's upstream, else past the same branch on origin, else past
+                  # origin's default branch (a new branch, push -u). With none of them it cannot be told: ask (fail closed)
+                  gb=$(git -C "$PWD" rev-parse --abbrev-ref HEAD 2>/dev/null); base=
+                  for r in '@{u}' "origin/$gb" origin/HEAD origin/main origin/master; do
+                    git -C "$PWD" rev-parse -q --verify "$r^{commit}" >/dev/null 2>&1 && { base=$r; break; }; done
+                  if [ -z "$base" ]; then
+                    echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this project has guarded decisions in DECISIONS.md and this push has no remote branch to compare with, so what it changes cannot be checked. Approve only if it does not undo a decision."}}'; exit 0
+                  fi
+                  dv=$(git -C "$PWD" diff "$base...HEAD" 2>/dev/null | grep '^[-+]' | grep -v '^[-+][-+][-+] ')
                   hitg=$(printf '%s\n' "$gt" | while IFS= read -r t; do printf '%s\n' "$dv" | grep -qiF -- "$t" && printf '%s, ' "$t"; done | tr -d '"\\\000-\037')
                   [ -n "$hitg" ] && echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this push changes '"${hitg%, }"', guarded by a decision in DECISIONS.md. Approve only if that decision still holds or was replaced by a new line."}}'
                 fi
@@ -368,7 +384,7 @@ $p"; fi ;;
     fresh=; [ -n "$project" ] && [ -f "$st/start" ] && fresh=$(find "$root/board" -name '*.md' -type f -cnewer "$st/start" 2>/dev/null)
     now=$(date '+%F %H:%M %z'); US=$(printf '\037')
     cos_board "$root" > "$st/board"
-    while IFS=$US read -r c cm cp cs a _d nq nu _r; do
+    while IFS=$US read -r c cm cp cs a _d nq nu sp _r; do
       if [ -n "$shared" ]; then   # a shared board: each card is stamped by its own member's computer only
         # a card without a member gets this person's, from central or from the session of its own project
         [ -z "$cm" ] && [ -n "$me" ] && { [ -z "$project" ] || [ "$cp" = "$project" ]; } && { cm=$me; fm_set "$c" member "$me"; }
@@ -376,7 +392,10 @@ $p"; fi ;;
       fi
       [ -n "$project" ] && [ "$cp" = "$project" ] && [ "$nq" -gt 0 ] && printf '%s\n' "$fresh" | grep -qxF "$c" &&
         case $cs in ''|in-progress) true ;; *) false ;; esac && { fm_set "$c" status waiting-owner; cs=waiting-owner; }
-      if [ "$cs" = waiting-owner ]; then [ -n "$a" ] || fm_set "$c" asked "$now"; [ "$nu" -gt 0 ] && cos_stamp "$c" "$now"
+      if [ "$cs" = waiting-owner ]; then [ -n "$a" ] || fm_set "$c" asked "$now"
+        # a card from v0.4 (asked: set, no line stamped yet): its questions keep that time, not the migration's
+        w=$now; [ -z "$sp" ] && case $a in [0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9]" "[0-2][0-9]:[0-5][0-9]|[0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9]" "[0-2][0-9]:[0-5][0-9]" "[+-][0-2][0-9][0-5][0-9]) w=$a ;; esac
+        [ "$nu" -gt 0 ] && cos_stamp "$c" "$w"
       elif [ -n "$a" ]; then fm_set "$c" asked ""; fi
     done < "$st/board"
     # ponytail: "substantive" is a heuristic (deliverable file, web research, or a long answer);
@@ -448,7 +467,9 @@ CH
         [ $# -gt 0 ] || continue
         if [ $# -gt 20 ]; then gap "More than 20 notes changed in '$n'; only 20 can be checked in one turn: run library.sh --lib $n doctor, and save fewer notes per turn."; set --; fi
         [ $# -gt 0 ] || continue
-        g=$(sh "$L" --lib "$n" gate "$@" | grep -v ': warning: ' | head -n 20)
+        # each slow step has its own budget inside the hook's 5 s; one that runs out fails closed, saying what to run
+        g=$(cos_limit 1.5 sh "$L" --lib "$n" gate "$@") || [ $? != 124 ] || g="The library check of this turn's notes did not finish in time (slow disk): run sh \"$L\" --lib $n gate <each note you saved> and fix what it lists."
+        g=$(printf '%s\n' "$g" | grep -v ': warning: ' | head -n 20)
         [ -n "$g" ] && gap "$g"
         if [ -n "$team" ]; then
           # a verbatim copy carries no [[link]]: a sentence of 40+ characters found in another library blocks it.
@@ -456,7 +477,8 @@ CH
           sentences "$@" | sort -u > "$st/lines"
           if [ -s "$st/lines" ]; then
             cos_libs "$root" | while IFS="$TAB" read -r n2 q2; do [ "$n2" = "$n" ] || [ ! -d "$q2/notes" ] && continue
-              find "$q2/notes" -name '*.md' -type f -exec env LC_ALL=C awk -v want="$st/lines" "$SENT" {} + 2>/dev/null; done > "$st/hits"
+              cos_limit 1.5 find "$q2/notes" -name '*.md' -type f -exec env LC_ALL=C awk -v want="$st/lines" "$SENT" {} + 2>/dev/null || [ $? != 124 ] || : > "$st/copyslow"; done > "$st/hits"
+            [ -f "$st/copyslow" ] && gap "The check for text copied from another library did not finish in time (slow disk): nothing goes to the team this turn; end the turn again, or ask the owner to read the notes first."
             # each note's first sentence found in another library, with that library's note: two awk runs in all
             # (the turn's notes against the hit sentences, then the join), not one per sentence
             if [ -s "$st/hits" ]; then cut -f1 "$st/hits" | sort -u > "$st/hitlines"
@@ -515,7 +537,11 @@ $wg"
 $lgaps
 Fix each note (format: $lib/templates/note.md). When a new note is better than an old one, or merges several, retire the old: sh \"$L\" retire <old-id> <new-id> \"<why it lost>\". Valid alternatives stay: write [[id]] coexists (reason)."
     gaps=
-    [ -n "$project" ] && gaps=$(sh "$(dirname "$0")/track.sh" check "$root/projects/$project" | head -n 20)
+    if [ -n "$project" ]; then
+      gaps=$(cos_limit 1.5 sh "$(dirname "$0")/track.sh" check "$root/projects/$project") || [ $? != 124 ] ||
+        gaps="track.sh check did not finish in time (slow disk): run sh \"$(dirname "$0")/track.sh\" check $root/projects/$project and close what it lists."
+      gaps=$(printf '%s\n' "$gaps" | head -n 20 | grep .)
+    fi
     [ -n "$gaps" ] && reason="${reason:+$reason }Track gate (projects/$project/TRACK.md) not met:
 $gaps
 Close each item with its proof file (evidence: path relative to the project folder), mark it [-] with why: when it does not apply, or move stage: back. A stage passes only when every item is closed."

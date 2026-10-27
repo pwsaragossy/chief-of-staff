@@ -42,7 +42,8 @@ while [ -n "$pids" ]; do
   if sleep 0.2 2>/dev/null; then k=$((k + 1)); else sleep 1; k=$((k + 5)); fi
 done
 
-cards=$(sh "$here/health.sh" cards "$root" 2>/dev/null)
+# the hook dies at 10 s and then shows nothing: each slow step gets its own budget, and says when it ran out
+cardslow=; cards=$(cos_limit 3 sh "$here/health.sh" cards "$root" 2>/dev/null) || [ $? != 124 ] || cardslow=1
 me=; cos_shared "$root" && me=$(cos_member "$root")
 waiting() { # cards waiting on the owner, with their questions; $1 = project slug filter (empty = all)
   printf '%s\n' "$cards" | while IFS=$US read -r k n p s m c w l d dl q esc big ages; do
@@ -100,7 +101,7 @@ reverify() {
     central|central/*)
       out "This session is central: the only one that asks the owner. Cards waiting on the owner:"
       [ "$src" = compact ] && [ -n "$sid" ] && turnrec
-      w=$(waiting ""); out "${w:-- none}"
+      w=$(waiting ""); [ -n "$cardslow" ] && w="- the board was not read in time (slow disk): read board/ before asking anything"; out "${w:-- none}"
       cos_shared "$root" && if [ -n "$me" ]; then out "Shared workspace: you are '$me'. Cards of other members are on the panel; their own central asks them."
         else out "Shared workspace, but this computer has no member name: set it with git -C \"$root\" config cos.member <name>. Until then every card is listed here."; fi
       dd=$(due7); [ -n "$dd" ] && { out "Due in the next 7 days:"; out "$dd"; }
@@ -114,7 +115,7 @@ reverify() {
       done
       n=$(ls "$(cos_lib "$root")"/inbox 2>/dev/null | wc -l | tr -d ' ')
       out "Knowledge inbox: $n item(s) waiting to be processed."
-      sh "$(dirname "$0")/library.sh" brief | tr -d '\000-\011\013-\037'
+      cos_limit 2 sh "$(dirname "$0")/library.sh" brief | tr -d '\000-\011\013-\037'
       syncline
       ;;
     projects/*)
@@ -129,11 +130,12 @@ reverify() {
         reverify "$s" "$root/projects/$p/TRACK.md"
       fi
       dc=$(decisions "$root/projects/$p/DECISIONS.md"); [ -n "$dc" ] && { out "Decisions in force (DECISIONS.md; a new line replaces one, never an edit):"; out "$dc"; }
-      tb=$(sh "$(dirname "$0")/track.sh" brief "$root/projects/$p" | tr -d '\000-\011\013-\037' | cut -c1-600)
+      tb=$(cos_limit 2 sh "$(dirname "$0")/track.sh" brief "$root/projects/$p" | tr -d '\000-\011\013-\037' | cut -c1-600)
       [ -n "$tb" ] && out "$tb (TRACK.md: a stage passes only when every item is closed with its proof file.)"
       w=$(waiting "$p"); [ -n "$w" ] && { out "Cards of this project waiting on the owner:"; out "$w"; }
       bigcards "$p"
-      sh "$(dirname "$0")/library.sh" brief "$p" | tr -d '\000-\011\013-\037'
+      [ -n "$cardslow" ] && out "The board was not read in time (slow disk): read this project's card before acting."
+      cos_limit 2 sh "$(dirname "$0")/library.sh" brief "$p" | tr -d '\000-\011\013-\037'
       syncline
       ;;
     *)
