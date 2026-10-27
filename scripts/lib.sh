@@ -132,15 +132,16 @@ cos_questions() {
     on { sub(/^[-*] +/, ""); if (match($0, '"$COS_ASKED"')) $0 = substr($0, RLENGTH + 1); if ($0 != "" && $0 !~ /^\(/) print }' "$1" 2>/dev/null | tr -d '\000-\010\013-\037' | cut -c1-300 | head -n 10
 }
 # cos_board ROOT -> one line per board card in one pass (hooks run it every turn), fields split by \037:
-#   file member project status asked due questions unstamped stamps lines bytes long text
+#   file member project status asked due questions unstamped stamps lines bytes long text qstamps
 # questions: open question lines; unstamped: top-level ones without (asked ...); stamps: their times, split by \036;
-# lines, bytes, long: the card's size and its lines over 300 characters; text: the questions as cos_questions prints them
+# lines, bytes, long: the card's size and its lines over 300 characters; text: the questions as cos_questions prints them;
+# qstamps: the (asked ...) time of each question in text, in the same order, empty when unstamped, split by \036
 cos_board() {
   for _c in "$1"/board/*.md; do [ -f "$_c" ] || continue
     LC_ALL=C awk '
       function cl(s) { gsub(/[\001-\037\177]/, "", s); return s }
-      function out() { if (fn != "") printf "%s\037%s\037%s\037%s\037%s\037%s\037%d\037%d\037%s\037%d\037%d\037%d\037%s\n", fn, V["member"], V["project"], V["status"], V["asked"], V["due"], nq, nu, sp, nl, nb, lg, qt }
-      FNR == 1 { out(); fn = FILENAME; split("", V); fm = 0; on = 0; nq = nu = nl = nb = lg = 0; sp = qt = "" }
+      function out() { if (fn != "") printf "%s\037%s\037%s\037%s\037%s\037%s\037%d\037%d\037%s\037%d\037%d\037%d\037%s\037%s\n", fn, V["member"], V["project"], V["status"], V["asked"], V["due"], nq, nu, sp, nl, nb, lg, qt, qs }
+      FNR == 1 { out(); fn = FILENAME; split("", V); fm = 0; on = 0; nq = nu = nl = nb = lg = 0; sp = qt = qs = "" }
       { nb += length($0) + 1; nl++; if (length($0) > 300) lg++; sub(/\r$/, "") }
       FNR == 1 && $0 == "---" { fm = 1; next }
       fm { if ($0 == "---") fm = 0
@@ -151,7 +152,7 @@ cos_board() {
            if (match(l, '"$COS_ASKED"')) { t = substr(l, 8, RLENGTH - 7); sub(/\) *$/, "", t); l = substr(l, RLENGTH + 1) }
            if (l == "" || l ~ /^\(/) next
            nq++; if (top && t == "") nu++; if (t != "") sp = sp (sp == "" ? "" : "\036") t
-           if (nq <= 10) qt = qt (qt == "" ? "" : "\036") substr(cl(l), 1, 300) }
+           if (nq <= 10) { qt = qt (qt == "" ? "" : "\036") substr(cl(l), 1, 300); qs = qs (nq == 1 ? "" : "\036") t } }
       END { out() }' "$1"/board/*.md 2>/dev/null
     return 0; done
 }

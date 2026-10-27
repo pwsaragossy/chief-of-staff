@@ -207,7 +207,44 @@ def shared(root):
     except OSError:
         sync = ""
     me = subprocess.run(["git", "-C", root, "config", "cos.member"], capture_output=True, text=True).stdout.strip()[:60]
-    return {"member": me, "sync": sync or "never", "color": sync_color(sync or "never")}
+    return {"member": me, "sync": sync or "never", "color": sync_color(sync or "never"), **data_age(sync[:19])}
+
+
+LATE_MINUTES = 15  # teammates' data older than this gets an "as of sync HH:MM" label
+
+
+def data_age(stamp):
+    """Age of the team's data from a sync line's "YYYY-MM-DD HH:MM:SS": as_of HH:MM, minutes, late."""
+    try:
+        t = time.mktime(time.strptime(stamp, "%Y-%m-%d %H:%M:%S"))
+    except ValueError:
+        return {"as_of": "", "age": None, "late": True}
+    age = max(0, int((time.time() - t) // 60))
+    return {"as_of": stamp[11:16], "age": age, "late": age > LATE_MINUTES}
+
+
+def decisions(pdir, keep=5):
+    """The decisions in force in the project's DECISIONS.md (lib.sh cos_decisions), newest first."""
+    path = os.path.join(pdir, "DECISIONS.md")
+    if not os.path.isfile(path):
+        return []
+    try:
+        out = subprocess.run(["sh", "-c", '. "$0/lib.sh"; cos_decisions "$1"', HERE, path],
+                             capture_output=True, text=True, timeout=10).stdout
+    except subprocess.TimeoutExpired:
+        return []
+    got = [dict(zip(("when", "what", "who"), (l.split("\t") + ["", ""])[:3])) for l in rows(out)]
+    return [{k: v[:200] for k, v in d.items()} for d in got[-keep:][::-1]]
+
+
+def outside(field):
+    """health.sh's public_urls and prod_ref results: "public <url> <code> ok|closed", "prod <url> <commit> ok|down|other"."""
+    out = []
+    for e in field.split("\x1e"):
+        k = e.split(" ")
+        if len(k) == 4 and k[0] in ("public", "prod"):
+            out.append({"kind": k[0], "url": k[1], "code" if k[0] == "public" else "commit": k[2], "state": k[3]})
+    return out
 
 
 VIEW = {"at": 0, "commit": "", "dir": "", "error": ""}
@@ -249,6 +286,7 @@ def team_view(root, fetch=False):
                         if old != commit:
                             shutil.rmtree(os.path.join(base, old), ignore_errors=True)
                     VIEW.update(commit=commit, dir=new)
+                VIEW["stamp"] = time.strftime("%Y-%m-%d %H:%M:%S")
             except (subprocess.TimeoutExpired, OSError, tarfile.TarError, TypeError) as e:
                 VIEW["error"] = "GitHub view failed (%s), showing the last state fetched" % type(e).__name__
             VIEW["fetched"] = time.strftime("%H:%M:%S")
@@ -275,7 +313,8 @@ def team_view(root, fetch=False):
                             f.write(data)
                 except OSError:
                     pass
-        return VIEW["dir"], {"commit": VIEW["commit"][:7], "fetched": VIEW.get("fetched", ""), "error": VIEW["error"]}
+        return VIEW["dir"], {"commit": VIEW["commit"][:7], "fetched": VIEW.get("fetched", ""), "error": VIEW["error"],
+                             **data_age(VIEW.get("stamp", ""))}
 
 
 def sync_color(text):
@@ -286,8 +325,10 @@ def snapshot(root, libname="personal", fetch=False):
     view, source = team_view(root, fetch)   # projects, cards and tasks as the team sees them; library and log stay local
     projects = []
     for line in rows(sh("health.sh", view)):
-        f = (line.split(US) + [""] * 16)[:16]
-        slug, color, reason, stage, stages, closed, total, delivery, delivered, baseline, baseline_delivery, deadline, member, target, check, runs = f
+        f = (line.split(US) + [""] * 18)[:18]
+        slug, color, reason, stage, stages, closed, total, delivery, delivered, baseline, baseline_delivery, deadline, member, target, check, runs, why, out = f
+        # every reason, red first, each "red <text>" or "yellow <text>"; an older health.sh gives only the first
+        reasons = [{"color": r.split(" ", 1)[0], "text": r.split(" ", 1)[1]} for r in why.split("\x1e") if r.split(" ", 1)[0] in ("red", "yellow") and " " in r]
         pdir = os.path.join(view, "projects", slug)
         stage_names, items = [], []
         for row in rows(sh("track.sh", "items", pdir)):
@@ -307,6 +348,8 @@ def snapshot(root, libname="personal", fetch=False):
             "brief": " ".join(l for l in rows(sh("track.sh", "brief", pdir)) if not l.startswith("Target: ")).strip().split(" Waiting on prerequisites:")[0],
             "next": front_matter(os.path.join(pdir, "STATE.md")).get("next", ""),
             "progress": progress(view, slug),
+            "reasons": reasons or ([{"color": color, "text": reason}] if color != "green" else []),
+            "outside": outside(out), "decisions": decisions(pdir),
         })
     libs = libraries(root)
     if libname not in [x["name"] for x in libs]:
@@ -319,10 +362,12 @@ def snapshot(root, libname="personal", fetch=False):
     todo = tasks(view)
     cards = []  # what waits on the owner, from health.sh (the one place that times and colors it)
     for line in rows(sh("health.sh", "cards", view)):
-        f = (line.split(US) + [""] * 11)[:11]
+        f = (line.split(US) + [""] * 14)[:14]
         if f[0] == "C" and f[3] == "waiting-owner":
+            qs, ages = f[10].split("\x1e"), f[13].split("\x1e")  # ages: minutes per question, empty when unstamped
             cards.append({"title": f[1], "project": f[2], "member": f[4], "color": f[5], "waited": int(f[6] or 0),
-                          "limit": f[7], "questions": [q for q in f[10].split("\x1e") if q]})
+                          "limit": f[7], "questions": [q for q in qs if q], "deputy": f[11], "size": f[12],
+                          "ages": [int(a) if i < len(ages) and (a := ages[i]).isdigit() else None for i, q in enumerate(qs) if q]})
 
     # the last 24 h of the protocol log, as three counts: turns, turns that broke the protocol, notes rejected
     try:
@@ -380,6 +425,13 @@ form{display:flex;gap:8px;margin-top:10px}input[type=text]{flex:1;padding:9px 12
 button{padding:9px 16px;border:0;border-radius:8px;background:var(--fg);color:var(--bg);font:inherit;cursor:pointer}
 #msg{min-height:20px;margin-top:8px;font-size:13px}
 .empty{padding:16px;color:var(--muted)}
+.why{margin:2px 0 0;padding:0;list-style:none}.why li{display:flex;gap:6px;align-items:baseline}.why .dot{width:8px;height:8px;flex:none}
+.why details summary{cursor:pointer;color:var(--muted);font-size:13px}
+.pill{display:inline-flex;align-items:baseline;gap:6px;max-width:100%;border:1px solid var(--yellow);border-radius:12px;padding:1px 9px;font-size:12px;color:var(--fg);margin:4px 6px 0 0}
+.pill.red{background:none;border-color:var(--red)}.pill .dot{width:8px;height:8px}
+.facts{font-size:13px;margin-top:6px}.facts b{font-weight:600}.facts ul{margin:2px 0 0;padding-left:18px;color:var(--muted)}
+.age{color:var(--muted);font-size:12px;white-space:nowrap}.pill .dot{flex:none}
+@media (max-width:639px){#cards .row{flex-wrap:wrap}#cards .row>span:last-child{flex-basis:100%;padding-left:24px}}
 .toggle{background:none;color:var(--fg);border:1px solid var(--line);padding:4px 10px;font-size:12px;margin-top:8px}
 .map{overflow-x:auto;margin-top:10px}
 .cols{display:flex;gap:28px;position:relative;padding:22px 2px 10px 40px;width:max-content}
@@ -701,14 +753,31 @@ function render(){
   const d=last;if(!d)return;
   document.getElementById("overall").className="dot "+d.overall;
   document.getElementById("time").textContent="Updated "+d.time;
-  document.getElementById("ws").textContent=d.workspace+(d.shared?" · shared, you are "+(d.shared.member||"unnamed")+" · last sync "+d.shared.sync:"");
-  document.getElementById("ws").style.color=d.shared&&d.shared.color!=="green"?"var(--"+d.shared.color+")":"";
-  if(d.source)document.getElementById("ws").textContent+=d.source.commit?" · showing GitHub at "+d.source.commit+", fetched "+d.source.fetched+(d.source.error?" ("+d.source.error+")":""):" · "+d.source.error;
+  const ws=document.getElementById("ws");
+  ws.textContent=d.workspace+(d.shared?" · shared, you are "+(d.shared.member||"unnamed")+" · last sync "+d.shared.sync:"");
+  if(d.source)ws.textContent+=d.source.commit?" · showing GitHub at "+d.source.commit+", fetched "+d.source.fetched+(d.source.error?" ("+d.source.error+")":""):" · "+d.source.error;
+  // teammates' data past a few minutes old: say how old, in a label that keeps the text contrast
+  const lag=d.source&&d.source.commit?d.source:d.shared;
+  if(lag&&(lag.late||(d.shared&&d.shared.color!=="green"))){const p=el("span","pill"+(d.shared&&d.shared.color==="red"?" red":""));
+    p.append(el("span","dot "+(d.shared&&d.shared.color==="red"?"red":"yellow")),lag.as_of?"Teammate data as of sync "+lag.as_of+(lag.age!=null?" ("+ago(lag.age)+" old)":""):"Teammate data: no sync yet");
+    ws.append(" ",p)}
   document.getElementById("fetch").hidden=!d.source;
   const P=document.getElementById("projects");
   if(!d.projects.length)empty(P,"No projects");else P.replaceChildren(...d.projects.map(p=>{
     const row=el("div","row"),body=el("div","grow");row.append(el("span","dot "+p.color),body);
-    body.append(el("div","name",p.slug+(p.member?" · "+p.member:"")),el("div","",p.reason));
+    body.append(el("div","name",p.slug+(p.member?" · "+p.member:"")));
+    const rs=p.reasons||[];if(rs.length<2)body.append(el("div","",p.reason));
+    else{const li=r=>{const x=el("li");x.append(el("span","dot "+r.color),el("span","",r.text));return x},u=el("ul","why");  // every reason, worst first
+      rs.slice(0,3).forEach(r=>u.append(li(r)));
+      if(rs.length>3){const m=el("details"),w=el("ul","why");m.append(el("summary","",(rs.length-3)+" more reason(s)"));rs.slice(3).forEach(r=>w.append(li(r)));m.append(w);const lm=el("li");lm.append(m);u.append(lm)}
+      body.append(u)}
+    if((p.outside||[]).length){const f=el("div","facts");f.append(el("b","","Seen as a stranger: "));
+      p.outside.forEach(o=>{const okk=o.state==="ok",x=el("span","pill"+(okk?"":" red"));x.style.borderColor=okk?"var(--line)":"";
+        x.append(el("span","dot "+(okk?"green":"yellow")),o.kind==="public"?o.url.replace(/^https?:\/\//,"")+" "+o.code+(okk?" opens logged out":" closed to a logged-out visitor")
+          :"production "+o.url.replace(/^https?:\/\//,"")+(o.state==="ok"?" serves "+o.commit:o.state==="down"?" does not answer":" does not serve "+o.commit));f.append(x)});
+      body.append(f)}
+    if((p.decisions||[]).length){const f=el("div","facts"),u=el("ul");f.append(el("b","","Decisions in force (latest "+p.decisions.length+")"));
+      p.decisions.forEach(x=>u.append(el("li","",x.when+" · "+x.what+(x.who?" ("+x.who+")":""))));f.append(u);body.append(f)}
     if(p.target)body.append(el("div","muted","Target: "+p.target+(/^none( |$)/.test(p.check)?" · no outside check"+p.check.slice(4):p.check?" · check: "+p.check:"")+(p.runs?" · agent runs: first "+p.runs.replace(" -> ",", now "):"")));
     if(p.deadline&&!p.delivered){const m=Math.round((p.deadline*1000-Date.now())/60000);
       body.append(el("div","muted",m<0?"Deadline passed "+ago(-m)+" ago":"Deadline in "+ago(m)))}
@@ -724,7 +793,10 @@ function render(){
   if(!d.cards.length)empty(C,"Nothing waiting");else C.replaceChildren(...d.cards.map(c=>{
     const row=el("div","row"),b=el("div","grow");row.append(el("span","dot "+c.color),b);
     b.append(el("div","name",c.title+(c.project?" ("+c.project+")":"")+(c.member?" · "+c.member:"")));
-    if(c.questions.length){const u=el("ul","q");c.questions.forEach(x=>u.append(el("li","",x)));b.append(u)}
+    if(c.questions.length){const u=el("ul","q");c.questions.forEach((x,i)=>{const li=el("li","",x+" "),a=(c.ages||[])[i];
+      li.append(el("span","age",a!=null?"· asked "+ago(a)+" ago":"· no time stamp"));u.append(li)});b.append(u)}
+    if(c.deputy){const x=el("div","pill red");x.append(el("span","dot red"),"Past the limit with the deadline under 3 h: if the owner cannot answer now, "+c.deputy+" (deputy) decides");b.append(x)}
+    if(c.size)b.append(el("div","muted","Card too long to read ("+c.size+"): move what is done to board/archive/"));
     row.append(el("span",c.color==="red"?"":"muted","Waiting "+ago(c.waited)+(c.color==="red"?", past "+c.limit+" min":"")));return row}));
   const K=document.getElementById("tasks");
   if(!(d.tasks||[]).length)empty(K,"No tasks");else K.replaceChildren(...d.tasks.map(g=>{

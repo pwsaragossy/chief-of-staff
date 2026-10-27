@@ -45,7 +45,7 @@ done
 cards=$(sh "$here/health.sh" cards "$root" 2>/dev/null)
 me=; cos_shared "$root" && me=$(cos_member "$root")
 waiting() { # cards waiting on the owner, with their questions; $1 = project slug filter (empty = all)
-  printf '%s\n' "$cards" | while IFS=$US read -r k n p s m c w l d dl q esc big; do
+  printf '%s\n' "$cards" | while IFS=$US read -r k n p s m c w l d dl q esc big ages; do
     [ "$k" = C ] && [ "$s" = waiting-owner ] || continue
     [ -z "$1" ] || [ "$p" = "$1" ] || continue
     [ -z "$1" ] && [ -n "$me" ] && [ -n "$m" ] && [ "$m" != "$me" ] && continue   # a teammate's central asks it
@@ -62,7 +62,7 @@ due7() { # cards with a due date in the next 7 days or past it
   done
 }
 bigcards() { # cards too long to read whole; $1 = project slug filter (empty = all)
-  printf '%s\n' "$cards" | while IFS=$US read -r k n p s m c w l d dl q esc big; do
+  printf '%s\n' "$cards" | while IFS=$US read -r k n p s m c w l d dl q esc big ages; do
     [ "$k" = C ] && [ -n "$big" ] && { [ -z "$1" ] || [ "$p" = "$1" ]; } && out "$n ($big)"
   done | head -n 3 | awk 'NR == 1 { printf "Cards too long to read whole (keep the open part, move the rest to board/archive/): " } { printf "%s%s", (NR > 1 ? "; " : ""), $0 } END { if (NR) print "" }'
 }

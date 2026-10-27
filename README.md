@@ -158,6 +158,12 @@ request without the token. Colors come from `scripts/health.sh`, which also work
   production not serving the `prod_ref:` commit, or a delivery that points outside the workspace;
 - **green**: none of these.
 
+Each project lists every reason, red ones first (more than 3 fold under "more reasons"), the
+`public_urls:` and `prod_ref:` results as a logged-out visitor sees them, and the last 5 decisions in
+force from `DECISIONS.md`. Each question waiting on the owner shows how long ago it was asked, a card
+past its limit near the deadline names the `deputy:` who decides, and a card too long to read says so.
+In a shared workspace, teammates' data older than 15 minutes carries "Teammate data as of sync HH:MM".
+
 Files or links dropped in the import box land in the library's `inbox/` (the panel warns when one
 looks like it holds a key or token); central turns them into library notes with the `knowledge`
 skill. The Library section shows the notes as an interactive graph, drawn on a canvas with no outside
