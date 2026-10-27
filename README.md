@@ -1,7 +1,7 @@
 # chief-of-staff
 
 An AI chief of staff for [Claude Code](https://code.claude.com): a small company of agents that
-works for one owner, or for a team. Version 0.4.7.
+works for one owner, or for a team. Version 0.5.0.
 
 What it gives you:
 
@@ -130,6 +130,17 @@ you, a shared library, one board for the whole team, or join a teammate's board)
   specialists/           one role card per specialist (edit freely)
   ROUTING.md             who to call for what
 ```
+
+## Upgrading from 0.4.x
+
+Nothing to migrate by hand; existing workspaces keep working:
+
+- Cards with the old single `asked:` keep their age: at the first turn end, their open questions are
+  stamped with that `asked:` time, and new ones with their own time.
+- `Role card: <role>` still works; a brief may now give the card's path instead, and nobody pastes the card.
+- `DECISIONS.md` is optional in old projects (copy `templates/project/DECISIONS.md` to start one); new
+  projects get it.
+- `deputy:`, `public_urls:` and `prod_ref:` in TRACK.md are optional; without them nothing changes.
 
 ## Daily use
 
@@ -284,8 +295,15 @@ What is ours, with no equivalent found in ECC:
   confidence — verify before citing", and shows each note's matching line; `library.sh search`
   run by the agent shows everything. A lookup that took 2 s or more is skipped until a note is added.
 - The decision guard reads the diff of the repository the hook runs in (the session's folder), not one
-  a command reaches with `cd` or `-C`; it is a reminder that asks, not a lock.
-- The near-duplicate file warning compares names only (letter case, separators, extension, a final s).
+  a command reaches with `cd` or `-C`; it is a reminder that asks, not a lock. It compares with the
+  branch's upstream, else the same branch on `origin`, else `origin/HEAD` (or `origin/main`, `origin/master`)
+  for a new branch pushed with `-u`; with none of them it asks, since what the push changes is unknown.
+- The hooks keep inside Claude Code's limits (5 s, 10 s for the briefing): each slow step (the prompt's
+  library lookup, the turn-end note and track checks, the briefing's board and library reads) has its own
+  budget. A lookup cut short is skipped until a note is added; a turn-end check cut short blocks the turn
+  and says what to run; the briefing says what it could not read.
+- The near-duplicate file notice compares names only, among files with the same extension (letter case,
+  separators and a final s ignored), and never blocks: it asks the agent to check whether one duplicates the other.
 - The hooks check that specialists and the reviewer ran, not that they were good.
 - A track gate checks that a proof file exists, not what it says. An agent can still write a
   thin file; the stage's reviewer item, which can never be skipped, is where that is caught.
