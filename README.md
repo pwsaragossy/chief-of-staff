@@ -45,14 +45,20 @@ What it gives you:
 - **One board for the whole team.** A workspace can be shared: one teammate creates it on an empty
   private git repo (`setup.sh create <folder> --share <link> --member <name>`), the others join it
   (`setup.sh join <folder> <link> --member <name>`). Every turn end sends the board, the projects and
-  the library notes that passed the checks to the team; every session start brings the teammates'
-  changes. Each card and project says whose it is (`member:`), each person's central asks only their
+  the library notes that passed the checks to the team, as one commit that names the cards and folders
+  it changed; every session start brings the teammates' changes first (waiting 2 s at most, else the
+  briefing says how old the team's data is). Long cards are flagged: move what is done to `board/archive/`.
+  Each card and project says whose it is (`member:`), each person's central asks only their
   own questions, each dispatcher runs only its own projects, and the panel shows everyone's work.
   Files that look like they hold a key or token stay on the computer, and the turn says so.
 - **Built for deadlines.** A project's `TRACK.md` can carry `deadline: YYYY-MM-DD HH:MM`: the panel
   counts down, yellow under 6 hours, red under 2 hours while the delivery is open. A question waiting
   on the owner turns red after `owner_wait_minutes` (60 by default, 20 in the hackathon track), with
-  its age shown. The panel and the briefing show the questions themselves. Items marked `owner: ok`
+  its age shown. Each question line carries the time it was asked (`- (asked 2026-10-25 18:00 -0300) ...`,
+  stamped by the turn-end hook), and the card is timed from its oldest open question, so rewriting `asked:`
+  or adding a newer question never makes an old one look young. With `deputy: <name>` in TRACK.md, a
+  question past its limit less than 3 hours before the deadline is escalated to the deputy. The panel and
+  the briefing show the questions themselves. Items marked `owner: ok`
   (the hackathon's scope freeze and submission) close only with the owner's OK, which central records
   with `track.sh ok` and the owner approves.
 - **Past the literal request (ambition loop).** Every new request goes through the `ambition` skill:
@@ -76,6 +82,16 @@ What it gives you:
   same task as a plain prompt and as a prompt with a target and a check: 11.1 s and a failing check
   without them, 1.43 s and a passing one with them (target under 3 s). That measured the prompt, the
   idea this feature builds into every track.
+- **A decision log and facts with a time.** Each project keeps `DECISIONS.md`, one line per decision
+  (`date time | decision | who | replaces`); a later line replaces or revokes an earlier one, and the
+  briefing shows the decisions in force. A decision may say `guard: <term>`: a `git push` whose commits
+  change that term asks first. STATE.md facts carry `verified: <date time>`; the briefing flags the ones
+  older than the track's `stale_hours`, and the handoff never copies a fact that changes on its own
+  (production commit, balances, public links, deploy state) without measuring it again.
+- **What goes outside, seen as a stranger.** Optional `public_urls:` (opened without credentials) and
+  `prod_ref: <url> <commit>` (production serves that commit) in TRACK.md are checked by `health.sh` and the
+  panel, never by a hook, at most every 10 minutes; a DELIVERY.md or TRACK.md that points at a file
+  outside the workspace is flagged too.
 - **A routing table** (`ROUTING.md`) so nobody has to remember whom to call.
 - **A local panel**: green, yellow or red per project with the reason, a live map of each track
   (stages, deliverables by state, prerequisites, the delivery line, items added since opening), decisions
@@ -133,10 +149,13 @@ request without the token. Colors come from `scripts/health.sh`, which also work
 
 - **red**: a track gate problem, STATE.md says red, a turn in the last 24 h ended without the
   specialists, the reviewer or the track gate, a dispatcher alert, a question waiting on the owner
-  past `owner_wait_minutes`, or the deadline less than 2 hours away (or past) with the delivery open;
+  past `owner_wait_minutes` (escalate to the `deputy:` when the deadline is under 3 hours), or the
+  deadline less than 2 hours away (or past) with the delivery open;
 - **yellow**: a decision waiting on the owner, a card past its `due:` date, the deadline less than
-  6 hours away, no handoff for longer than the track's `stale_hours` (3 h for a hackathon, 48 h
-  otherwise), paused, the last check run failed, or the target was met on the very first run;
+  6 hours away, no handoff (STATE.md `updated:`, not the file date) for longer than the track's
+  `stale_hours` (3 h for a hackathon, 48 h otherwise), paused, the last check run failed, the target met on
+  the very first run, a card over ~60 lines or 15 KB, a `public_urls:` link closed to a logged-out visitor,
+  production not serving the `prod_ref:` commit, or a delivery that points outside the workspace;
 - **green**: none of these.
 
 Files or links dropped in the import box land in the library's `inbox/` (the panel warns when one
@@ -152,10 +171,12 @@ Every hook does nothing outside a workspace, so the plugin does not affect your 
 - `SessionStart` prints a factual briefing (at most 2000 characters): cards waiting on the owner,
   the project's status and next action, the library's counts and the project's latest notes.
 - `PreToolUse` on `AskUserQuestion` blocks button questions in any session that is not `central/`.
-- `scripts/protocol.sh` (UserPromptSubmit, PreToolUse, PostToolUse, SubagentStop, Stop) restates
-  the protocol every turn and enforces it: a subagent brief must name an existing role card
-  (`Role card: <role>`, or `Role card: utility` for a helper); a specialist cannot finish without
-  its never-skip checklist and needs a `Library:` line; web search waits for a library search
+- `scripts/protocol.sh` (UserPromptSubmit, PreToolUse, PostToolUse, SubagentStop, Stop) states
+  the protocol in full at the first prompt of a session and after a compaction or restart (one line on
+  the other prompts) and enforces it: a subagent brief must name an existing role card by its path
+  (`Role card: <workspace>/specialists/<role>.md`, which the subagent reads itself, or `Role card:
+  utility` for a helper); a specialist cannot finish without its never-skip checklist and its
+  `## Versions` with the judge's evidence, and its brief needs a `Library:` line; web search waits for a library search
   (`scripts/library.sh search`); a note is checked on save and at the end of the turn (links,
   `Compared:`, retirements, notes written by shell commands too); agents cannot edit the workspace
   marker;
@@ -237,8 +258,16 @@ What is ours, with no equivalent found in ECC:
   `CLAUDE.md` rules are what prevent it.
 - The ask guard has been tested by script, not yet in an interactive session.
 - The reviewer is the same model with a different brief. It catches incoherence, not authority.
-- "Substantive" is a heuristic (deliverable file, web research, or an answer over about 2500
-  characters). A short answer to a real decision is not forced through specialists.
+- "Substantive" is a heuristic (deliverable file, web research, or an answer over 6000 characters,
+  measured on the answer itself). Until v0.4.7 it was the whole hook input over 2500 bytes, which a
+  2-3 KB status report crossed and forced specialists on every turn. A short answer to a real decision
+  is not forced through specialists.
+- The prompt's unasked library lookup leaves out notes past `review_by`, notes of low confidence (the
+  default of a new note) and weak matches, and shows each note's matching line; `library.sh search`
+  run by the agent shows everything. A lookup that took 2 s or more is skipped until a note is added.
+- The decision guard reads the diff of the repository the hook runs in (the session's folder), not one
+  a command reaches with `cd` or `-C`; it is a reminder that asks, not a lock.
+- The near-duplicate file warning compares names only (letter case, separators, extension, a final s).
 - The hooks check that specialists and the reviewer ran, not that they were good.
 - A track gate checks that a proof file exists, not what it says. An agent can still write a
   thin file; the stage's reviewer item, which can never be skipped, is where that is caught.
@@ -296,6 +325,19 @@ What is ours, with no equivalent found in ECC:
   until it is renamed.
 - An offloaded library: no automatic sync; Windows paths are not supported; in iCloud, keep the
   folder downloaded on the computer (placeholder files are not seen).
+
+## Pitfalls for maintainers
+
+- **WSL drives.** A workspace under `/mnt/c` (drvfs) reads files about 70 times slower than the Linux
+  home; every hook pays it. `setup.sh` warns; prefer `~/chief-of-staff`. Run the selftest from a copy on
+  ext4 too (`/tmp`), or it takes many minutes.
+- **No fork per item in hooks.** The hooks run on every prompt and tool call: one `awk` over the board
+  (`cos_board`), note ids from a cache keyed by the `notes/` folder's mtime (`cos_ids`), no `dirname`
+  loop, and Read/Grep/Glob leave before any setup unless they name a library.
+- **Background children hold pipes.** A `sleep` left by a killed watcher kept the dispatcher's output
+  open for up to `COS_RUN_TIMEOUT`; watchers poll instead.
+- **Hook stdin.** `briefing.sh` reads its hook input only when stdin is not a terminal; tests feed it
+  `/dev/null`.
 
 ## Check
 
