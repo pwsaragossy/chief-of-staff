@@ -53,10 +53,12 @@ notes() { ls "$lib/notes/"*.md >/dev/null 2>&1; }
 ext() {
   [ -n "${EXTF:-}" ] && rm -f "$EXTF"
   EXTF=$(mktemp "${TMPDIR:-/tmp}/cos-ext.XXXXXX") || return 0; trap 'rm -f "$EXTF"' EXIT
+  # ids come from the per-library cache (cos_ids): no stat per note of every other library at each gate
+  cos_ids "$lib" > "$EXTF.own"
   cos_libs "$root" | while IFS="$(printf '\t')" read -r n p; do
     [ "$n" = "$name" ] && continue
-    for f in "$p/notes/"*.md; do [ -f "$f" ] && [ ! -f "$lib/notes/${f##*/}" ] && { b=${f##*/}; printf '%s\t%s\n' "${b%.md}" "$n"; }; done
-  done > "$EXTF"
+    cos_ids "$p" | awk -v n="$n" -v own="$EXTF.own" 'BEGIN { while ((getline l < own) > 0) O[l] = 1 } $0 != "" && !($0 in O) { print $0 "\t" n }'
+  done > "$EXTF"; rm -f "$EXTF.own"
   export EXTF
 }
 run() { # MODE [awk -v assignments...] -- runs library.awk over every note
