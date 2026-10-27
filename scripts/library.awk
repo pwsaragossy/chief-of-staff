@@ -266,6 +266,9 @@ function search(   n, t, i, sc, w, df, idf, avg, tot, cnt, best, bi, r, h, nb, k
     c = f(n, "confidence"); S[n] *= (c == "high") ? 1 : (c == "medium") ? 0.85 : 0.7
     S[n] *= 1 + 0.1 * log(1 + IND[n])
     if (AUTO && MT[n] < 2 && !(TTANY(n))) S[n] = 0
+    # unasked notes reach the prompt only when they can be relied on: not past review_by, not low confidence,
+    # and a clear match (a weak one dressed as context was repeated as fact). A search the agent runs shows all
+    if (AUTO && (c == "low" || (isdate(f(n, "review_by")) && f(n, "review_by") < TODAY) || S[n] < 1.5)) S[n] = 0
   }
   h = 0
   for (r = 1; r <= 5; r++) { best = 0; bi = 0
@@ -276,7 +279,8 @@ function search(   n, t, i, sc, w, df, idf, avg, tot, cnt, best, bi, r, h, nb, k
   for (i = 1; i <= h; i++) {
     n = HIT[i]; x = (isdate(f(n, "review_by")) && f(n, "review_by") < TODAY) ? "  STALE: re-check before relying on it" : ""
     print i ". [[" f(n, "id") "]] " clean(f(n, "title"), 80) " (" f(n, "type") ", origin " clean(f(n, "origin"), 40) ", confidence " f(n, "confidence") ", updated " f(n, "updated") ")" x
-    if (AUTO) continue
+    # the claim itself, not only the title: a title alone invited the model to guess what the note says
+    if (AUTO) { if (SNIP[n] != "") print "   \"" clean(trim(SNIP[n]), 200) "\""; continue }
     mt = ""; for (t in QT) { if (TT[n, t]) mt = mt " title:" t; else if (AT[n, t]) mt = mt " alias:" t; else if (GT[n, t]) mt = mt " tag:" t; else if (BT[n, t]) mt = mt " body:" t }
     print "   " rel[n] "  matched:" mt
     if (SNIP[n] != "") print "   \"" clean(trim(SNIP[n]), 160) "\""

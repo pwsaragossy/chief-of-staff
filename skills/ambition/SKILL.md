@@ -25,8 +25,11 @@ Based on Felix Rieseberg, "How to be more ambitious" (altitude, depth, range, an
      senior would use on it (a database, a model, a spreadsheet, a benchmark), not prose?
    - **Range**: which specialists DO this work (turn the noun into a verb)? Brief them.
    - **Against yourself**: where does this version break? Say it plainly.
-   Stop when the verdict stops improving. A v1 that passes on the first try means the judge is too
-   easy: raise it. The weakest point you name becomes the next version, unless fixing it grows the
+   Every verdict carries its evidence: the command and what it printed, or the file that shows it.
+   Stop when the verdict stops improving. A v1 that passes is written as it happened, `v1 passed:
+   <what the judge printed>`, never padded with invented failed versions; then check the judge
+   measures the goal behind the goal and not something the first draft already met, and raise it
+   if it does not. The weakest point you name becomes the next version, unless fixing it grows the
    scope (then it is a question for the owner).
    With a deadline, ship the first working version before the next round; there is no "too small
    to apply" exception: the cheapest loop is one honest judge that measures the goal.
@@ -44,7 +47,8 @@ Based on Felix Rieseberg, "How to be more ambitious" (altitude, depth, range, an
 
 ## Output
 - First line: the conclusion, including "this does not work as asked".
-- One line per version: lens, what changed, the outside judge's verdict.
+- One line per version: lens, what changed, the outside judge's verdict and its evidence (the command
+  output or the file); a v1 that passed is `v1 passed: <what the judge printed>`.
 - The final request, plan or prompt in a code block.
 - The weakest point still left.
 - Sources, with dates.
