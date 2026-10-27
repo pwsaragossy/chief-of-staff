@@ -6,7 +6,8 @@
 #         search  ranked notes for ENVIRON["Q"], with neighbours; AUTO=1 prints only strong hits
 #         similar notes whose title shares 2+ words with ENVIRON["Q"] (used by `new`)
 #         brief   counts and the project's recent notes, for the session briefing (PROJ = project)
-#         graph   nodes, edges and problems as tab-separated lines, for the panel
+#         graph   nodes, edges and problems as tab-separated lines, for the panel (N id title type state origin
+#                 group problems in-links confidence updated review_by; M id problem-text, first 10 per note)
 #         backlinks  notes that link to ID
 # TODAY = YYYY-MM-DD. LIBNAME, LIBKIND (personal|team): the library read. EXTF: file of "id<TAB>library" for the
 # ids of the other libraries (not also in this one), so a link across libraries is seen.
@@ -315,7 +316,8 @@ function graph(   n, k, i, a, x, st) {
   pairs()
   for (n = 1; n <= N; n++) {
     st = active(n) ? ((isdate(f(n, "review_by")) && f(n, "review_by") < TODAY) ? "stale" : "active") : "retired"
-    printf "N\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\n", f(n, "id"), clean(f(n, "title"), 80), clean(f(n, "type"), 12), st, clean(f(n, "origin"), 40), clean(f(n, "group"), 40), NP[n] + 0, IND[n] + 0
+    printf "N\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\n", f(n, "id"), clean(f(n, "title"), 80), clean(f(n, "type"), 12), st, clean(f(n, "origin"), 40), clean(f(n, "group"), 40), NP[n] + 0, IND[n] + 0, clean(f(n, "confidence"), 12), clean(f(n, "updated"), 12), clean(f(n, "review_by"), 12)
+    k = split(P[n], a, "\n"); for (i = 1; i <= k && i <= 10; i++) printf "M\t%s\t%s\n", f(n, "id"), clean(substr(a[i], length(rel[n]) + 3), 200)
     k = split(OUT[n], a, " "); for (i = 1; i <= k; i++) printf "%s\t%s\t%s\n", (a[i] in ID2N) ? "E" : (a[i] in EXTL) ? "X" : "D", f(n, "id"), clean(a[i], 80)
     if (f(n, "superseded_by") != "") printf "R\t%s\t%s\n", f(n, "id"), f(n, "superseded_by")
   }
