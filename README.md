@@ -262,8 +262,9 @@ What is ours, with no equivalent found in ECC:
   measured on the answer itself). Until v0.4.7 it was the whole hook input over 2500 bytes, which a
   2-3 KB status report crossed and forced specialists on every turn. A short answer to a real decision
   is not forced through specialists.
-- The prompt's unasked library lookup leaves out notes past `review_by`, notes of low confidence (the
-  default of a new note) and weak matches, and shows each note's matching line; `library.sh search`
+- The prompt's unasked library lookup leaves out notes past `review_by` and weak matches (score under
+  1.5), lists high and medium notes first, then low ones (the default of a new note) labelled "low
+  confidence — verify before citing", and shows each note's matching line; `library.sh search`
   run by the agent shows everything. A lookup that took 2 s or more is skipped until a note is added.
 - The decision guard reads the diff of the repository the hook runs in (the session's folder), not one
   a command reaches with `cd` or `-C`; it is a reminder that asks, not a lock.
