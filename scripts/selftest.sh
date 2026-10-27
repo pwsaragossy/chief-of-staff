@@ -198,6 +198,7 @@ turn >/dev/null
 note tax-2 "Tax rate on services in 2026" 2026-06-01 "Services pay 12 percent since 2026 ([[vat-0001]], [[nowhere-0000]])." "none similar" "confidence: high\n"
 wrote "$N/tax-2.md" >/dev/null 2>&1
 check "confidence high without sources is rejected" 'L check "$N/tax-2.md" | grep -q "needs sources"'
+check "graph gives the panel each problem as text (M lines)" 'L graph | grep -q "^M	tax-2	confidence high needs sources"'
 note tax-2 "Tax rate on services in 2026" 2026-06-01 "Services pay 12 percent since 2026 ([[vat-0001]], [[nowhere-0000]])." "none similar"
 check "a link to a missing note blocks the turn end" 'stop | grep -q "links to \[\[nowhere-0000\]\], which does not exist"'
 check "a similar older note nobody compared blocks the turn end" 'stop | grep -q "possible duplicate or conflict: \[\[tax-1\]\]"'
@@ -276,6 +277,7 @@ check "ambition: the reviewer checks that each version was judged from outside" 
 check "agents cannot edit the workspace marker" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/.chief-of-staff\"}")" "$P")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo library: /x > $W/.chief-of-staff\"}")" "$P")" = 2 ]'
 check "reading the marker is fine" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat $W/.chief-of-staff\"}")" "$P")" = 0 ]'
 check "graph lists notes, links and retirements" 'L graph | grep -q "^N	tax-2	" && L graph | grep -q "^E	tax-2	vat-0001" && L graph | grep -q "^R	tax-1	tax-2"'
+check "graph N line ends with confidence, updated and review_by" 'L graph | grep -q "^N	tax-2	[^	]*	finding	active	alpha	[^	]*	[0-9]*	[0-9]*	low	2026-06-01	2099-01-01$"'
 check "project briefing lists this project's latest notes" 'b "$P" | grep -q "^- \[\[price-m\]\]"'
 
 # review round 2: each way around the gates found by the independent reviewer
@@ -688,6 +690,13 @@ printf -- "---\nstatus: in-progress\nproject: p\nupdated: 2026-10-25\n---\n## Su
 printf -- "---\nstatus: waiting-owner\nproject: p\n---\n- 2026-10-25 11:50 UTC (session-p): track 8/22\n" > "$d/board/b.md"
 printf -- "---\nstatus: done\nproject: p\n---\n- 2026-10-26 09:00 UTC (x): closed card\n" > "$d/board/c.md"
 python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; g = panel.progress(sys.argv[2], \"p\"); assert [x[\"card\"] for x in g] == [\"b\", \"a\"], g; assert g[1][\"what\"] == \"contract and 16 tests\" and g[1][\"who\"] == \"agent-a\", g" "$here" "$d"; r=$?; rm -rf "$d"; exit $r )'
+check "panel reads the new N fields and M problem lines, and an older 9-field N line" 'python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel
+out = {\"where\": \"/x\\n\", \"graph\": \"N\\ta\\tA\\tfinding\\tactive\\to\\t\\t1\\t0\\tlow\\t2026-01-01\\t2027-01-01\\nM\\ta\\tupdated: must be a date\\nN\\tb\\tB\\ttopic\\tactive\\to\\t\\t0\\t1\\nE\\ta\\tb\\n\"}
+panel.sh = lambda s, *a, **k: out[a[-1]]
+L = panel.library(\"/x\"); n = {x[\"id\"]: x for x in L[\"nodes\"]}
+assert n[\"a\"][\"confidence\"] == \"low\" and n[\"a\"][\"updated\"] == \"2026-01-01\" and n[\"a\"][\"review_by\"] == \"2027-01-01\", n
+assert n[\"a\"][\"issues\"] == [\"updated: must be a date\"] and n[\"b\"][\"issues\"] == [] and n[\"b\"][\"confidence\"] == \"\" and L[\"edges\"] == [[\"a\", \"b\"]], L
+assert panel.MAX_NODES == 500" "$here"'
 check "panel lists ## Tasks lines by person, from open cards only" '( d=$(mktemp -d); mkdir -p "$d/board"; touch "$d/.chief-of-staff"
 printf -- "---\nstatus: in-progress\nproject: p\n---\n## Tasks\n- (template line)\n- Leo, now: deploy by 13:00\n- Vhendala: video cut\n- check the page\n## For the owner to decide\n- Pedro: title A or B?\n" > "$d/board/a.md"
 printf -- "---\nstatus: done\nproject: p\n---\n## Tasks\n- Leo: old task\n" > "$d/board/b.md"
@@ -715,6 +724,8 @@ if command -v python3 >/dev/null && command -v curl >/dev/null; then
   check "panel api carries the library graph" 'curl -s "$B/api?t=$TK" | python3 -c "import json,sys; L=json.load(sys.stdin)[\"library\"]; ids={n[\"id\"] for n in L[\"nodes\"]}; assert L[\"state\"]==\"online\" and \"tax-2\" in ids and [\"tax-1\",\"tax-2\"] in L[\"edges\"]"'
   check "panel page scripts run only with the per-response nonce" 'curl -s -D "$W/h.txt" "$B/?t=$TK" > "$W/p.html" && n=$(sed -n "s/.*script-src .nonce-\([^'"'"']*\).*/\1/p" "$W/h.txt") && [ -n "$n" ] && grep -q "<script nonce=\"$n\">" "$W/p.html" && ! grep -qi "unsafe-inline" "$W/h.txt"'
   check "panel warns when an import holds a secret" 'printf "key AKIAABCDEFGHIJKLMNOP" | curl -s -X POST --data-binary @- -H "X-Name: k.txt" -H "X-Kind: text" "$B/import?t=$TK" | grep -q "holds a key or token"'
+  check "panel page loads nothing from outside (no external src, href, @import or url())" '! grep -Eiq "(src|href) *= *[\"'"'"']?(https?:)?//|@import|url\(" "$W/p.html"'
+  check "panel graph has its controls: search, filters, zoom, fit, detail, list, empty states, reduced motion" '( for t in "Search title or id" "Only with problems" "Hide retired" "Fit the graph in view" "Zoom in" "Zoom out" "Note detail" "Notes as a list" "No note matches" "Clear filters" "No notes yet. Import files above." "prefers-reduced-motion" "devicePixelRatio" "aria-live"; do grep -qF "$t" "$W/p.html" || { echo "missing: $t"; exit 1; }; done ) && grep -q "role.,.img" "$W/p.html"'
   check "panel never sends the token on as a referrer" 'curl -s -D - -o /dev/null "$B/?t=$TK" | grep -qi "^referrer-policy: no-referrer"'
   kill $pp 2>/dev/null; wait $pp 2>/dev/null
 else

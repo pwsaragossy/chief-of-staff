@@ -141,9 +141,20 @@ request without the token. Colors come from `scripts/health.sh`, which also work
 
 Files or links dropped in the import box land in the library's `inbox/` (the panel warns when one
 looks like it holds a key or token); central turns them into library notes with the `knowledge`
-skill. The Library section shows the notes as a graph (green active, yellow past review, grey
-retired, red ring with problems; the 300 most linked when there are more), with the notes that have
+skill. The Library section shows the notes as an interactive graph, drawn on a canvas with no outside
+code (it works offline): color by type (finding, decision, howto, option; topics are squares), size
+by links, a dashed yellow ring past the review date, an outline only when retired, a red dot with
+problems; the 500 most linked when there are more. Zoom with the wheel, a pinch or the buttons, drag
+the background to pan, drag a note to pin it (double-click releases it), Fit to see everything.
+Pointing at a note lights it and its neighbours; clicking opens its detail (type, state, origin,
+confidence, updated, review_by, its problems in words, links out and backlinks, which navigate).
+Search by title or id (Enter jumps to the first match), filter by type (the legend), origin, only
+with problems or without retired notes. The keyboard works too (Tab, arrows, Enter, Esc, + - 0), a
+list of the same notes sits under the graph for screen readers, and reduced motion lays it out in
+one step. The 30 s refresh keeps the view, the selection and the positions. Below it: the notes with
 problems, broken links, notes past their review date and possible duplicates nobody compared.
+In the track map, an item waiting on a prerequisite is grey with a dashed border, a prerequisite in
+the same stage shows as "↳ id", and pointing at an item outlines what it needs and what needs it.
 
 ## Hooks
 
