@@ -676,6 +676,10 @@ check "a deadline under 2 h with the delivery open is red, with the countdown" '
 fm_set "$G/TRACK.md" deadline "$(fut 14400)"
 check "a deadline under 6 h is yellow" 'H gamma | grep -Eq "^yellow: deadline in (3 h 59|4 h 0) min"'
 check "health gives the panel the deadline as a number" 'sh "$here/health.sh" "$W" | awk -F "$(printf "\037")" "\$1 == \"gamma\" { print \$12 }" | grep -q "^[0-9][0-9]*$"'
+check "health gives every reason, red ones first, each tagged with its color" 'sh "$here/health.sh" "$W" | awk -F "$(printf "\037")" "\$1 == \"gamma\" { print \$17 }" | tr "\036" "\n" | awk "!/^(red|yellow) / { exit 1 } /^yellow / { y = 1 } /^red / && y { exit 1 } END { exit NR < 1 }"'
+check "health gives each question to the owner its own age, empty when unstamped" '( d=$(mktemp -d); mkdir -p "$d/board"; touch "$d/.chief-of-staff"; z=$(date +%z); o=$(date -d "-90 min" "+%F %H:%M" 2>/dev/null || date -v-90M "+%F %H:%M")
+printf -- "---\nstatus: waiting-owner\nproject: p\n---\n## For the owner to decide\n- (asked %s %s) old one\n- (asked %s %s) new one\n- no stamp\n" "$o" "$z" "$(date "+%F %H:%M")" "$z" > "$d/board/c.md"
+a=$(sh "$here/health.sh" cards "$d" | awk -F "$(printf "\037")" "{ print \$14 }" | tr "\036" ,); rm -rf "$d"; case $a in 9[0-2],[01],|8[89],[01],) exit 0 ;; *) echo "ages: $a"; exit 1 ;; esac )'
 fm_set "$G/TRACK.md" deadline "$(fut -120)"
 check "a passed deadline with the delivery open is red" 'H gamma | grep -Eq "^red: deadline passed (2|3) min ago"'
 fm_set "$G/TRACK.md" deadline "Friday 6pm"
@@ -769,6 +773,12 @@ L = panel.library(\"/x\"); n = {x[\"id\"]: x for x in L[\"nodes\"]}
 assert n[\"a\"][\"confidence\"] == \"low\" and n[\"a\"][\"updated\"] == \"2026-01-01\" and n[\"a\"][\"review_by\"] == \"2027-01-01\", n
 assert n[\"a\"][\"issues\"] == [\"updated: must be a date\"] and n[\"b\"][\"issues\"] == [] and n[\"b\"][\"confidence\"] == \"\" and L[\"edges\"] == [[\"a\", \"b\"]], L
 assert panel.MAX_NODES == 500" "$here"'
+check "panel shows the last 5 decisions in force, newest first, the outside checks and how old the team data is" 'python3 -c "import sys, os, tempfile, time; sys.path.insert(0, sys.argv[1]); import panel
+d = tempfile.mkdtemp(); open(os.path.join(d, \"DECISIONS.md\"), \"w\").write(\"\".join(\"- 2026-10-2%d 10:00 | d%d | Leo | replaces: -\\n\" % (i, i) for i in range(7)) + \"- 2026-10-27 10:00 | revoked: no | Leo | replaces: 2026-10-26 10:00\\n- 2026-10-27 11:00 | d0 again | Ana | replaces: 2026-10-20 10:00\\n\")
+g = panel.decisions(d); assert [x[\"what\"] for x in g] == [\"d0 again\", \"d5\", \"d4\", \"d3\", \"d2\"], g
+o = panel.outside(\"public https://a.example/x 200 ok\\x1eprod https://a.example/v abc1234 other\\x1ejunk\")
+assert o == [{\"kind\": \"public\", \"url\": \"https://a.example/x\", \"code\": \"200\", \"state\": \"ok\"}, {\"kind\": \"prod\", \"url\": \"https://a.example/v\", \"commit\": \"abc1234\", \"state\": \"other\"}], o
+assert panel.data_age(\"2000-01-01 10:00:00\")[\"late\"] and not panel.data_age(time.strftime(\"%Y-%m-%d %H:%M:%S\"))[\"late\"] and panel.data_age(\"\")[\"late\"]" "$here"'
 check "panel lists ## Tasks lines by person, from open cards only" '( d=$(mktemp -d); mkdir -p "$d/board"; touch "$d/.chief-of-staff"
 printf -- "---\nstatus: in-progress\nproject: p\n---\n## Tasks\n- (template line)\n- Leo, now: deploy by 13:00\n- Vhendala: video cut\n- check the page\n## For the owner to decide\n- Pedro: title A or B?\n" > "$d/board/a.md"
 printf -- "---\nstatus: done\nproject: p\n---\n## Tasks\n- Leo: old task\n" > "$d/board/b.md"
@@ -798,6 +808,7 @@ if command -v python3 >/dev/null && command -v curl >/dev/null; then
   check "panel warns when an import holds a secret" 'printf "key AKIAABCDEFGHIJKLMNOP" | curl -s -X POST --data-binary @- -H "X-Name: k.txt" -H "X-Kind: text" "$B/import?t=$TK" | grep -q "holds a key or token"'
   check "panel page loads nothing from outside (no external src, href, @import or url())" '! grep -Eiq "(src|href) *= *[\"'"'"']?(https?:)?//|@import|url\(" "$W/p.html"'
   check "panel graph has its controls: search, filters, zoom, fit, detail, list, empty states, reduced motion" '( for t in "Search title or id" "Only with problems" "Hide retired" "Fit the graph in view" "Zoom in" "Zoom out" "Note detail" "Notes as a list" "No note matches" "Clear filters" "No notes yet. Import files above." "prefers-reduced-motion" "devicePixelRatio" "aria-live"; do grep -qF "$t" "$W/p.html" || { echo "missing: $t"; exit 1; }; done ) && grep -q "role.,.img" "$W/p.html"'
+  check "panel shows the team signals: every reason, deputy, question ages, decisions, outside checks, sync age" '( for t in "more reason(s)" "(deputy) decides" "asked " "no time stamp" "Decisions in force" "Seen as a stranger" "opens logged out" "does not serve" "Teammate data as of sync" "Card too long to read"; do grep -qF "$t" "$W/p.html" || { echo "missing: $t"; exit 1; }; done )'
   check "panel never sends the token on as a referrer" 'curl -s -D - -o /dev/null "$B/?t=$TK" | grep -qi "^referrer-policy: no-referrer"'
   kill $pp 2>/dev/null; wait $pp 2>/dev/null
 else

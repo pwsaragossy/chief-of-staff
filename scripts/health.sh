@@ -2,12 +2,15 @@
 # Health of each project, the one source for the panel and the briefing.
 #   health.sh [dir]        one line per project, fields split by \037:
 #     slug color reason stage stages closed total delivery delivered baseline baseline_delivery deadline member
-#     target check runs   (runs: "first value -> last value" from .check-runs)
+#     target check runs reasons outside   (runs: "first value -> last value" from .check-runs;
+#     reasons: every red then every yellow reason, each "red <reason>" or "yellow <reason>", split by \036; outside: one entry per public_urls link,
+#     "public <url> <http code> ok|closed", and for prod_ref "prod <url> <commit> ok|down|other", split by \036)
 #     (deadline: seconds since 1970, empty when TRACK.md sets none)
 #   health.sh cards [dir]  one line per board card, fields split by \037:
-#     C name project status member color waited limit due due_left questions deputy size   (questions split by \036;
+#     C name project status member color waited limit due due_left questions deputy size ages   (questions split by \036;
 #     waited: minutes since its oldest open question was asked; due_left: minutes to the due date, negative when past;
-#     deputy: who to escalate to, set when a late question meets a deadline under 3 h; size: set when the card is too long)
+#     deputy: who to escalate to, set when a late question meets a deadline under 3 h; size: set when the card is too long;
+#     ages: minutes since each question was asked, same order as questions, empty when unstamped, split by \036)
 # red    = track gate problem, STATE says red, a protocol violation in the last 24 h, a dispatcher ALERT,
 #          a question waiting on the owner longer than owner_wait_minutes (TRACK.md, default 60),
 #          the deadline (TRACK.md) less than 2 h away or past with the delivery open,
@@ -28,7 +31,7 @@ clean() { tr -d '\000-\037' | cut -c1-200; }
 
 cards() {
   # one pass over the board (cos_board); values come back without control characters, at most 200 characters
-  cos_board "$root" | while IFS=$US read -r c cm cp cs ca dr nq nu sp nl nb lg q; do
+  cos_board "$root" | while IFS=$US read -r c cm cp cs ca dr nq nu sp nl nb lg q qs; do
     t="$root/projects/$(printf '%s' "$cp" | tr -cd 'A-Za-z0-9._-')/TRACK.md"
     lim=$(fm_get "$t" owner_wait_minutes); case $lim in ''|*[!0-9]*) lim=60 ;; esac
     col=green; w=; esc=
@@ -50,9 +53,11 @@ EOS
     [ -n "$de" ] && { dl=$(( (de - now) / 60 )); [ "$dl" -lt 0 ] && [ $col = green ] && col=yellow; }
     # a card past ~60 lines, 15 KB or with lines over 300 characters is read by every session: it buries the questions
     big=; { [ "$nl" -gt 60 ] || [ "$nb" -gt 15000 ] || [ "$lg" -gt 0 ]; } && big="$nl lines, $((nb / 1024)) KB, $lg lines over 300 characters"
+    ag=; [ "$cs" = waiting-owner ] && ag=$(printf '%s\n' "$qs" | tr '\036' '\n' | while IFS= read -r x; do x=$(cos_epoch "$x")
+      [ -n "$x" ] && x=$(( (now - x) / 60 )) && [ "$x" -lt 0 ] && x=0; printf '%s\036' "$x"; done)
     n=${c##*/}; n=${n%.md}
-    printf 'C%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n' "$US" "$(printf '%s' "$n" | clean)" "$US" "$cp" "$US" "$cs" "$US" "$cm" \
-      "$US" "$col" "$US" "$w" "$US" "$lim" "$US" "$dr" "$US" "$dl" "$US" "$q" "$US" "$esc" "$US" "$big"
+    printf 'C%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n' "$US" "$(printf '%s' "$n" | clean)" "$US" "$cp" "$US" "$cs" "$US" "$cm" \
+      "$US" "$col" "$US" "$w" "$US" "$lim" "$US" "$dr" "$US" "$dl" "$US" "$q" "$US" "$esc" "$US" "$big" "$US" "${ag%$RS}"
   done
 }
 [ $mode = cards ] && { cards; exit 0; }
@@ -61,9 +66,11 @@ allcards=$(cards)
 for s in "$root"/projects/*/STATE.md; do
   [ -f "$s" ] || continue
   d=$(dirname "$s"); p=$(basename "$d")
-  color=; reason=
-  red() { [ -n "$color" ] && [ "$color" != yellow ] || { color=red; reason=$1; }; }
-  yellow() { [ -n "$color" ] || { color=yellow; reason=$1; }; }
+  color=; reason=; reds=; yels=; outside=
+  # the first red (else yellow) reason is the project's; every one is kept for the panel, red first
+  red() { reds="$reds${reds:+$RS}red $(printf '%s' "$1" | clean)"; [ -n "$color" ] && [ "$color" != yellow ] || { color=red; reason=$1; }; }
+  yellow() { yels="$yels${yels:+$RS}yellow $(printf '%s' "$1" | clean)"; [ -n "$color" ] || { color=yellow; reason=$1; }; }
+  seen() { outside="$outside${outside:+$RS}$1"; }
 
   gap=$(sh "$(dirname "$0")/track.sh" check "$d" | head -n 1)
   [ -n "$gap" ] && red "track: $gap"
@@ -104,7 +111,7 @@ for s in "$root"/projects/*/STATE.md; do
     [ "${lr%%	*}" = 1 ] && yellow "check fails: $lv (target: $tg)"
     [ "${fr%%	*}" = 0 ] && yellow "target met on the first run: not a hard target, raise it with the owner"
   fi
-  while IFS=$US read -r k cn cp cs cm cc cw cl cd cdl cq cesc cbig; do
+  while IFS=$US read -r k cn cp cs cm cc cw cl cd cdl cq cesc cbig _ages; do
     [ "$k" = C ] && [ "$cp" = "$p" ] || continue
     if [ "$cs" = waiting-owner ]; then
       if [ -n "$cesc" ]; then red "a question has waited $(cos_ago "$cw") with the deadline under 3 h: escalate it to the deputy, $cesc: $cn"
@@ -133,13 +140,17 @@ EOC
     cat "$_c"; }
   netok() { set -- $(head -n 1); [ "$1" = 0 ] && { [ "$2" = 000 ] || [ "$2" -lt 400 ]; }; }
   if command -v curl >/dev/null 2>&1; then
+    pu=
     for u in $(fm_get "$d/TRACK.md" public_urls | clean | tr ',' ' ' | cut -d' ' -f1-6); do
-      net "$u" | netok || { yellow "a public link does not open for a logged-out visitor: $u ($(net "$u" | head -n 1 | cut -d' ' -f2))"; break; }
+      hc=$(net "$u" | head -n 1 | cut -d' ' -f2)
+      if net "$u" | netok; then seen "public $u $hc ok"; else seen "public $u $hc closed"
+        [ -n "$pu" ] || { pu=1; yellow "a public link does not open for a logged-out visitor: $u ($hc)"; }; fi
     done
     set -- $(fm_get "$d/TRACK.md" prod_ref | clean)
     if [ $# -ge 2 ]; then pc=$(printf '%s' "$2" | cut -c1-7)
-      if ! net "$1" | netok; then yellow "production does not answer: $1"
-      elif ! net "$1" | sed 1d | grep -qF -- "$pc"; then yellow "production does not serve the expected commit $pc ($1)"; fi
+      if ! net "$1" | netok; then yellow "production does not answer: $1"; seen "prod $1 $pc down"
+      elif ! net "$1" | sed 1d | grep -qF -- "$pc"; then yellow "production does not serve the expected commit $pc ($1)"; seen "prod $1 $pc other"
+      else seen "prod $1 $pc ok"; fi
     fi
   fi
   # a delivery that points at a file outside the workspace: teammates and the reviewer cannot open it
@@ -148,5 +159,5 @@ EOC
   [ -n "$xo" ] && yellow "the delivery points outside the workspace ($xo): copy the file into the project folder"
   if [ -n "$quiet" ]; then on="delivered: the original request is done"; else on="on track"; fi
   [ -n "$color" ] || { color=green; reason=$on; }
-  printf '%s\037%s\037%s\037%s\037%s\037%s\n' "$p" "$color" "$(printf '%s' "$reason" | clean)" "$st" "$dle" "$(fm_get "$s" member | clean)$US$tg$US$ck$US$runs"
+  printf '%s\037%s\037%s\037%s\037%s\037%s\n' "$p" "$color" "$(printf '%s' "$reason" | clean)" "$st" "$dle" "$(fm_get "$s" member | clean)$US$tg$US$ck$US$runs$US$reds${reds:+${yels:+$RS}}$yels$US$(printf '%s' "$outside" | tr -d '\000-\035\037')"
 done
