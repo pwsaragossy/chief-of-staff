@@ -16,7 +16,7 @@ root=$(cd "${1:?usage: dispatcher.sh /path/to/workspace}" && pwd) || exit 1
 [ -f "$root/.chief-of-staff" ] || { echo "not a workspace: $root" >&2; exit 1; }
 max=${COS_MAX_RUNS_PER_DAY:-3}
 budget=${COS_MAX_BUDGET_USD:-2}
-limit=${COS_RUN_TIMEOUT:-1800}
+limit=${COS_RUN_TIMEOUT:-1800}; case $limit in ""|*[!0-9]*) limit=1800 ;; esac
 bin=${CLAUDE_BIN:-claude}
 log="$root/.dispatch.log"
 today=$(date +%F)
@@ -78,9 +78,11 @@ for s in "$root"/projects/*/STATE.md; do
     >> "$root/.dispatch-$p.out" 2>&1) &
   run=$!
   rm -f "$lock/timeout"
-  # Watcher: kills the run after $limit seconds. Its own sleep dies with it (no orphan holding fds).
-  (trap 'kill $sp 2>/dev/null; exit 0' TERM; sleep "$limit" & sp=$!; wait $sp || exit 0
-   : > "$lock/timeout"; kill "$run" 2>/dev/null) &
+  # Watcher: kills the run after $limit seconds. It polls in 1 s steps, so no long sleep outlives it
+  # (a TERM racing the trap left "sleep $limit" orphaned, holding fds and the final wait for up to $limit s)
+  ( n=0; while kill -0 "$run" 2>/dev/null; do
+      [ $n -ge "$limit" ] && { : > "$lock/timeout"; kill "$run" 2>/dev/null; break; }
+      sleep 1; n=$((n + 1)); done ) </dev/null >/dev/null 2>&1 &
   watch=$!
   wait "$run"; rc=$?
   kill "$watch" 2>/dev/null; wait "$watch" 2>/dev/null; run= watch=

@@ -51,6 +51,8 @@ check "a relative project dir is no workspace (and does not hang)" '[ "$(CLAUDE_
 check "guard ignores folders outside a workspace" '[ "$(g /tmp)" = 0 ]'
 
 # dispatcher, with a stub CLI. The stub does a handoff only for alpha.
+# a short run timeout: a watcher that outlives its run would hold every test below for that long
+export COS_RUN_TIMEOUT=20
 stub="$W/stub.sh"
 cat > "$stub" <<EOF
 #!/bin/sh
@@ -83,6 +85,9 @@ printf '#!/bin/sh\nexec sleep 30\n' > "$W/slow.sh"; chmod +x "$W/slow.sh"
 fm_set "$W/projects/beta/STATE.md" dispatch ready
 CLAUDE_BIN="$W/slow.sh" COS_ALLOW_NO_BACKUP=1 COS_MAX_RUNS_PER_DAY=9 COS_RUN_TIMEOUT=1 sh "$here/dispatcher.sh" "$W"
 check "a hung run is killed and parked" 'grep -q "timeout: beta killed after 1s" "$W/.dispatch.log" && [ "$(fm_get "$W/projects/beta/STATE.md" dispatch)" = off ]'
+fm_set "$W/projects/alpha/STATE.md" dispatch ready
+t0=$(date +%s); CLAUDE_BIN="$stub" COS_ALLOW_NO_BACKUP=1 COS_MAX_RUNS_PER_DAY=99 COS_RUN_TIMEOUT=97 sh "$here/dispatcher.sh" "$W" >/dev/null; t1=$(date +%s)
+check "a quick run returns at once and leaves no watcher sleep behind" '[ $((t1 - t0)) -lt 5 ] && ! pgrep -f "sleep 97" >/dev/null'
 fm_set "$W/projects/alpha/STATE.md" dispatch running
 CLAUDE_BIN="$stub" COS_ALLOW_NO_BACKUP=1 sh "$here/dispatcher.sh" "$W"
 check "an interrupted run is parked by the next dispatcher" 'grep -q "parked alpha: previous run was interrupted" "$W/.dispatch.log" && [ "$(fm_get "$W/projects/alpha/STATE.md" dispatch)" = off ]'
