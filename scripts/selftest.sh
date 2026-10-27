@@ -285,8 +285,11 @@ printf 'x\n' > "$N/viabash.md"
 check "a note written by a shell command is caught at the turn end" 'stop | grep -q "viabash.md: has no front matter"'
 rm -f "$N/viabash.md"
 
-check "an unasked lookup leaves out low-confidence notes" '! h "$(ev UserPromptSubmit ",\"prompt\":\"what is the tax rate on services?\"")" "$P" | grep -q "tax-2"'
+check "an unasked lookup brings a low-confidence note, labelled" 'h "$(ev UserPromptSubmit ",\"prompt\":\"what is the tax rate on services?\"")" "$P" | grep -q "\[\[tax-2\]\] .*(low confidence — verify before citing)"'
+note tax-9 "Tax rate on services tax rate services rate" 2026-06-02 "Services tax rate services rate tax, per a forum post." "none similar"
 fm_set "$N/tax-2.md" confidence medium
+check "high and medium notes come before low ones, however strong the low match" 'o=$(h "$(ev UserPromptSubmit ",\"prompt\":\"what is the tax rate on services?\"")" "$P"); printf "%s" "$o" | grep -q "^1\. \[\[tax-2\]\]" && printf "%s" "$o" | grep -q "^2\. \[\[tax-9\]\] .*low confidence" && ! printf "%s" "$o" | grep -q "^1\. .*low confidence"'
+rm -f "$N/tax-9.md"
 check "the prompt hook brings the notes that bear on the request, with their claim" 'o=$(h "$(ev UserPromptSubmit ",\"prompt\":\"what is the tax rate on services?\"")" "$P"); printf "%s" "$o" | grep -q "^1\. \[\[tax-2\]\]" && printf "%s" "$o" | grep -q "Services pay 12 percent"'
 check "a library marked slow skips the unasked lookup and says how to search" '( . "$here/lib.sh"; s=$(cos_cache slow "$W/knowledge"); mkdir -p "${s%/*}"; : > "$s" ); o=$(h "$(ev UserPromptSubmit ",\"prompt\":\"what is the tax rate on services?\"")" "$P"); rm -f "$CLAUDE_PLUGIN_DATA"/slow-*; printf "%s" "$o" | grep -q "Library lookup skipped"'
 fm_set "$N/tax-2.md" confidence low
