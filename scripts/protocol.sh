@@ -102,6 +102,8 @@ case $(jget hook_event_name) in
     cos_libs "$root" | while IFS="$TAB" read -r n q; do [ "$n" = personal ] || [ "$n" = "$lname" ] || [ ! -d "$q/.git" ] && continue
       { git -C "$q" rev-parse -q --verify HEAD; git -C "$q" status --porcelain -uall --no-renames; } > "$st/snap-$n" 2>/dev/null; done
     [ $lst = 0 ] || { sh "$L" where | sed -n 2p; exit 0; }
+    # the turn-end gate reads only the turn's notes while its index is fresh: refresh it now, in the background
+    ( sh "$L" index </dev/null >/dev/null 2>&1 & )
     # what the company already knows about this request; skipped for an external or very large library (hook time budget)
     case $lib in "$root"/*) ;; *) exit 0 ;; esac
     [ "$(cos_ids "$lib" | wc -l)" -le 3000 ] || exit 0
@@ -417,8 +419,12 @@ $p"; fi ;;
       [ "$substantive" = 1 ] && { [ "$specialists" -lt 1 ] || [ "$reviewers" -lt 1 ]; } && reason="This turn produced a deliverable, research or a long answer with $specialists specialist(s) and $reviewers reviewer(s). Before finishing, run the specialists skill: at least one senior specialist and the independent reviewer as subagents, each briefed with its role card from $root/specialists/, then revise the answer with what they found."
     fi
     [ -f "$st/web" ] && [ ! -f "$st/saved" ] && [ $lst = 0 ] && reason="${reason:+$reason }This turn searched the web but saved nothing to the library. Save each new finding as a note in $lib/notes/ (sh \"$L\" new ...) before finishing."
-    lgaps=; push=
+    lgaps=; push=; lslow=
     gap() { lgaps="${lgaps:+$lgaps
+}$1"; }
+    # a step cut by its time budget (slow disk) is not the agent's fault: it blocks once, never counts as a violation,
+    # and fails closed, holding back what goes to the team this turn
+    slow() { lslow="${lslow:+$lslow
 }$1"; }
     if [ -f "$st/start" ]; then
       while IFS="$TAB" read -r n q; do
@@ -468,7 +474,8 @@ CH
         if [ $# -gt 20 ]; then gap "More than 20 notes changed in '$n'; only 20 can be checked in one turn: run library.sh --lib $n doctor, and save fewer notes per turn."; set --; fi
         [ $# -gt 0 ] || continue
         # each slow step has its own budget inside the hook's 5 s; one that runs out fails closed, saying what to run
-        g=$(cos_limit 1.5 sh "$L" --lib "$n" gate "$@") || [ $? != 124 ] || g="The library check of this turn's notes did not finish in time (slow disk): run sh \"$L\" --lib $n gate <each note you saved> and fix what it lists."
+        since=; [ -z "$team" ] && since=$st/start   # personal: the targets are every note changed since the turn began
+        g=$(cos_limit 1.5 env COS_SINCE="$since" sh "$L" --lib "$n" gate "$@") || [ $? != 124 ] || { g=; slow "The library check of this turn's notes did not finish in time (slow disk), so nothing of the library '$n' goes to the team this turn: run sh \"$L\" --lib $n gate <each note you saved> and fix what it lists."; }
         g=$(printf '%s\n' "$g" | grep -v ': warning: ' | head -n 20)
         [ -n "$g" ] && gap "$g"
         if [ -n "$team" ]; then
@@ -478,7 +485,7 @@ CH
           if [ -s "$st/lines" ]; then
             cos_libs "$root" | while IFS="$TAB" read -r n2 q2; do [ "$n2" = "$n" ] || [ ! -d "$q2/notes" ] && continue
               cos_limit 1.5 find "$q2/notes" -name '*.md' -type f -exec env LC_ALL=C awk -v want="$st/lines" "$SENT" {} + 2>/dev/null || [ $? != 124 ] || : > "$st/copyslow"; done > "$st/hits"
-            [ -f "$st/copyslow" ] && gap "The check for text copied from another library did not finish in time (slow disk): nothing goes to the team this turn; end the turn again, or ask the owner to read the notes first."
+            [ -f "$st/copyslow" ] && slow "The check for text copied from another library did not finish in time (slow disk): nothing goes to the team this turn; end the turn again, or ask the owner to read the notes first."
             # each note's first sentence found in another library, with that library's note: two awk runs in all
             # (the turn's notes against the hit sentences, then the join), not one per sentence
             if [ -s "$st/hits" ]; then cut -f1 "$st/hits" | sort -u > "$st/hitlines"
@@ -489,7 +496,7 @@ CH
               done < "$st/copies"
             fi
           fi
-          [ -z "$lgaps" ] && push="$q"
+          [ -z "$lgaps$lslow" ] && push="$q"
           for f in "$@"; do push="$push$TAB${f#"$q/"}"; done
         fi
       done <<LIBS
@@ -499,7 +506,7 @@ LIBS
     if [ -n "$shared" ]; then
       # the shared workspace goes to the team at every turn end: the board, the projects, and the library notes
       # that passed the gate. Held back: notes that failed it, and files that look like they hold a key or token
-      kn=; [ -z "$lgaps" ] && [ -n "$push" ] && kn=$(printf '%s\n' "$push" | tr "$TAB" '\n' | sed 1d | sed 's|^|knowledge/|')
+      kn=; [ -z "$lgaps$lslow" ] && [ -n "$push" ] && kn=$(printf '%s\n' "$push" | tr "$TAB" '\n' | sed 1d | sed 's|^|knowledge/|')
       list=$( { git -C "$root" status --porcelain -z -uall --no-renames 2>/dev/null | tr '\0' '\n' | cut -c4-
         git -C "$root" rev-parse -q --verify '@{u}' >/dev/null && git -C "$root" diff -z --name-only --no-renames '@{u}...HEAD' | tr '\0' '\n'
         printf '%s\n' "$kn"; } | sort -u | while IFS= read -r f; do
@@ -526,7 +533,7 @@ $wg"
         sh "$(dirname "$0")/sync.sh" push "$root" "${project:-central}" "$root" "$@" </dev/null >/dev/null 2>&1 & )
     # team notes that passed go to the team now, in the background (the hook has 5 s); conflicts become a card.
     # Only this session's library, only the files just gated, and only when nothing in this turn failed
-    elif [ -z "$lgaps" ] && [ -n "$push" ]; then
+    elif [ -z "$lgaps$lslow" ] && [ -n "$push" ]; then
       ( IFS=$TAB; set -f; set -- $push; q=$1; shift
         sh "$(dirname "$0")/sync.sh" push "$q" "${project:-central}" "$root" "$@" </dev/null >/dev/null 2>&1 & )
     fi
@@ -539,7 +546,7 @@ Fix each note (format: $lib/templates/note.md). When a new note is better than a
     gaps=
     if [ -n "$project" ]; then
       gaps=$(cos_limit 1.5 sh "$(dirname "$0")/track.sh" check "$root/projects/$project") || [ $? != 124 ] ||
-        gaps="track.sh check did not finish in time (slow disk): run sh \"$(dirname "$0")/track.sh\" check $root/projects/$project and close what it lists."
+        { gaps=; slow "track.sh check did not finish in time (slow disk): run sh \"$(dirname "$0")/track.sh\" check $root/projects/$project and close what it lists."; }
       gaps=$(printf '%s\n' "$gaps" | head -n 20 | grep .)
     fi
     [ -n "$gaps" ] && reason="${reason:+$reason }Track gate (projects/$project/TRACK.md) not met:
@@ -547,10 +554,12 @@ $gaps
 Close each item with its proof file (evidence: path relative to the project folder), mark it [-] with why: when it does not apply, or move stage: back. A stage passes only when every item is closed."
     pushed=$(jget stop_hook_active)
     violation=0; [ "$pushed" = true ] && [ -n "$reason" ] && violation=1
-    printf '%s t=%s turn=%s project=%s substantive=%s agents=%s specialists=%s reviewers=%s library=%s web=%s saved=%s track=%s pushed=%s violation=%s notes=%s offline=%s rejected=%s\n' \
+    [ -n "$lslow" ] && reason="${reason:+$reason }Not checked this turn (slow disk):
+$lslow"
+    printf '%s t=%s turn=%s project=%s substantive=%s agents=%s specialists=%s reviewers=%s library=%s web=%s saved=%s track=%s pushed=%s violation=%s notes=%s offline=%s rejected=%s slow=%s\n' \
       "$(date '+%F %T')" "$(date +%s)" "$sid" "${project:--}" "$substantive" "$agents" "$specialists" "$reviewers" \
       "$([ -f "$st/library" ] && echo 1 || echo 0)" "$([ -f "$st/web" ] && echo 1 || echo 0)" "$([ -f "$st/saved" ] && echo 1 || echo 0)" \
-      "$(printf '%s' "$gaps" | grep -c .)" "${pushed:-false}" "$violation" "$(printf '%s' "$lgaps" | grep -c .)" "$([ $lst = 0 ] && echo 0 || echo 1)" "$(count rejected)" >> "$root/.protocol.log"
+      "$(printf '%s' "$gaps" | grep -c .)" "${pushed:-false}" "$violation" "$(printf '%s' "$lgaps" | grep -c .)" "$([ $lst = 0 ] && echo 0 || echo 1)" "$(count rejected)" "$(printf '%s' "$lslow" | grep -c .)" >> "$root/.protocol.log"
     [ "$pushed" = true ] && exit 0
     [ -n "$reason" ] || exit 0
     echo "$reason" >&2

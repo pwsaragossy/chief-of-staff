@@ -328,6 +328,11 @@ check "a backdated created: does not escape the similarity check" 'stop | grep -
 rm -f "$N/dot-1.md"
 check "a path with a comma is read whole and checked" 'printf x > "$N/a,b.md"; [ "$(rc "$(wev "$N/a,b.md")" "$P")" = 2 ]'
 rm -f "$N/a,b.md"
+# a gate cut by its time budget (slow disk) is not the agent's fault: it blocks once and is never a violation
+mkdir -p "$W/slowbin"; printf '#!/bin/sh\ncase " $* " in *" gate "*) exit 124 ;; esac\nshift; exec "$@"\n' > "$W/slowbin/timeout"; chmod +x "$W/slowbin/timeout"
+turn >/dev/null; note slow-1 "Opening hours of the shop" 2026-09-03 "Nine to six." "none similar"
+check "a gate cut by its time budget blocks once, says what to run, and is logged as slow, not as a violation" '( PATH="$W/slowbin:$PATH"; export PATH; stop | grep -q "Not checked this turn (slow disk):" && [ "$(rc "$(ev Stop ",\"stop_hook_active\":true")" "$P")" = 0 ] ) && tail -n 1 "$W/.protocol.log" | grep -q "violation=0 .*slow=1"'
+rm -f "$N/slow-1.md"
 check "a note in a subfolder is rejected" 'mkdir -p "$N/sub"; cp "$N/vat-0001.md" "$N/sub/vat-0001.md"; [ "$(rc "$(wev "$N/sub/vat-0001.md")" "$P")" = 2 ]'
 rm -rf "$N/sub"
 turn >/dev/null
@@ -513,6 +518,11 @@ ta; sed 's/^id: pers-3/id: team-9/' "$PN/pers-3.md" > "$TN/team-9.md"; git -C "$
 N0=$N; N=$TN; note team-9 "Quarterly roadmap meeting" 2026-01-05 "Held on the first Monday." "none similar"; N=$N0
 check "a commit made by hand leaves only as the gate saw it" 'sa >/dev/null; i=0; while [ $i -lt 50 ] && ! on notes/team-9.md; do i=$((i+1)); sleep 0.1; done; on notes/team-9.md && ! git -C "$V/t1.git" log -p --all | grep -q "never goes below 400"'
 check "with the problems gone the next turn pushes the good note" 'sa >/dev/null; i=0; while [ $i -lt 50 ] && ! on notes/team-5.md; do i=$((i+1)); sleep 0.1; done; on notes/team-5.md'
+# a gate cut by its time budget (slow disk): fails closed for the team, blocks once, never logged as a violation
+mkdir -p "$V/slowbin"; printf '#!/bin/sh\ncase " $* " in *" gate "*) exit 124 ;; esac\nshift; exec "$@"\n' > "$V/slowbin/timeout"; chmod +x "$V/slowbin/timeout"
+ta; N0=$N; N=$TN; note team-10 "Team holiday calendar" 2026-01-07 "Closed in August." "none similar"; N=$N0
+check "a gate cut by its time budget holds the team notes back" '( PATH="$V/slowbin:$PATH"; export PATH; sa | grep -q "nothing of the library .t1. goes to the team this turn" && sa true >/dev/null ) && ! on notes/team-10.md && tail -n 1 "$V/m1/.protocol.log" | grep -q "slow=1"'
+check "and the next turn on a normal disk sends them" 'ta; sa >/dev/null; i=0; while [ $i -lt 50 ] && ! on notes/team-10.md; do i=$((i+1)); sleep 0.1; done; on notes/team-10.md'
 mkdir -p "$V/m1/projects/b"; ln -s "$TN/team-5.md" "$PA/f.md"
 check "a symlink to another library's note is not a way in" 'W() { rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$1\"}")" "$2"; }; [ "$(W "$PA/f.md" "$V/m1/central")" = 2 ]'
 rm -f "$PA/f.md"
@@ -555,6 +565,17 @@ awk -v d="$Z/knowledge/notes" 'BEGIN { srand(7); for (i = 1; i <= 2000; i++) { f
 ZL() { CLAUDE_PROJECT_DIR="$Z/projects/p" sh "$here/library.sh" "$@"; }
 t0=$(date +%s); ZL search topic5 word7 >/dev/null; ZL check "$Z/knowledge/notes/n5.md" >/dev/null; ZL gate "$Z/knowledge/notes/n5.md" "$Z/knowledge/notes/n9.md" >/dev/null; ZL brief p >/dev/null; t1=$(date +%s)
 check "search, check, gate and brief on 2,000 notes take under 4 s together" '[ $((t1 - t0)) -le 4 ]'
+# the gate reads only the turn's notes and those changed since its index; edits in place, deletions and
+# retirements of the other notes still count
+ZN=$Z/knowledge/notes; zt() { sed "$1" "$ZN/$2.md" > "$Z/t"; cat "$Z/t" > "$ZN/$2.md"; }   # in place: notes/ keeps its mtime
+ZL gate "$ZN/n5.md" >/dev/null; zt 's/^title: .*/title: Note 5 about topic5 and area5/' n7
+check "index: a title edited in place in another note is seen as a duplicate" 'ZL gate "$ZN/n5.md" | grep -q "notes/n5.md: possible duplicate or conflict: \[\[n7\]\]"'
+sed 's/^Compared: .*/Compared: [[n7]] replaces/' "$ZN/n5.md" > "$Z/t"; cat "$Z/t" > "$ZN/n5.md"
+check "index: replaces an active note is blocked, and passes once that note is retired in place" 'ZL gate "$ZN/n5.md" | grep -q "Compared: \[\[n7\]\] replaces but it is still active" && zt "s/^status: active/status: retired\nretired_reason: lost to n5\nsuperseded_by: n5/" n7 && ! ZL gate "$ZN/n5.md" | grep -q "n7"'
+printf 'See [[n11]].\n' >> "$ZN/n5.md"; ZL gate "$ZN/n5.md" >/dev/null; rm "$ZN/n11.md"
+check "index: a link to a note deleted since is broken" 'ZL gate "$ZN/n5.md" | grep -q "links to \[\[n11\]\], which does not exist"'
+sed 's/^id: n12$/id: n5/' "$ZN/n12.md" > "$ZN/zz-conflict.md"
+check "index: a sync conflict copy with the same id is seen from either note" 'ZL gate "$ZN/n5.md" | grep -q "notes/n5.md: has the same id as notes/zz-conflict.md"'
 rm -rf "$Z"
 
 # tracks: minimum deliverables per stage, the Stop gate, and health colors

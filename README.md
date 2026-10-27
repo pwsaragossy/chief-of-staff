@@ -301,7 +301,8 @@ What is ours, with no equivalent found in ECC:
 - The hooks keep inside Claude Code's limits (5 s, 10 s for the briefing): each slow step (the prompt's
   library lookup, the turn-end note and track checks, the briefing's board and library reads) has its own
   budget. A lookup cut short is skipped until a note is added; a turn-end check cut short blocks the turn
-  and says what to run; the briefing says what it could not read.
+  once and says what to run, holds back what would go to the team that turn, and is logged as `slow=`,
+  not as a violation; the briefing says what it could not read.
 - The near-duplicate file notice compares names only, among files with the same extension (letter case,
   separators and a final s ignored), and never blocks: it asks the agent to check whether one duplicates the other.
 - The hooks check that specialists and the reviewer ran, not that they were good.
@@ -370,6 +371,13 @@ What is ours, with no equivalent found in ECC:
 - **No fork per item in hooks.** The hooks run on every prompt and tool call: one `awk` over the board
   (`cos_board`), note ids from a cache keyed by the `notes/` folder's mtime (`cos_ids`), no `dirname`
   loop, and Read/Grep/Glob leave before any setup unless they name a library.
+- **The turn-end gate reads the turn's notes, not the library.** `library.sh gate` keeps an index of
+  each note's id, state, type, title words and `Compared:` (`noteidx-*` in the plugin data folder) and
+  reads only the targets and the notes whose ctime is newer than the index (one `find`, a stat per note);
+  for the personal library the Stop hook passes the turn's start (`COS_SINCE`), so an index refreshed
+  after it (the prompt hook runs `library.sh index` in the background) needs no scan at all. A check that
+  needs another note's facts must add them to the index (`saveidx`/`loadidx` in `library.awk`). Never `ls`
+  the notes in a hook: `ls` stats every file (1.8 s for 300 notes on `/mnt/c`); test the glob instead.
 - **Background children hold pipes.** A `sleep` left by a killed watcher kept the dispatcher's output
   open for up to `COS_RUN_TIMEOUT`; watchers poll instead.
 - **Hook stdin.** `briefing.sh` reads its hook input only when stdin is not a terminal; tests feed it

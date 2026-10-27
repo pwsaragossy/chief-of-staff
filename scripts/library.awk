@@ -11,6 +11,8 @@
 #         backlinks  notes that link to ID
 # TODAY = YYYY-MM-DD. LIBNAME, LIBKIND (personal|team): the library read. EXTF: file of "id<TAB>library" for the
 # ids of the other libraries (not also in this one), so a link across libraries is seen.
+# Gate with an index (library.sh): ALLF lists every note, NEWF the ones to read (changed since IDXF or targets);
+# the others come from IDXF, one line of cross-note facts per note, and IDXOUT gets the refreshed index.
 # Output: one line per problem, "<file>: <problem>".
 
 function rep(s, k,   r) { r = ""; while (k-- > 0) r = r s; return r }
@@ -58,10 +60,11 @@ BEGIN {
   nt = split(ENVIRON["TARGETS"], ta, "\n"); for (i = 1; i <= nt; i++) if (ta[i] != "") { sub(/.*\//, "", ta[i]); TGT["notes/" ta[i]] = 1 }
   if (ENVIRON["EXTF"] != "") while ((getline xl < ENVIRON["EXTF"]) > 0) { split(xl, xe, "\t"); if (xe[1] != "" && !(xe[1] in EXTL)) EXTL[xe[1]] = xe[2] }
   N = 0
+  if (MODE == "gate" && ENVIRON["ALLF"] != "") loadidx()
 }
 
 FNR == 1 {
-  if (N) endfile(N)
+  if (N && !(N in IXN)) endfile(N)
   N++; path[N] = FILENAME; rel[N] = FILENAME; sub(/.*\//, "", rel[N]); stem[N] = rel[N]; sub(/\.md$/, "", stem[N])
   rel[N] = "notes/" rel[N]
   infm = ($0 == "---" || $0 == "---\r"); hasfm[N] = infm; lastkey = ""; fence = ""; code = 0; bytes[N] = 0; blen[N] = 0
@@ -121,13 +124,13 @@ FNR == 1 {
   }
 }
 END {
-  if (N) endfile(N)
+  if (N && !(N in IXN)) endfile(N)
   for (n = 1; n <= N; n++) {
     k = split(OUT[n], oa, " ")
     for (i = 1; i <= k; i++) { BACK[oa[i]] = BACK[oa[i]] " " f(n, "id"); if (oa[i] in ID2N) IND[ID2N[oa[i]]]++ }
   }
   if (MODE == "check") { for (n = 1; n <= N; n++) { xlib(n); report(n) }; exit (bad ? 2 : 0) }
-  if (MODE == "gate") { for (n = 1; n <= N; n++) if (rel[n] in TGT) { xcheck(n); xlib(n); report(n) }; exit (bad ? 2 : 0) }
+  if (MODE == "gate") { for (n = 1; n <= N; n++) if (rel[n] in TGT) { xcheck(n); xlib(n); report(n) }; if (ENVIRON["IDXOUT"] != "") saveidx(); exit (bad ? 2 : 0) }
   if (MODE == "doctor") { for (n = 1; n <= N; n++) { xcheck(n); xlib(n) }; pairs()
     if (COUNT) { c = 0; for (n = 1; n <= N; n++) if (NP[n]) c++; print c "\t" npair "\t" N; exit 0 }
     for (n = 1; n <= N; n++) report(n); exit 0 }
@@ -142,7 +145,7 @@ function endfile(n,   k, i, a, id, t, x, al, j, m) {
   if (fence != "") prob(n, "the third-party fence opened on line " fline[n] " is never closed: add the line ~~~ " fence)
   if (bytes[n] > 40960) prob(n, "is larger than 40 KB: keep the claim and its evidence, and cut the excerpt (the source URL is enough)")
   id = f(n, "id"); if (id == "") id = stem[n]; F[n, "id"] = id
-  if (id in ID2N) DUPID[n] = ID2N[id]; else ID2N[id] = n
+  idreg(n)
   # title and alias words, for similarity; title, alias and tag counts, for search
   k = words(f(n, "title"), a); TWN[n] = 0
   for (i = 1; i <= k; i++) { t = a[i]; if (MODE == "search" && t in QT) TT[n, t]++; if (!(t in STOP) && !((n, t) in TW)) { TW[n, t] = 1; TWL[n] = TWL[n] " " t; TWN[n]++ } }
@@ -151,6 +154,36 @@ function endfile(n,   k, i, a, id, t, x, al, j, m) {
   for (j = 1; j <= k; j++) { m = words(al[j], a); for (i = 1; i <= m; i++) { t = a[i]; if (MODE == "search" && t in QT) AT[n, t]++; if (!(t in STOP) && !((n, t) in TW)) { TW[n, t] = 1; TWL[n] = TWL[n] " " t } } }
   if (MODE == "search") { k = listitems(f(n, "tags"), al); for (j = 1; j <= k; j++) { m = words(al[j], a); for (i = 1; i <= m; i++) if (a[i] in QT) GT[n, a[i]]++ } }
   sfcheck(n)
+}
+
+function idreg(n,   id) { id = f(n, "id"); if (id in ID2N) { DUPID[n] = ID2N[id]; DUP2[id] = n } else ID2N[id] = n }
+
+# the index: what the turn-end gate needs from the notes it does not read (id, state, type, title words, Compared:)
+function loadidx(   l, b, x, a, k, i, n, t) {
+  IDXV = "cos-noteidx 1"
+  while ((getline l < ENVIRON["NEWF"]) > 0) { sub(/.*\//, "", l); RD[l] = 1 }
+  if (ENVIRON["IDXF"] != "" && (getline l < ENVIRON["IDXF"]) > 0 && l == IDXV)
+    while ((getline l < ENVIRON["IDXF"]) > 0) { b = l; sub(/\t.*/, "", b); IX[b] = l }
+  while ((getline l < ENVIRON["ALLF"]) > 0) {
+    b = l; sub(/.*\//, "", b)
+    if (b in RD || !(b in IX) || split(IX[b], x, "\t") != 11) { ARGV[ARGC++] = l; continue }
+    n = ++N; IXN[n] = 1; path[n] = l; rel[n] = "notes/" b; stem[n] = b; sub(/\.md$/, "", stem[n]); hasfm[n] = 1
+    F[n, "id"] = x[2]; F[n, "status"] = x[3]; F[n, "superseded_by"] = x[4]; F[n, "type"] = x[5]; F[n, "group"] = x[6]
+    F[n, "created"] = x[7]; F[n, "title"] = x[8]; NORM[n] = x[9]; TWL[n] = x[10]; CVS[n] = x[11]
+    k = split(TWL[n], a, " "); for (i = 1; i <= k; i++) TW[n, a[i]] = 1
+    k = split(CVS[n], a, " "); for (i = 1; i <= k; i++) { t = index(a[i], ":"); CV[n, substr(a[i], t + 1)] = substr(a[i], 1, t - 1) }
+    idreg(n)
+  }
+  close(ENVIRON["ALLF"]); if (ARGC == 1) ARGV[ARGC++] = "/dev/null"
+}
+function ix(s) { gsub(/[\t\n]/, " ", s); return s }
+function saveidx(   o, n, c, k, a, i) {
+  o = ENVIRON["IDXOUT"]; print IDXV > o
+  for (n = 1; n <= N; n++) {
+    c = CVS[n]; if (!(n in IXN)) { c = ""; k = split(CVL[n], a, " "); for (i = 1; i <= k; i++) c = c (c == "" ? "" : " ") CV[n, a[i]] ":" a[i] }
+    print substr(rel[n], 7) "\t" ix(f(n, "id")) "\t" ix(f(n, "status")) "\t" ix(f(n, "superseded_by")) "\t" ix(f(n, "type")) "\t" ix(f(n, "group")) "\t" ix(f(n, "created")) "\t" ix(f(n, "title")) "\t" NORM[n] "\t" TWL[n] "\t" c > o
+  }
+  close(o)
 }
 
 # what one file can tell on its own
@@ -201,6 +234,7 @@ function sfcheck(n,   id, ty, st, c, k, i, e, a, v) {
 function xcheck(n,   k, i, a, t, m, id, b, j, x, cnt) {
   id = f(n, "id")
   if (n in DUPID) prob(n, "has the same id as " rel[DUPID[n]] " (a sync conflict copy?): merge them and delete one")
+  else if (MODE == "gate" && (id in DUP2)) prob(n, "has the same id as " rel[DUP2[id]] " (a sync conflict copy?): merge them and delete one")
   t = f(n, "superseded_by"); if (t != "" && !(t in ID2N)) prob(n, "superseded_by: [[" t "]] does not exist")
   if (!active(n)) return
   k = split(OUT[n], a, " ")
