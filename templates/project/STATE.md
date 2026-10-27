@@ -21,7 +21,9 @@ member:
 - Stop criterion (written at the start; when it is hit, the project goes to the gate):
 
 ## 3. What is true now
-Facts with their source (file, link, command output). Nothing inferred goes here without saying so.
+One fact per line, `- fact — source (file, link, command) — verified: YYYY-MM-DD HH:MM`. Nothing inferred goes
+here without saying so. Facts that change on their own (what runs in production, balances, public links, deploy
+state) are measured again before they are copied forward; the briefing flags those older than `stale_hours`.
 
 ## 4. What was done and how
 Only what the next session needs to repeat or avoid. History lives in git.
