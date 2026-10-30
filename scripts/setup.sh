@@ -124,7 +124,7 @@ fi
 
 [ -n "$backup" ] || { echo "Backup: none yet: the workspace is only on this computer. Ask central to back it up to a private GitHub repo when you want one."; exit 0; }
 if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
-  echo "Backup: not done, GitHub is not signed in on this computer. Sign in (gh auth login), then ask central to back it up."; exit 0
+  echo "Backup: not done, the GitHub tool (gh) is not installed or not signed in on this computer. Install it and run gh auth login, then ask central to back it up."; exit 0
 fi
 name=$(basename "$W")
 if gh repo create "$name" --private --source "$W" --remote origin --push >/dev/null 2>&1; then

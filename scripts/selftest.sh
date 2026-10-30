@@ -429,7 +429,7 @@ check "a library inside a vault kept in git gets no repo of its own" 'U create "
 printf '#!/bin/sh\necho "$*" >> "%s/gh.log"\n' "$Y" > "$Y/bin/gh"; chmod +x "$Y/bin/gh"
 check "backup creates private repos for the workspace and the library" 'U create "$Y/ws4" --library "$Y/lib4" --backup | grep -q "^Library backup: private GitHub repo ws4-library" && grep -q "^repo create ws4 --private --source $Y/ws4 " "$Y/gh.log" && grep -q "^repo create ws4-library --private --source $Y/lib4 " "$Y/gh.log"'
 printf '#!/bin/sh\nexit 1\n' > "$Y/bin/gh"
-check "backup without a signed-in gh is skipped, not failed, and says what to do" 'U create "$Y/ws5" --backup | grep -q "^Backup: not done, GitHub is not signed in on this computer. Sign in (gh auth login), then ask central to back it up.$"'
+check "backup without a signed-in gh is skipped, not failed, and says what to do" 'U create "$Y/ws5" --backup | grep -q "^Backup: not done, the GitHub tool (gh) is not installed or not signed in on this computer. Install it and run gh auth login, then ask central to back it up.$"'
 check "offload refuses --remote for a library inside another repo" 'cd "$Y/ws3/central" && CLAUDE_PROJECT_DIR="$Y/ws3/central" sh "$here/library.sh" offload "$Y/Git Vault/lib2" --remote "$Y/r.git" 2>&1 | grep -q "inside the git repo"; r=$?; cd "$here"; [ $r = 0 ]'
 rm -rf "$Y"
 

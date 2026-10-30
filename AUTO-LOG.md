@@ -141,6 +141,18 @@ se está tudo bem e o que espera por ele.
   selftest 473/473; simulation handoff Stop rc 2 → 0.
 - Blocks per handoff with a decision: 1 → 0.
 
+### Round 7b — reviewer findings on rounds 3-6 (reviewer role card, as a subagent)
+- Verdict: pass with minor fixes; no security block weakened; selftest passed.
+- Applied: (1) central's backup line covers the library folder too, and pushes to an existing `origin` before
+  creating a repo (a retry after a half-done backup no longer fails); (2) the gh message covers "not installed"
+  as well as "not signed in"; (3) the guard hint drops "This check is a word list" (it added nothing for a real
+  mention) and the message now names .owner-items, which it already protected.
+- Left as notes: `library.sh libs` and skills/knowledge say "personal" in a shared workspace, but none is reached
+  by a shared-workspace user in practice (reviewer finding 5).
+- Proof: selftest 473/473.
+- Method log: second reviewer pass in a row that found real defects my own checks missed. Keeping one reviewer
+  subagent per batch of user-facing changes (cost ~100k tokens, ~3 min, background while the next round runs).
+
 ## Ideas (no evidence of friction yet; not built)
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`
   on every push to a branch, and a run with TMPDIR containing a space. v0.5.1 was a bash 3.2 parse error that a
