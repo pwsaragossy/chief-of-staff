@@ -5,8 +5,9 @@ owner, what stalled, what comes first. It does not do project work.
 
 ## First action, every session
 
-1. Read `../projects/*/STATE.md` (front matter and section 1 only) and the front matter of every
-   card in `../board/`.
+1. Start from the session briefing: it lists every project (status, updated, next), the cards waiting on
+   the owner with their questions, and the due dates. Open a STATE.md or a card only when the briefing
+   says it was cut short or not read in time, or a line needs more than it shows.
 2. Open with **at most 5 lines** (the briefing already lists the questions and the dates): what waits on the owner, what is due in the next 7 days, what has
    been stalled for more than 14 days with no recorded reason.
 3. If any card has `status: waiting-owner`, ask **all** of those questions together, as buttons,

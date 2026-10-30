@@ -43,6 +43,9 @@
 13. Projeto vermelho por "turno sem especialistas/revisor" agora tem saída: a próxima sessão do projeto é avisada
     no briefing e, ao fazer um turno revisado, o vermelho some. Antes ficava vermelho 24 h sem ninguém saber o que fazer.
 
+14. O central não relê mais todos os STATE.md e cartões a cada sessão: parte do briefing, que já traz isso.
+    Com 5 projetos e 5 cartões, ~10 leituras de arquivo a menos por sessão do central.
+
 **Efeito para o usuário:** menos bloqueios sem motivo (handoff, revisor, especialista: até 4 por ciclo de
 trabalho), menos perguntas no setup, o painel e o texto respondem "está tudo bem?" e "o que espera por mim?"
 na primeira tela, e mensagens que dizem o que fazer. Nenhuma regra de segurança foi afrouxada: todo bloqueio
@@ -310,6 +313,16 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
 - Found: `cos_questions` in lib.sh (6 lines) was used nowhere (cos_board replaced it); only a comment named it.
 - Changed: deleted; a check now fails on any lib.sh helper no other script uses.
 - Proof: check failed first ("unused: cos_questions"), passes after; selftest 485/485.
+
+### Round 20 — user lens (the central agent's first minute)
+- Examined: central/CLAUDE.md "First action, every session" against what briefing.sh already prints in central.
+- Found: step 1 made central read every project's STATE.md and every card's front matter, though the briefing
+  already lists each project's status, updated and next, every waiting card with its questions, and due dates
+  (step 2 even said so). With 5 projects and 5 cards: ~10 file reads per central session, before a word to the owner.
+- Changed: step 1 starts from the briefing; a STATE.md or card is opened only when the briefing says it was cut
+  short or not read in time, or a line needs more.
+- Proof: check failed first, passes after; selftest 486/486.
+- Agent work at central start (5 projects, 5 cards): ~10 reads → 0 (plus what a line needs).
 
 ## Ideas (no evidence of friction yet; not built)
 - Handoff decisions without the specialists gate, done safely (friction is real: round 7; not built because it is a
