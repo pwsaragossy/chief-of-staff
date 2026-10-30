@@ -14,6 +14,9 @@
    protegido (ex.: mensagem de commit com ".library"), a mensagem agora diz para reescrever sem o nome.
    O bloqueio continua igual (segurança intacta); o agente só não fica tentando às cegas.
 
+4. Workspace compartilhado: o briefing chamava a biblioteca do time de 'personal' (o setup dizia "the team's").
+   Agora diz "the team's (shared workspace)": ninguém pensa que as notas são privadas.
+
 **Efeito para o usuário:** o selftest volta a ser prova confiável; sem python3, o dono vê em segundos
 se está tudo bem e o que espera por ele.
 
@@ -85,5 +88,16 @@ se está tudo bem e o que espera por ele.
   mentions one of these names (a commit message, an echo), rephrase it without the name." Write/Edit unchanged.
 - Proof: new check failed first, passes after; selftest 470/470.
 - Hook times: unchanged (message only).
+
+### Round 4 — user lens (second member joins)
+- Examined: Bia's first central session after `setup.sh join` (simulation from round 2).
+- Found: setup printed `Library: .../knowledge (the team's)`; the briefing then printed
+  `Library of this session: 'personal' (...)` and `Library 'personal': empty (0 notes).` A teammate reads that
+  their notes are private when every note goes to the whole team: the most expensive misunderstanding a shared
+  workspace can cause. 1 confusing message of 7 in Bia's first briefing.
+- Changed: library.sh shows the shared workspace's library as "the team's (shared workspace)" in the two
+  person-facing lines. The internal name stays `personal` (all gates, sync and paths unchanged).
+- Proof: new check failed first, passes after; selftest 471/471.
+- Simulation after: Bia's briefing has 0 messages that say personal; confusing messages 1 → 0.
 
 ## Ideas (no evidence of friction yet; not built)

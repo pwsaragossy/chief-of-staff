@@ -32,6 +32,8 @@ root=$(cos_root "$dir") || die "not inside a chief-of-staff workspace"
 name=; [ "${1:-}" = --lib ] && { name=${2:-}; shift 2 || usage; }
 mine=$(cos_libname "$root" "$dir")   # the session's own library
 setlib() { name=$1; lib=$(cos_libpath "$root" "$name"); state=$?; kind=team; [ "$name" = personal ] && kind=personal; }
+# what a person reads: a shared workspace's own library (knowledge/) is the team's, though its name stays personal
+label() { if [ "$name" = personal ] && cos_shared "$root"; then printf "the team's (shared workspace)"; else printf "'%s'" "$name"; fi; }
 setlib "${name:-$mine}"
 # a shared workspace is the team's: its knowledge/ is already the team library, and nothing personal joins it
 case ${1:-} in join|use|offload) cos_shared "$root" && die "this workspace is shared with the team: its library (knowledge/) is already the team's, so it takes no other library. Personal notes belong in a personal workspace." ;; esac
@@ -64,7 +66,7 @@ ext() {
 }
 run() { # MODE [awk -v assignments...] -- runs library.awk over every note
   m=$1; shift
-  notes || { [ "$m" = brief ] && echo "Library '$name': empty (0 notes)."; return 0; }
+  notes || { [ "$m" = brief ] && echo "Library $(label): empty (0 notes)."; return 0; }
   case $m in gate|doctor|graph) ext ;; esac
   LC_ALL=C TODAY=$today awk -v MODE="$m" -v TODAY="$today" -v LIBNAME="$name" -v LIBKIND="$kind" "$@" -f "$here/library.awk" "$lib/notes/"*.md
 }
@@ -172,7 +174,7 @@ case ${1:-} in
   backlinks)
     [ $# -eq 2 ] || usage; need_online; run backlinks -v ID="$2" ;;
   graph) need_online; run graph ;;
-  brief) [ $state = 0 ] || { offline; exit 0; }; echo "Library of this session: '$name' ($lib)."; run brief -v PROJ="${2:-}" ;;
+  brief) [ $state = 0 ] || { offline; exit 0; }; echo "Library of this session: $(label) ($lib)."; run brief -v PROJ="${2:-}" ;;
   where) echo "$lib"; offline; exit $state ;;
   offload) [ "$name" = personal ] || die "offload moves the personal library; a team library lives in its git repo"; sh "$here/offload.sh" "$@" ;;
   libs)

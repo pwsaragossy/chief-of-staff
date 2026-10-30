@@ -939,6 +939,7 @@ check "a shared workspace needs the member name" '! sh "$here/setup.sh" create "
 check "a shared workspace is created and pushed to the team repo" 'sh "$here/setup.sh" create "$SW/a" --share "$SW/team.git" --member Ana | grep -q "^Shared: pushed" && grep -qx "shared: yes" "$SW/a/.chief-of-staff" && git -C "$SW/team.git" ls-tree -r --name-only HEAD | grep -qx board/.gitkeep'
 check "a repo that is not a shared workspace cannot be joined, and leaves nothing" '! sh "$here/setup.sh" join "$SW/x" "$SW/plain.git" --member Bia 2>/dev/null && [ ! -e "$SW/x" ] && ! ls "$SW" | grep -q cos-join'
 check "a teammate joins with their own name" 'sh "$here/setup.sh" join "$SW/b" "$SW/team.git" --member Bia | grep -q "you are Bia" && [ "$(git -C "$SW/b" config cos.member)" = Bia ] && ro "$SW/b/.chief-of-staff"'
+check "a teammate's briefing calls the shared library the team's, never personal" 'o=$(CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/briefing.sh"); printf "%s\n" "$o" | grep -q "^Library of this session: the team.s (shared workspace)" && ! printf "%s\n" "$o" | grep -q "personal"'
 check "a shared workspace takes no other library" 'CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/library.sh" join "$SW/plain.git" 2>&1 | grep -q "shared with the team"'
 turn() { hk "$(ev UserPromptSubmit)" "$1" >/dev/null 2>&1; hk "$(ev Stop ",\"stop_hook_active\":false")" "$1" 2>&1; }
 inteam() { git -C "$SW/team.git" ls-tree -r --name-only HEAD | grep -qxF "$1"; }
