@@ -36,10 +36,17 @@
 10. Os 8 cartões de especialista (exceto o revisor) não tinham a seção "## Versions" no formato de saída,
     que o hook exige: o especialista que seguia o próprio cartão era bloqueado uma vez por execução. Corrigido.
 
-**Efeito para o usuário:** o selftest volta a ser prova confiável; sem python3, o dono vê em segundos
-se está tudo bem e o que espera por ele.
+11. README lista os 7 skills (faltava `ambition`) com as contagens certas; um teste impede que volte a divergir.
+12. Sessão retomada (`--resume`) não é mais mandada reescrever a "arrival synthesis" que já escreveu.
 
-**Recomendo fazer merge de:** todos os commits até aqui (só testes).
+**Efeito para o usuário:** menos bloqueios sem motivo (handoff, revisor, especialista: até 4 por ciclo de
+trabalho), menos perguntas no setup, o painel e o texto respondem "está tudo bem?" e "o que espera por mim?"
+na primeira tela, e mensagens que dizem o que fazer. Nenhuma regra de segurança foi afrouxada: todo bloqueio
+de segurança continua igual; só mudaram textos, a ordem do painel e o que conta como "entregável".
+
+**Recomendo fazer merge de:** todos os commits do branch. Cada um tem teste que falhou antes e passa depois
+(selftest 479/479). Se quiser revisar só um: o de DECISIONS.md (muda o que o gate de fim de turno considera
+entregável) — é o único que muda comportamento de hook.
 
 ---
 
