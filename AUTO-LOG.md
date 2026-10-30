@@ -331,6 +331,16 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
 - Found: every date/stat use has its BSD/GNU fallback in the right order; the only `{n,m}` are in sed BREs; no awk
   extension is used. Only mawk exists here; BSD awk itself remains untested (see the CI idea). No change.
 
+### Round 22 — user lens (the unattended dispatcher) — no change
+- Examined: dispatcher.sh against every README promise: refuses without a git remote (unless COS_ALLOW_NO_BACKUP),
+  one dispatcher at a time with stale-lock takeover, daily run ceiling, budget and timeout per run, read/edit tools
+  only with Bash and AskUserQuestion denied, Edit denies on CLAUDE.md/.claude/.git/.gitattributes/.dispatch* by
+  absolute path, git fingerprint check (ALERT and stop), commits with hooks off, a run without a handoff parked,
+  a shared workspace runs only this member's projects and never plain-pushes.
+- Found: every promise is kept by the code. No change.
+- Pace note: rounds 13-14, 21-22 found nothing with evidence by reading; the next rounds space out (20 min) and
+  favour measurement over reading.
+
 ## Ideas (no evidence of friction yet; not built)
 - Fewer permission prompts for the plugin's own read-only commands. In default permission mode every
   `sh .../library.sh search <terms>` (which the protocol requires before web research) and `track.sh brief/check`
