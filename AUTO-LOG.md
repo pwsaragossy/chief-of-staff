@@ -324,7 +324,21 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
 - Proof: check failed first, passes after; selftest 486/486.
 - Agent work at central start (5 projects, 5 cards): ~10 reads → 0 (plus what a line needs).
 
+### Round 21 — technical lens (portability scan) — no change
+- Examined: every script except the selftest for GNU-only or BSD-only forms (sed -i, grep -P, readlink -f, date -d,
+  stat -c, xargs -r, find -printf, head -c, [[ ]], local) and awk extensions (gensub, strftime, 3-arg match,
+  IGNORECASE) and `{n,m}` intervals in awk regexes (unsupported by macOS awk 20070501, shipped through macOS 12).
+- Found: every date/stat use has its BSD/GNU fallback in the right order; the only `{n,m}` are in sed BREs; no awk
+  extension is used. Only mawk exists here; BSD awk itself remains untested (see the CI idea). No change.
+
 ## Ideas (no evidence of friction yet; not built)
+- Fewer permission prompts for the plugin's own read-only commands. In default permission mode every
+  `sh .../library.sh search <terms>` (which the protocol requires before web research) and `track.sh brief/check`
+  costs the user a permission click that is not their decision. The PreToolUse Bash hook could answer
+  `permissionDecision: allow` only for an exact single invocation of the plugin's own script path with a read-only
+  subcommand (search, where, brief, libs, backlinks, similar, doctor; track.sh check/brief/status) and arguments with
+  no shell metacharacters ($ ` ; & | < > ( ) \ newline). Not built: it grants permission on the user's behalf, which
+  is a security decision for the owner, and I could not measure the prompt count without an interactive session.
 - Handoff decisions without the specialists gate, done safely (friction is real: round 7; not built because it is a
   gate change that needs the owner's eye): PreToolUse saves a copy of DECISIONS.md; PostToolUse accepts the write as a
   control file only if the old file is a byte prefix of the new one, every added line is a decision line of at most
