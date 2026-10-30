@@ -17,5 +17,5 @@ set in your shell). It needs `python3` (standard library only) and runs on this 
    waiting on the owner or no handoff for a while; files dropped in the import box go to
    `knowledge/inbox/` and central processes them with the `knowledge` skill.
 
-No `python3`: say so in one line; `sh "<plugin>/scripts/health.sh" "<workspace>"` prints the same
-colors as text.
+No `python3`: say so in one line, run `sh "<plugin>/scripts/health.sh" text "<workspace>"` and show
+its lines as they are: each project's color and reason, then what waits on the owner.

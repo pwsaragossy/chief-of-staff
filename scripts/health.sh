@@ -21,8 +21,18 @@
 #          a public_urls link closed to a logged-out visitor, production not serving the prod_ref commit,
 #          a delivery that points at a file outside the workspace
 # green  = none of the above
+#   health.sh text [dir]   the same, for a person: "slug: color - reason" per project, then each question waiting on the owner
 . "$(dirname "$0")/lib.sh"
 
+if [ "${1:-}" = text ]; then shift
+  cos_root "${1:-$PWD}" >/dev/null || { echo "health.sh: no chief-of-staff workspace at ${1:-$PWD}" >&2; exit 2; }
+  sh "$0" "$@" | awk -F '\037' '{ print $1 ": " $2 " - " $3 } END { if (!NR) print "No projects yet." }'
+  sh "$0" cards "$@" | awk -F '\037' 'function ago(m) { return m < 60 ? m " min" : m < 1440 ? int(m / 60) " h " m % 60 " min" : int(m / 1440) " d" }
+    $1 == "C" && $4 == "waiting-owner" { n = split($11, q, "\036")
+      for (i = 1; i <= n; i++) { if (!w++) print "Waits on you:"; print "- " $2 " (" $3 ($5 != "" ? ", " $5 : "") ", " ago($7) "): " q[i] } }
+    END { if (!w) print "Nothing waits on you." }'
+  exit 0
+fi
 mode=projects; [ "${1:-}" = cards ] && { mode=cards; shift; }
 root=$(cos_root "${1:-$PWD}") || { echo "health.sh: no chief-of-staff workspace at ${1:-$PWD}" >&2; exit 2; }
 US=$(printf '\037'); RS=$(printf '\036')

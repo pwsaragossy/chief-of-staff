@@ -156,7 +156,8 @@ Skills: `setup`, `new-project`, `handoff`, `specialists`, `knowledge`, `panel`.
 
 `/chief-of-staff:panel` starts `scripts/panel.py` (needs `python3`, standard library only) and opens
 a link like `http://127.0.0.1:<port>/?t=<token>`. It listens on this computer only and refuses any
-request without the token. Colors come from `scripts/health.sh`, which also works as text:
+request without the token. Colors come from `scripts/health.sh`; `health.sh text <workspace>` prints them
+without the panel, one line per project, then what waits on the owner:
 
 - **red**: a track gate problem, STATE.md says red, a turn in the last 24 h ended without the
   specialists, the reviewer or the track gate, a dispatcher alert, a question waiting on the owner

@@ -726,6 +726,11 @@ fm_set "$G/TRACK.md" deadline "$(fut 14400)"
 check "a deadline under 6 h is yellow" 'H gamma | grep -Eq "^yellow: deadline in (3 h 59|4 h 0) min"'
 check "health gives the panel the deadline as a number" 'sh "$here/health.sh" "$W" | awk -F "$(printf "\037")" "\$1 == \"gamma\" { print \$12 }" | grep -q "^[0-9][0-9]*$"'
 check "health gives every reason, red ones first, each tagged with its color" 'sh "$here/health.sh" "$W" | awk -F "$(printf "\037")" "\$1 == \"gamma\" { print \$17 }" | tr "\036" "\n" | awk "!/^(red|yellow) / { exit 1 } /^yellow / { y = 1 } /^red / && y { exit 1 } END { exit NR < 1 }"'
+check "health.sh text answers in plain lines: each project's color and reason, then what waits on the owner" '( d=$(mktemp -d); mkdir -p "$d/board" "$d/projects/p"; touch "$d/.chief-of-staff"; cp "$here/../templates/project/STATE.md" "$d/projects/p/STATE.md"; fm_set "$d/projects/p/STATE.md" updated "$(date "+%F %H:%M")"
+printf -- "---\nstatus: waiting-owner\nproject: p\n---\n## For the owner to decide\n- (asked %s %s) Price at 9 or 19? Recommend 19\n" "$(date "+%F %H:%M")" "$(date +%z)" > "$d/board/Card.md"
+t=$(sh "$here/health.sh" text "$d"); rm -rf "$d"; printf "%s\n" "$t"
+printf "%s" "$t" | tr -d "\n" | LC_ALL=C grep -q "[[:cntrl:]]" && exit 1
+printf "%s\n" "$t" | grep -q "^p: yellow - waiting on the owner for 0 min: Card$" && printf "%s\n" "$t" | grep -q "^Waits on you:" && printf "%s\n" "$t" | grep -q "^- Card (p, 0 min): Price at 9 or 19? Recommend 19$" )'
 check "health gives each question to the owner its own age, empty when unstamped" '( d=$(mktemp -d); mkdir -p "$d/board"; touch "$d/.chief-of-staff"; z=$(date +%z); o=$(date -d "-90 min" "+%F %H:%M" 2>/dev/null || date -v-90M "+%F %H:%M")
 printf -- "---\nstatus: waiting-owner\nproject: p\n---\n## For the owner to decide\n- (asked %s %s) old one\n- (asked %s %s) new one\n- no stamp\n" "$o" "$z" "$(date "+%F %H:%M")" "$z" > "$d/board/c.md"
 a=$(sh "$here/health.sh" cards "$d" | awk -F "$(printf "\037")" "{ print \$14 }" | tr "\036" ,); rm -rf "$d"; case $a in 9[0-2],[01],|8[89],[01],) exit 0 ;; *) echo "ages: $a"; exit 1 ;; esac )'
