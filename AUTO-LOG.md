@@ -235,6 +235,18 @@ se está tudo bem e o que espera por ele.
   templates/specialists/; ROUTING.md names the same cards.
 - Found: nothing with evidence. No change. Next rounds move to other areas (panel text, dispatcher, knowledge skill).
 
+### Round 15 — technical lens (knowledge skill promises; resume)
+- Examined: knowledge SKILL.md promises against library.sh and panel.py (offline library → panel yellow: kept,
+  panel.py library() color yellow feeds the overall dot). No drift there.
+- Found: on `claude --resume` the project briefing said "Protocol: the arrival synthesis in STATE.md is written
+  before any other action", though a resumed conversation already wrote it (compaction was handled, resume not).
+  Each resume cost the agent a re-read and a 3-5 line rewrite of STATE.md for nothing.
+- Changed: briefing.sh on resume: "Resumed session: your arrival synthesis is already in STATE.md; re-read
+  STATE.md only if it changed since." Project CLAUDE.md's "First action, every session" notes the same.
+  Startup and clear still require the synthesis.
+- Proof: check failed first, passes after; selftest 479/479.
+- Agent work per resume: 1 arrival synthesis → 0.
+
 ## Ideas (no evidence of friction yet; not built)
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`
   on every push to a branch, and a run with TMPDIR containing a space. v0.5.1 was a bash 3.2 parse error that a

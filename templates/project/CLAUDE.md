@@ -2,7 +2,7 @@
 
 A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
 
-## First action, every session
+## First action, every session (a resumed conversation already did it)
 
 1. Read [STATE.md](STATE.md) in full.
 2. Before acting, write 3 to 5 lines under "Arrival synthesis" at the top of STATE.md: what you
