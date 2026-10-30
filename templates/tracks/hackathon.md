@@ -3,10 +3,13 @@ track: hackathon
 stage: 1
 delivery: 4
 stale_hours: 3
+deputy:
 owner_wait_minutes: 20
 deadline:
 target:
 check:
+public_urls:
+prod_ref:
 ---
 # Track: hackathon
 For a 24-48 hour build event judged by a panel. Pick it when the deadline is hours away and the goal is a working demo plus a complete submission.

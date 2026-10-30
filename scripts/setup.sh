@@ -51,6 +51,9 @@ done
 case $W in /*) ;; *) die "give the workspace as an absolute path" ;; esac
 W=${W%/}
 [ -f "$W/.chief-of-staff" ] && die "$W is already a workspace"
+# a Windows drive seen from WSL (drvfs): every file read there is about 70 times slower than in the Linux home,
+# and the hooks run on each prompt and tool call
+case $W in /mnt/[a-z]/*) echo "Warning: $W is on a Windows drive seen from WSL, where the hooks are about 70 times slower. Prefer a folder in the Linux home (~/chief-of-staff); Windows apps reach it at \\\\wsl\$\\<distro>\\home." ;; esac
 if [ -d "$W" ] && [ -n "$(ls -A "$W")" ]; then die "$W exists and is not empty: choose a new or empty folder"; fi
 member=$(printf '%s' "$member" | tr -d '\000-\037' | cut -c1-60)
 if [ -n "$share" ] || [ "$cmd" = join ]; then

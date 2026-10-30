@@ -56,7 +56,19 @@ case $cmd in
     [ -n "$b" ] && g reset -q "$b"
     if [ $# -gt 0 ] && ! e=$(g --literal-pathspecs add -A -- "$@" 2>&1); then   # only what the gate passed
       g reset -q; say "push failed: $(first "$e")"; exit 1; fi
-    own=; g diff --cached --quiet || { g commit -qm "update from $s"; own=1; own_commit; }   # also before the rebase: a push refused later keeps it
+    # the message says what changed (cards by name, other files counted per folder), so the team's log reads
+    # as a history instead of a column of "update from <session>"
+    msg=$(g diff --cached --name-only 2>/dev/null | LC_ALL=C awk -v s="$s" '
+      { gsub(/[\001-\037]/, "") }
+      /^board\/[^\/]+\.md$/ { c = substr($0, 7, length($0) - 9); if (nc++ < 3) C = C (C == "" ? "" : ", ") c; next }
+      /^(knowledge\/)?notes\// { nn++; next }
+      { k = split($0, a, "/"); d = (k > 2) ? a[1] "/" a[2] : (k == 2 ? a[1] : "(root)"); if (!(d in N)) O[++no] = d; N[d]++ }
+      END { m = ""; if (nc) m = (nc == 1 ? "card " : "cards ") C (nc > 3 ? " and " nc - 3 " more" : "")
+        for (i = 1; i <= no && i <= 3; i++) m = m (m == "" ? "" : "; ") O[i] " (" N[O[i]] (N[O[i]] == 1 ? " file)" : " files)")
+        if (no > 3) m = m "; " no - 3 " more folders"
+        if (nn) m = m (m == "" ? "" : "; ") nn (nn == 1 ? " note" : " notes")
+        print s ": " (m == "" ? "update" : substr(m, 1, 200)) }')
+    own=; g diff --cached --quiet || { g commit -qm "${msg:-update from $s}"; own=1; own_commit; }   # also before the rebase: a push refused later keeps it
     if ! g rev-parse -q --verify '@{u}' >/dev/null; then   # the first push failed at join: push now, nothing to merge
       own_commit; if e=$(g push -q -u origin HEAD 2>&1); then say "pushed ok"; else say "push failed: $(first "$e")"; fi; exit 0
     fi

@@ -3,6 +3,7 @@ track: research
 stage: 1
 delivery: 4
 stale_hours: 48
+deputy:
 target:
 check:
 ---

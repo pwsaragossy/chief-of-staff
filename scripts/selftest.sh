@@ -1,6 +1,7 @@
 #!/bin/sh
 # Self-test: builds a throwaway workspace and checks the hooks and the dispatcher. No network, no real claude.
 set -u
+exec </dev/null   # the briefing reads its hook input from stdin: never a terminal or an open pipe here
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib.sh"
 fail=0
@@ -51,6 +52,8 @@ check "a relative project dir is no workspace (and does not hang)" '[ "$(CLAUDE_
 check "guard ignores folders outside a workspace" '[ "$(g /tmp)" = 0 ]'
 
 # dispatcher, with a stub CLI. The stub does a handoff only for alpha.
+# a short run timeout: a watcher that outlives its run would hold every test below for that long
+export COS_RUN_TIMEOUT=20
 stub="$W/stub.sh"
 cat > "$stub" <<EOF
 #!/bin/sh
@@ -83,6 +86,9 @@ printf '#!/bin/sh\nexec sleep 30\n' > "$W/slow.sh"; chmod +x "$W/slow.sh"
 fm_set "$W/projects/beta/STATE.md" dispatch ready
 CLAUDE_BIN="$W/slow.sh" COS_ALLOW_NO_BACKUP=1 COS_MAX_RUNS_PER_DAY=9 COS_RUN_TIMEOUT=1 sh "$here/dispatcher.sh" "$W"
 check "a hung run is killed and parked" 'grep -q "timeout: beta killed after 1s" "$W/.dispatch.log" && [ "$(fm_get "$W/projects/beta/STATE.md" dispatch)" = off ]'
+fm_set "$W/projects/alpha/STATE.md" dispatch ready
+t0=$(date +%s); CLAUDE_BIN="$stub" COS_ALLOW_NO_BACKUP=1 COS_MAX_RUNS_PER_DAY=99 COS_RUN_TIMEOUT=97 sh "$here/dispatcher.sh" "$W" >/dev/null; t1=$(date +%s)
+check "a quick run returns at once and leaves no watcher sleep behind" '[ $((t1 - t0)) -lt 5 ] && ! pgrep -f "sleep 97" >/dev/null'
 fm_set "$W/projects/alpha/STATE.md" dispatch running
 CLAUDE_BIN="$stub" COS_ALLOW_NO_BACKUP=1 sh "$here/dispatcher.sh" "$W"
 check "an interrupted run is parked by the next dispatcher" 'grep -q "parked alpha: previous run was interrupted" "$W/.dispatch.log" && [ "$(fm_get "$W/projects/alpha/STATE.md" dispatch)" = off ]'
@@ -108,6 +114,16 @@ ev() { printf '{"session_id":"s1","hook_event_name":"%s"%s}' "$1" "${2:-}"; }
 rc() { h "$1" "$2" >/dev/null 2>&1; echo $?; }
 check "prompt hook restates the protocol" 'h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "at least one specialist and the independent reviewer"'
 check "prompt hook is silent outside a workspace" '[ -z "$(h "$(ev UserPromptSubmit)" /tmp)" ]'
+check "the next prompt of the session gets one line, not the whole protocol" 'o=$(h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P"); printf "%s" "$o" | grep -q "as stated at the start of this session" && ! printf "%s" "$o" | grep -q "the independent reviewer, as subagents"'
+check "after a compaction the next prompt gets the full protocol again" 'printf "{\"session_id\":\"s1\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh" >/dev/null; h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "the independent reviewer, as subagents"'
+check "a compacted session gets its turn record, not a new arrival synthesis" 'o=$(printf "{\"session_id\":\"s1\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh"); printf "%s" "$o" | grep -q "Resumed after a compaction, same turn: .* 0 specialist" && ! printf "%s" "$o" | grep -q "arrival synthesis in STATE.md is written"'
+long() { awk -v n="$1" 'BEGIN { while (n-- > 0) printf "a" }'; }
+h "$(ev UserPromptSubmit)" "$P" >/dev/null
+check "a 3,000-character status answer is not substantive, a 7,000-character one is" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false,\"last_assistant_message\":\"$(long 3000)\"")" "$P")" = 0 ] && [ "$(rc "$(ev Stop ",\"stop_hook_active\":false,\"last_assistant_message\":\"$(long 7000)\"")" "$P")" = 2 ]'
+h "$(ev UserPromptSubmit)" "$P" >/dev/null
+check "a Read outside the library is silent and records nothing; one inside marks the library" '[ -z "$(h "$(ev PostToolUse ",\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$P/x.ts\"}")" "$P" 2>&1)" ] && [ ! -f "$CLAUDE_PLUGIN_DATA/turns/s1/library" ] && h "$(ev PostToolUse ",\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$W/knowledge/notes/n1.md\"}")" "$P" && [ -f "$CLAUDE_PLUGIN_DATA/turns/s1/library" ]'
+check "the note id cache follows notes added and removed" '( . "$here/lib.sh"; cos_ids "$W/knowledge" | grep -qx n1 && : > "$W/knowledge/notes/zz-new.md" && cos_ids "$W/knowledge" | grep -qx zz-new && rm "$W/knowledge/notes/zz-new.md" && ! cos_ids "$W/knowledge" | grep -qx zz-new )'
+h "$(ev UserPromptSubmit)" "$P" >/dev/null
 check "a short turn ends freely" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
 check "web search is blocked before the library" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
 h "$(ev PostToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh /x/library.sh search tax\"}")" "$P"
@@ -154,11 +170,26 @@ check "a role card that does not exist is blocked" '[ "$(rc "$(ev PreToolUse ",\
 check "an existing role card is allowed" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher Library: none found for x Ambition: answer many lookups fast, not one | judge: sh check.sh under 3 s\"}")" "$P")" = 0 ]'
 check "a utility helper is allowed" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: utility\"}")" "$P")" = 0 ]'
 check "a specialist cannot finish without its checklist" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance answer\"")" "$P")" = 2 ]'
-check "a specialist with its checklist and versions finishes" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Versions v1 depth: judge fail ## Never-skip checklist ok\"")" "$P")" = 0 ]'
+check "a specialist with its checklist and versions finishes" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Versions v1 depth: judge fail, evidence: sh check.sh printed 4.2 s ## Never-skip checklist ok\"")" "$P")" = 0 ]'
+check "ambition: a version without the judge.s evidence cannot finish" 'h "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Versions v1 depth: judge fail ## Never-skip checklist ok\"")" "$P" 2>&1 | grep -q "never invent a failed version"'
+check "ambition: a first version that passed, with what the judge printed, finishes" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Versions v1 passed: sh check.sh printed 1.4 s ## Never-skip checklist ok\"")" "$P")" = 0 ]'
+check "a role card named by its path is allowed, a path outside the workspace is not" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: $W/specialists/researcher.md Library: none found for x Ambition: answer many lookups fast, not one | judge: sh check.sh under 3 s\"}")" "$P")" = 0 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: /tmp/evil/specialists/researcher.md Library: none found for x Ambition: answer many lookups fast, not one | judge: sh check.sh under 3 s\"}")" "$P")" = 2 ]'
+SP="$W/My Drive/ws"; mkdir -p "$SP/specialists" "$SP/projects/p"; : > "$SP/.chief-of-staff"; : > "$SP/specialists/researcher.md"
+check "a role card path with spaces is read up to .md; the block message says the role name is enough" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: $SP/specialists/researcher.md Library: none found for x Ambition: answer many lookups fast, not one | judge: sh check.sh under 3 s\"}")" "$SP/projects/p")" = 0 ] && h "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"do it\"}")" "$SP/projects/p" 2>&1 | grep -q "the role name is enough"'
+rm -rf "$W/My Drive"
+check "cos_limit stops a slow command, with timeout(1) and without it" '( . "$here/lib.sh"; s=$(date +%s); o=$(cos_limit 1 sh -c "sleep 6; echo late"); r=$?; [ $r = 124 ] && [ -z "$o" ] && [ $(($(date +%s) - s)) -lt 4 ] && [ "$(cos_limit 2 echo fast)" = fast ] ) && mkdir -p "$W/limbin" && for t in sleep mktemp cat rm sh; do ln -sf "$(command -v $t)" "$W/limbin/$t"; done && ( PATH="$W/limbin"; . "$here/lib.sh"; o=$(cos_limit 1 sh -c "sleep 6; echo late"); [ $? = 124 ] && [ -z "$o" ] && [ "$(cos_limit 2 sh -c "echo fast")" = fast ] )'
+SL="$W/slowplug"; cp -R "$here" "$SL"; printf '#!/bin/sh\nsleep 9\n' > "$SL/library.sh"
+check "a lookup slower than its budget is cut: the hook ends in time, the full protocol is out, and the next prompts skip it" 'rm -f "$CLAUDE_PLUGIN_DATA/turns/s7.seen"; s=$(date +%s); o=$(printf "%s" "{\"session_id\":\"s7\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"what is the tax rate on services?\"}" | CLAUDE_PROJECT_DIR="$P" sh "$SL/protocol.sh"); r=$?; e=$(date +%s); [ $r = 0 ] && [ $((e - s)) -lt 5 ] && printf "%s" "$o" | grep -q "the independent reviewer, as subagents" && [ -f "$CLAUDE_PLUGIN_DATA/turns/s7.seen" ] && printf "%s" "{\"session_id\":\"s7\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"what is the tax rate?\"}" | CLAUDE_PROJECT_DIR="$P" sh "$SL/protocol.sh" | grep -q "Library lookup skipped"'
+printf '#!/bin/sh\nsleep 9\n' > "$SL/track.sh"; printf '#!/bin/sh\nsleep 9\n' > "$SL/health.sh"
+check "a turn-end track check slower than its budget blocks in time and says what to run" 's=$(date +%s); o=$(printf "%s" "{\"session_id\":\"s7\",\"hook_event_name\":\"Stop\",\"stop_hook_active\":false}" | CLAUDE_PROJECT_DIR="$P" sh "$SL/protocol.sh" 2>&1); r=$?; [ $r = 2 ] && [ $(($(date +%s) - s)) -lt 5 ] && printf "%s" "$o" | grep -q "track.sh check did not finish in time"'
+check "a briefing whose board read runs out of time says so and ends in time" 's=$(date +%s); o=$(CLAUDE_PROJECT_DIR="$W/central" sh "$SL/briefing.sh"); [ $(($(date +%s) - s)) -lt 9 ] && printf "%s" "$o" | grep -q "board was not read in time"'
+rm -rf "$SL" "$CLAUDE_PLUGIN_DATA"/slow-*
+check "the panel writes state text in colors with 4.5:1 in both modes, and the version is 0.5.0 everywhere" 'grep -q ".finish span{[^}]*color:var(--yellow-t)" "$here/panel.py" && grep -q "finish.reached span{color:var(--green-t)}" "$here/panel.py" && grep -q -- "--yellow-t:#8a5d00" "$here/panel.py" && grep -q "\"version\": \"0.5.0\"" "$here/../.claude-plugin/plugin.json" && grep -q "Version 0.5.0\." "$here/../README.md"'
+check "the specialists skill names cards by path and never pastes them" 'grep -q "Do not paste the card" "$here/../skills/specialists/SKILL.md" && grep -q "never pasted" "$here/../templates/ROUTING.md"'
 check "ambition: a specialist cannot finish without its versions" 'h "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Never-skip checklist ok\"")" "$P" 2>&1 | grep -q "## Versions" && [ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Never-skip checklist ok\"")" "$P")" = 2 ]'
 check "ambition: the reviewer finishes without versions (it judges, it does not draft)" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: reviewer ## Never-skip checklist ok\"")" "$P")" = 0 ]'
 check "ambition: a placeholder Ambition: line is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher Library: [[tax-2]] Ambition: x | judge: y\"}")" "$P")" = 2 ]'
-check "ambition: the skill makes the judge measure the goal behind the goal, and keeps the owner.s target" 'f="$here/../skills/ambition/SKILL.md"; grep -q "first try" "$f" && grep -q "briefs sets the judge" "$f" && grep -q "never raise or lower" "$f" && grep -q "deadline" "$f" && ! grep -qi "gets one version" "$f"'
+check "ambition: the skill makes the judge measure the goal behind the goal, and keeps the owner.s target" 'f="$here/../skills/ambition/SKILL.md"; grep -q "v1 passed:" "$f" && grep -q "briefs sets the judge" "$f" && grep -q "never raise or lower" "$f" && grep -q "deadline" "$f" && ! grep -qi "gets one version" "$f"'
 check "a helper without a role finishes" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"found 3 files\"")" "$P")" = 0 ]'
 
 # library: the save gate, the turn-end gate, search, retire/merge/coexist, offline, speed
@@ -198,6 +229,7 @@ turn >/dev/null
 note tax-2 "Tax rate on services in 2026" 2026-06-01 "Services pay 12 percent since 2026 ([[vat-0001]], [[nowhere-0000]])." "none similar" "confidence: high\n"
 wrote "$N/tax-2.md" >/dev/null 2>&1
 check "confidence high without sources is rejected" 'L check "$N/tax-2.md" | grep -q "needs sources"'
+check "graph gives the panel each problem as text (M lines)" 'L graph | grep -q "^M	tax-2	confidence high needs sources"'
 note tax-2 "Tax rate on services in 2026" 2026-06-01 "Services pay 12 percent since 2026 ([[vat-0001]], [[nowhere-0000]])." "none similar"
 check "a link to a missing note blocks the turn end" 'stop | grep -q "links to \[\[nowhere-0000\]\], which does not exist"'
 check "a similar older note nobody compared blocks the turn end" 'stop | grep -q "possible duplicate or conflict: \[\[tax-1\]\]"'
@@ -264,7 +296,14 @@ printf 'x\n' > "$N/viabash.md"
 check "a note written by a shell command is caught at the turn end" 'stop | grep -q "viabash.md: has no front matter"'
 rm -f "$N/viabash.md"
 
-check "the prompt hook brings the notes that bear on the request" 'h "$(ev UserPromptSubmit ",\"prompt\":\"what is the tax rate on services?\"")" "$P" | grep -q "^1\. \[\[tax-2\]\]"'
+check "an unasked lookup brings a low-confidence note, labelled" 'h "$(ev UserPromptSubmit ",\"prompt\":\"what is the tax rate on services?\"")" "$P" | grep -q "\[\[tax-2\]\] .*(low confidence — verify before citing)"'
+note tax-9 "Tax rate on services tax rate services rate" 2026-06-02 "Services tax rate services rate tax, per a forum post." "none similar"
+fm_set "$N/tax-2.md" confidence medium
+check "high and medium notes come before low ones, however strong the low match" 'o=$(h "$(ev UserPromptSubmit ",\"prompt\":\"what is the tax rate on services?\"")" "$P"); printf "%s" "$o" | grep -q "^1\. \[\[tax-2\]\]" && printf "%s" "$o" | grep -q "^2\. \[\[tax-9\]\] .*low confidence" && ! printf "%s" "$o" | grep -q "^1\. .*low confidence"'
+rm -f "$N/tax-9.md"
+check "the prompt hook brings the notes that bear on the request, with their claim" 'o=$(h "$(ev UserPromptSubmit ",\"prompt\":\"what is the tax rate on services?\"")" "$P"); printf "%s" "$o" | grep -q "^1\. \[\[tax-2\]\]" && printf "%s" "$o" | grep -q "Services pay 12 percent"'
+check "a library marked slow skips the unasked lookup and says how to search" '( . "$here/lib.sh"; s=$(cos_cache slow "$W/knowledge"); mkdir -p "${s%/*}"; : > "$s" ); o=$(h "$(ev UserPromptSubmit ",\"prompt\":\"what is the tax rate on services?\"")" "$P"); rm -f "$CLAUDE_PLUGIN_DATA"/slow-*; printf "%s" "$o" | grep -q "Library lookup skipped"'
+fm_set "$N/tax-2.md" confidence low
 check "a short prompt brings no library noise" '! h "$(ev UserPromptSubmit ",\"prompt\":\"ok\"")" "$P" | grep -q "Library notes"'
 check "the prompt search does not count as searching" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
 check "a brief without its Library: line is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher\"}")" "$P")" = 2 ]'
@@ -276,6 +315,7 @@ check "ambition: the reviewer checks that each version was judged from outside" 
 check "agents cannot edit the workspace marker" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/.chief-of-staff\"}")" "$P")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo library: /x > $W/.chief-of-staff\"}")" "$P")" = 2 ]'
 check "reading the marker is fine" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat $W/.chief-of-staff\"}")" "$P")" = 0 ]'
 check "graph lists notes, links and retirements" 'L graph | grep -q "^N	tax-2	" && L graph | grep -q "^E	tax-2	vat-0001" && L graph | grep -q "^R	tax-1	tax-2"'
+check "graph N line ends with confidence, updated and review_by" 'L graph | grep -q "^N	tax-2	[^	]*	finding	active	alpha	[^	]*	[0-9]*	[0-9]*	low	2026-06-01	2099-01-01$"'
 check "project briefing lists this project's latest notes" 'b "$P" | grep -q "^- \[\[price-m\]\]"'
 
 # review round 2: each way around the gates found by the independent reviewer
@@ -288,6 +328,11 @@ check "a backdated created: does not escape the similarity check" 'stop | grep -
 rm -f "$N/dot-1.md"
 check "a path with a comma is read whole and checked" 'printf x > "$N/a,b.md"; [ "$(rc "$(wev "$N/a,b.md")" "$P")" = 2 ]'
 rm -f "$N/a,b.md"
+# a gate cut by its time budget (slow disk) is not the agent's fault: it blocks once and is never a violation
+mkdir -p "$W/slowbin"; printf '#!/bin/sh\ncase " $* " in *" gate "*) exit 124 ;; esac\nshift; exec "$@"\n' > "$W/slowbin/timeout"; chmod +x "$W/slowbin/timeout"
+turn >/dev/null; note slow-1 "Opening hours of the shop" 2026-09-03 "Nine to six." "none similar"
+check "a gate cut by its time budget blocks once, says what to run, and is logged as slow, not as a violation" '( PATH="$W/slowbin:$PATH"; export PATH; stop | grep -q "Not checked this turn (slow disk):" && [ "$(rc "$(ev Stop ",\"stop_hook_active\":true")" "$P")" = 0 ] ) && tail -n 1 "$W/.protocol.log" | grep -q "violation=0 .*slow=1"'
+rm -f "$N/slow-1.md"
 check "a note in a subfolder is rejected" 'mkdir -p "$N/sub"; cp "$N/vat-0001.md" "$N/sub/vat-0001.md"; [ "$(rc "$(wev "$N/sub/vat-0001.md")" "$P")" = 2 ]'
 rm -rf "$N/sub"
 turn >/dev/null
@@ -365,6 +410,7 @@ rm -rf "$X" "$W"/knowledge.offloaded-*
 # setup: one block of answers; the library goes where the owner already reads notes; backup by gh
 U() { HOME="$Y" PATH="$Y/bin:$PATH" sh "$here/setup.sh" "$@" 2>&1; }
 Y=$(cd "$(mktemp -d)" && pwd -P); mkdir -p "$Y/My Vault/.obsidian" "$Y/Library/Mobile Documents/com~apple~CloudDocs" "$Y/bin" "$Y/Library/CloudStorage/GoogleDrive-a" "$Y/Library/CloudStorage/MacDroid-phone"
+check "setup warns about a workspace on a Windows drive seen from WSL" 'U create "/mnt/q/cos-selftest-$$" | grep -q "Windows drive seen from WSL"'
 check "setup lists sync folders, not phones or network mounts" 'U detect | grep -q "^GoogleDrive-a" && ! U detect | grep -q MacDroid'
 check "setup puts the only Obsidian vault first, then the workspace, then iCloud" 'U detect | head -n 3 | cut -f1 | tr "\n" "|" | grep -q "^Obsidian vault \"My Vault\"|Inside the workspace|iCloud Drive|$"'
 check "setup refuses a library folder that is not empty and creates nothing" 'mkdir -p "$Y/full"; : > "$Y/full/x"; U create "$Y/ws0" --library "$Y/full" | grep -q "not empty" && [ ! -e "$Y/ws0" ]'
@@ -472,6 +518,11 @@ ta; sed 's/^id: pers-3/id: team-9/' "$PN/pers-3.md" > "$TN/team-9.md"; git -C "$
 N0=$N; N=$TN; note team-9 "Quarterly roadmap meeting" 2026-01-05 "Held on the first Monday." "none similar"; N=$N0
 check "a commit made by hand leaves only as the gate saw it" 'sa >/dev/null; i=0; while [ $i -lt 50 ] && ! on notes/team-9.md; do i=$((i+1)); sleep 0.1; done; on notes/team-9.md && ! git -C "$V/t1.git" log -p --all | grep -q "never goes below 400"'
 check "with the problems gone the next turn pushes the good note" 'sa >/dev/null; i=0; while [ $i -lt 50 ] && ! on notes/team-5.md; do i=$((i+1)); sleep 0.1; done; on notes/team-5.md'
+# a gate cut by its time budget (slow disk): fails closed for the team, blocks once, never logged as a violation
+mkdir -p "$V/slowbin"; printf '#!/bin/sh\ncase " $* " in *" gate "*) exit 124 ;; esac\nshift; exec "$@"\n' > "$V/slowbin/timeout"; chmod +x "$V/slowbin/timeout"
+ta; N0=$N; N=$TN; note team-10 "Team holiday calendar" 2026-01-07 "Closed in August." "none similar"; N=$N0
+check "a gate cut by its time budget holds the team notes back" '( PATH="$V/slowbin:$PATH"; export PATH; sa | grep -q "nothing of the library .t1. goes to the team this turn" && sa true >/dev/null ) && ! on notes/team-10.md && tail -n 1 "$V/m1/.protocol.log" | grep -q "slow=1"'
+check "and the next turn on a normal disk sends them" 'ta; sa >/dev/null; i=0; while [ $i -lt 50 ] && ! on notes/team-10.md; do i=$((i+1)); sleep 0.1; done; on notes/team-10.md'
 mkdir -p "$V/m1/projects/b"; ln -s "$TN/team-5.md" "$PA/f.md"
 check "a symlink to another library's note is not a way in" 'W() { rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$1\"}")" "$2"; }; [ "$(W "$PA/f.md" "$V/m1/central")" = 2 ]'
 rm -f "$PA/f.md"
@@ -514,6 +565,17 @@ awk -v d="$Z/knowledge/notes" 'BEGIN { srand(7); for (i = 1; i <= 2000; i++) { f
 ZL() { CLAUDE_PROJECT_DIR="$Z/projects/p" sh "$here/library.sh" "$@"; }
 t0=$(date +%s); ZL search topic5 word7 >/dev/null; ZL check "$Z/knowledge/notes/n5.md" >/dev/null; ZL gate "$Z/knowledge/notes/n5.md" "$Z/knowledge/notes/n9.md" >/dev/null; ZL brief p >/dev/null; t1=$(date +%s)
 check "search, check, gate and brief on 2,000 notes take under 4 s together" '[ $((t1 - t0)) -le 4 ]'
+# the gate reads only the turn's notes and those changed since its index; edits in place, deletions and
+# retirements of the other notes still count
+ZN=$Z/knowledge/notes; zt() { sed "$1" "$ZN/$2.md" > "$Z/t"; cat "$Z/t" > "$ZN/$2.md"; }   # in place: notes/ keeps its mtime
+ZL gate "$ZN/n5.md" >/dev/null; zt 's/^title: .*/title: Note 5 about topic5 and area5/' n7
+check "index: a title edited in place in another note is seen as a duplicate" 'ZL gate "$ZN/n5.md" | grep -q "notes/n5.md: possible duplicate or conflict: \[\[n7\]\]"'
+sed 's/^Compared: .*/Compared: [[n7]] replaces/' "$ZN/n5.md" > "$Z/t"; cat "$Z/t" > "$ZN/n5.md"
+check "index: replaces an active note is blocked, and passes once that note is retired in place" 'ZL gate "$ZN/n5.md" | grep -q "Compared: \[\[n7\]\] replaces but it is still active" && zt "s/^status: active/status: retired\nretired_reason: lost to n5\nsuperseded_by: n5/" n7 && ! ZL gate "$ZN/n5.md" | grep -q "n7"'
+printf 'See [[n11]].\n' >> "$ZN/n5.md"; ZL gate "$ZN/n5.md" >/dev/null; rm "$ZN/n11.md"
+check "index: a link to a note deleted since is broken" 'ZL gate "$ZN/n5.md" | grep -q "links to \[\[n11\]\], which does not exist"'
+sed 's/^id: n12$/id: n5/' "$ZN/n12.md" > "$ZN/zz-conflict.md"
+check "index: a sync conflict copy with the same id is seen from either note" 'ZL gate "$ZN/n5.md" | grep -q "notes/n5.md: has the same id as notes/zz-conflict.md"'
 rm -rf "$Z"
 
 # tracks: minimum deliverables per stage, the Stop gate, and health colors
@@ -597,11 +659,70 @@ printf -- '---\nstatus: in-progress\nproject: gamma\ndue: 2026-01-02\n---\n' > "
 check "a card past its due date is yellow" 'H gamma | grep -q "^yellow: card past its due date 2026-01-02: Gamma"'
 check "central lists what is due or overdue" 'b "$W/central" | grep -q "^- Gamma: was due 2026-01-02"'
 rm "$W/board/Gamma.md"
+# team communication (from a real hackathon): each question keeps its age, a deputy near the deadline, short
+# cards, decisions in force, facts measured again, a delivery that is reachable
+gq() { printf -- '---\nstatus: waiting-owner\nproject: gamma\nasked: %s\n---\n# Gamma\n\n## For the owner to decide (central asks, all at once)\n- (asked %s) Old question about the demo? Recommended: yes\n- New question about the video\n' "$1" "$2" > "$W/board/Gamma.md"; }
+gq "$(fut 0)" "$(fut -32400) $(date +%z)"
+check "a rewritten asked: does not reset the age of an older question" 'H gamma | grep -Eq "^red: a question has waited on the owner for 9 h [01] min \(limit 20 min\): Gamma"'
+check "the question text is shown without its stamp" 'b "$W/central" | grep -q "^  - Old question about the demo? Recommended: yes"'
+h "$(ev Stop ",\"stop_hook_active\":false")" "$W/central" >/dev/null 2>&1
+check "the Stop hook stamps each new question line and keeps the old stamps" 'grep -Eq "^- \(asked 20[0-9-]+ [0-9:]+ [+-][0-9]+\) New question about the video" "$W/board/Gamma.md" && [ "$(grep -c "(asked " "$W/board/Gamma.md")" = 2 ] && H gamma | grep -q "for 9 h"'
+check "an old card with asked: alone still counts" 'gcard "$(fut -1800)"; H gamma | grep -Eq "waited on the owner for 3[01] min"'
+gcard "$(fut -32400) $(date +%z)"; h "$(ev Stop ",\"stop_hook_active\":false")" "$W/central" >/dev/null 2>&1
+check "a v0.4 card is stamped with its asked: time, not the time of the upgrade" 'grep -q "^- (asked $(fut -32400) $(date +%z)) Freeze the scope" "$W/board/Gamma.md" && H gamma | grep -q "for 9 h"'
+fm_set "$G/TRACK.md" deputy bia; fm_set "$G/TRACK.md" deadline "$(fut 9000)"
+check "a late question under 3 h from the deadline goes to the deputy" 'H gamma | grep -q "escalate it to the deputy, bia: Gamma" && b "$W/central" | grep -q "the deputy bia decides"'
+fm_set "$G/TRACK.md" deadline "$(fut 30000)"
+check "far from the deadline the deputy is not called" '! H gamma | grep -q deputy'
+fm_set "$G/TRACK.md" deadline ""; fm_set "$G/TRACK.md" deputy ""
+awk 'BEGIN { print "---\nstatus: in-progress\nproject: gamma\n---\n# Gamma"; for (i = 0; i < 70; i++) print "- done task " i }' > "$W/board/Gamma.md"
+check "a card over 60 lines is flagged, with where the rest goes" 'H gamma | grep -q "^yellow: card too long to read (7[0-9] lines" && b "$W/central" | grep -q "Cards too long to read whole.*board/archive/"'
+rm "$W/board/Gamma.md"
+printf -- '# Decisions\n- 2026-10-25 14:00 | Demo on testnet only | pedro | replaces: -\n- 2026-10-25 15:00 | Logo stays blue | leo | replaces: -\n- 2026-10-26 09:20 | Demo on mainnet now, guard: testnet | pedro | replaces: 2026-10-25 14:00\n- 2026-10-26 10:00 | revoked: the brand is open again | leo | replaces: 2026-10-25 15:00\n' > "$G/DECISIONS.md"
+check "the project briefing shows only the decisions in force" 'o=$(b "$G"); printf "%s" "$o" | grep -q "^- 2026-10-26 09:20: Demo on mainnet now, guard: testnet (pedro)" && ! printf "%s" "$o" | grep -q "testnet only" && ! printf "%s" "$o" | grep -q "Logo stays blue"'
+GR="$W/guardrepo"; git init -q --bare "$GR.git"; git clone -q "$GR.git" "$GR" 2>/dev/null; git -C "$GR" config user.email t@t; git -C "$GR" config user.name t
+echo a > "$GR/f"; git -C "$GR" add f; git -C "$GR" commit -qm a; git -C "$GR" push -q origin HEAD 2>/dev/null; git -C "$GR" branch -q -u origin/HEAD 2>/dev/null || git -C "$GR" branch -q -u "origin/$(git -C "$GR" rev-parse --abbrev-ref HEAD)"
+echo "network: testnet" > "$GR/f"; git -C "$GR" commit -qam b
+gp() { printf '%s' "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push\"}")" | CLAUDE_PROJECT_DIR="$G" sh -c "cd \"$GR\" && sh \"$here/protocol.sh\""; }
+check "a push that changes a guarded term asks first, other pushes pass silently" 'mv "$G/DECISIONS.md" "$G/D.bak"; [ -z "$(gp)" ] && mv "$G/D.bak" "$G/DECISIONS.md" && gp | grep -q "this push changes testnet"'
+git -C "$GR" checkout -q -b newbranch; echo "testnet again" >> "$GR/f"; git -C "$GR" commit -qam c
+check "a new branch with no upstream is compared with origin, not let through" 'gp | grep -q "this push changes testnet"'
+git -C "$GR" remote remove origin
+check "with no remote branch at all the guarded push asks" 'gp | grep -q "no remote branch to compare with"'
+rm -f "$G/DECISIONS.md"
+cp "$G/STATE.md" "$W/gs.bak"; awk '{ print } /^## 3\./ { print "- Production runs commit abc123 — curl https://x/version — verified: 2026-01-01 10:00"; print "- Balance is 12 XLM — stellar CLI" }' "$W/gs.bak" > "$G/STATE.md"
+check "facts checked long ago are flagged to re-verify, facts without a time are counted" 'o=$(b "$G"); printf "%s" "$o" | grep -q "Re-verify before repeating (1 fact(s)" && printf "%s" "$o" | grep -q "Production runs commit abc123" && printf "%s" "$o" | grep -q "1 fact(s) in STATE.md section 3 have no verified: time"'
+cp "$W/gs.bak" "$G/STATE.md"
+fm_set "$G/STATE.md" updated "2026-01-01 10:00"; touch "$G/STATE.md"
+check "an old handoff is stale by updated:, even when git just touched the file" 'H gamma | grep -q "no handoff for more than"'
+fm_set "$G/STATE.md" updated "$(fut 0)"; touch -t 202601010000 "$G/STATE.md"
+check "a fresh updated: is not stale, whatever the file date" '! H gamma | grep -q "no handoff"'
+cp "$W/gs.bak" "$G/STATE.md"
+printf 'abc1234 deployed\n' > "$W/version.txt"
+fm_set "$G/TRACK.md" public_urls "file://$W/version.txt"; fm_set "$G/TRACK.md" prod_ref "file://$W/version.txt abc1234def"
+check "a public link that opens and production on the expected commit raise nothing" '! H gamma | grep -Eq "public link|production"'
+fm_set "$G/TRACK.md" public_urls "file://$W/missing.txt"; fm_set "$G/TRACK.md" prod_ref "file://$W/version.txt fff9999"
+check "a link closed to a logged-out visitor is yellow" 'H gamma | grep -q "^yellow: a public link does not open for a logged-out visitor: file://$W/missing.txt"'
+fm_set "$G/TRACK.md" public_urls ""
+check "production on another commit is yellow" 'H gamma | grep -q "^yellow: production does not serve the expected commit fff9999"'
+fm_set "$G/TRACK.md" prod_ref ""
+cp "$G/TRACK.md" "$W/gt.bak"; printf 'Video for the submission: /home/someone/Desktop/final-video.mp4\n' >> "$G/TRACK.md"
+check "a delivery that points outside the workspace is yellow" 'H gamma | grep -q "^yellow: the delivery points outside the workspace (/home/someone/Desktop/final-video.mp4)"'
+cp "$W/gt.bak" "$G/TRACK.md"
+h "$(ev UserPromptSubmit)" "$G" >/dev/null; : > "$G/THREE-MACHINES.md"; : > "$G/THREE-MACHINE.md"
+check "a file written beside one with nearly its name gets a notice that does not block; a distinct name gets none" 'o=$(h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$G/THREE-MACHINE.md\"}")" "$G" 2>&1); [ $? = 0 ] && printf "%s" "$o" | grep -q "nearly the same name as THREE-MACHINES.md in the same folder: check whether one duplicates the other" && ! printf "%s" "$o" | grep -qi delete && : > "$G/report-v2.md" && [ -z "$(h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$G/report-v2.md\"}")" "$G" 2>&1)" ]'
+: > "$G/index.html"; : > "$G/index.js"
+check "files with the same name and another extension are not near duplicates" '[ -z "$(h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$G/index.js\"}")" "$G" 2>&1)" ]'
+rm -f "$G/THREE-MACHINES.md" "$G/THREE-MACHINE.md" "$G/report-v2.md" "$G/index.html" "$G/index.js"
 fm_set "$G/TRACK.md" deadline "$(fut 3600)"
 check "a deadline under 2 h with the delivery open is red, with the countdown" 'H gamma | grep -Eq "^red: deadline in ([0-9]+ h )?[0-9]+ min and the delivery is open"'
 fm_set "$G/TRACK.md" deadline "$(fut 14400)"
 check "a deadline under 6 h is yellow" 'H gamma | grep -Eq "^yellow: deadline in (3 h 59|4 h 0) min"'
 check "health gives the panel the deadline as a number" 'sh "$here/health.sh" "$W" | awk -F "$(printf "\037")" "\$1 == \"gamma\" { print \$12 }" | grep -q "^[0-9][0-9]*$"'
+check "health gives every reason, red ones first, each tagged with its color" 'sh "$here/health.sh" "$W" | awk -F "$(printf "\037")" "\$1 == \"gamma\" { print \$17 }" | tr "\036" "\n" | awk "!/^(red|yellow) / { exit 1 } /^yellow / { y = 1 } /^red / && y { exit 1 } END { exit NR < 1 }"'
+check "health gives each question to the owner its own age, empty when unstamped" '( d=$(mktemp -d); mkdir -p "$d/board"; touch "$d/.chief-of-staff"; z=$(date +%z); o=$(date -d "-90 min" "+%F %H:%M" 2>/dev/null || date -v-90M "+%F %H:%M")
+printf -- "---\nstatus: waiting-owner\nproject: p\n---\n## For the owner to decide\n- (asked %s %s) old one\n- (asked %s %s) new one\n- no stamp\n" "$o" "$z" "$(date "+%F %H:%M")" "$z" > "$d/board/c.md"
+a=$(sh "$here/health.sh" cards "$d" | awk -F "$(printf "\037")" "{ print \$14 }" | tr "\036" ,); rm -rf "$d"; case $a in 9[0-2],[01],|8[89],[01],) exit 0 ;; *) echo "ages: $a"; exit 1 ;; esac )'
 fm_set "$G/TRACK.md" deadline "$(fut -120)"
 check "a passed deadline with the delivery open is red" 'H gamma | grep -Eq "^red: deadline passed (2|3) min ago"'
 fm_set "$G/TRACK.md" deadline "Friday 6pm"
@@ -688,6 +809,19 @@ printf -- "---\nstatus: in-progress\nproject: p\nupdated: 2026-10-25\n---\n## Su
 printf -- "---\nstatus: waiting-owner\nproject: p\n---\n- 2026-10-25 11:50 UTC (session-p): track 8/22\n" > "$d/board/b.md"
 printf -- "---\nstatus: done\nproject: p\n---\n- 2026-10-26 09:00 UTC (x): closed card\n" > "$d/board/c.md"
 python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; g = panel.progress(sys.argv[2], \"p\"); assert [x[\"card\"] for x in g] == [\"b\", \"a\"], g; assert g[1][\"what\"] == \"contract and 16 tests\" and g[1][\"who\"] == \"agent-a\", g" "$here" "$d"; r=$?; rm -rf "$d"; exit $r )'
+check "panel reads the new N fields and M problem lines, and an older 9-field N line" 'python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel
+out = {\"where\": \"/x\\n\", \"graph\": \"N\\ta\\tA\\tfinding\\tactive\\to\\t\\t1\\t0\\tlow\\t2026-01-01\\t2027-01-01\\nM\\ta\\tupdated: must be a date\\nN\\tb\\tB\\ttopic\\tactive\\to\\t\\t0\\t1\\nE\\ta\\tb\\n\"}
+panel.sh = lambda s, *a, **k: out[a[-1]]
+L = panel.library(\"/x\"); n = {x[\"id\"]: x for x in L[\"nodes\"]}
+assert n[\"a\"][\"confidence\"] == \"low\" and n[\"a\"][\"updated\"] == \"2026-01-01\" and n[\"a\"][\"review_by\"] == \"2027-01-01\", n
+assert n[\"a\"][\"issues\"] == [\"updated: must be a date\"] and n[\"b\"][\"issues\"] == [] and n[\"b\"][\"confidence\"] == \"\" and L[\"edges\"] == [[\"a\", \"b\"]], L
+assert panel.MAX_NODES == 500" "$here"'
+check "panel shows the last 5 decisions in force, newest first, the outside checks and how old the team data is" 'python3 -c "import sys, os, tempfile, time; sys.path.insert(0, sys.argv[1]); import panel
+d = tempfile.mkdtemp(); open(os.path.join(d, \"DECISIONS.md\"), \"w\").write(\"\".join(\"- 2026-10-2%d 10:00 | d%d | Leo | replaces: -\\n\" % (i, i) for i in range(7)) + \"- 2026-10-27 10:00 | revoked: no | Leo | replaces: 2026-10-26 10:00\\n- 2026-10-27 11:00 | d0 again | Ana | replaces: 2026-10-20 10:00\\n\")
+g = panel.decisions(d); assert [x[\"what\"] for x in g] == [\"d0 again\", \"d5\", \"d4\", \"d3\", \"d2\"], g
+o = panel.outside(\"public https://a.example/x 200 ok\\x1eprod https://a.example/v abc1234 other\\x1ejunk\")
+assert o == [{\"kind\": \"public\", \"url\": \"https://a.example/x\", \"code\": \"200\", \"state\": \"ok\"}, {\"kind\": \"prod\", \"url\": \"https://a.example/v\", \"commit\": \"abc1234\", \"state\": \"other\"}], o
+assert panel.data_age(\"2000-01-01 10:00:00\")[\"late\"] and not panel.data_age(time.strftime(\"%Y-%m-%d %H:%M:%S\"))[\"late\"] and panel.data_age(\"\")[\"late\"]" "$here"'
 check "panel lists ## Tasks lines by person, from open cards only" '( d=$(mktemp -d); mkdir -p "$d/board"; touch "$d/.chief-of-staff"
 printf -- "---\nstatus: in-progress\nproject: p\n---\n## Tasks\n- (template line)\n- Leo, now: deploy by 13:00\n- Vhendala: video cut\n- check the page\n## For the owner to decide\n- Pedro: title A or B?\n" > "$d/board/a.md"
 printf -- "---\nstatus: done\nproject: p\n---\n## Tasks\n- Leo: old task\n" > "$d/board/b.md"
@@ -715,6 +849,9 @@ if command -v python3 >/dev/null && command -v curl >/dev/null; then
   check "panel api carries the library graph" 'curl -s "$B/api?t=$TK" | python3 -c "import json,sys; L=json.load(sys.stdin)[\"library\"]; ids={n[\"id\"] for n in L[\"nodes\"]}; assert L[\"state\"]==\"online\" and \"tax-2\" in ids and [\"tax-1\",\"tax-2\"] in L[\"edges\"]"'
   check "panel page scripts run only with the per-response nonce" 'curl -s -D "$W/h.txt" "$B/?t=$TK" > "$W/p.html" && n=$(sed -n "s/.*script-src .nonce-\([^'"'"']*\).*/\1/p" "$W/h.txt") && [ -n "$n" ] && grep -q "<script nonce=\"$n\">" "$W/p.html" && ! grep -qi "unsafe-inline" "$W/h.txt"'
   check "panel warns when an import holds a secret" 'printf "key AKIAABCDEFGHIJKLMNOP" | curl -s -X POST --data-binary @- -H "X-Name: k.txt" -H "X-Kind: text" "$B/import?t=$TK" | grep -q "holds a key or token"'
+  check "panel page loads nothing from outside (no external src, href, @import or url())" '! grep -Eiq "(src|href) *= *[\"'"'"']?(https?:)?//|@import|url\(" "$W/p.html"'
+  check "panel graph has its controls: search, filters, zoom, fit, detail, list, empty states, reduced motion" '( for t in "Search title or id" "Only with problems" "Hide retired" "Fit the graph in view" "Zoom in" "Zoom out" "Note detail" "Notes as a list" "No note matches" "Clear filters" "No notes yet. Import files above." "prefers-reduced-motion" "devicePixelRatio" "aria-live"; do grep -qF "$t" "$W/p.html" || { echo "missing: $t"; exit 1; }; done ) && grep -q "role.,.img" "$W/p.html"'
+  check "panel shows the team signals: every reason, deputy, question ages, decisions, outside checks, sync age" '( for t in "more reason(s)" "(deputy) decides" "asked " "no time stamp" "Decisions in force" "Seen as a stranger" "opens logged out" "does not serve" "Teammate data as of sync" "Card too long to read"; do grep -qF "$t" "$W/p.html" || { echo "missing: $t"; exit 1; }; done )'
   check "panel never sends the token on as a referrer" 'curl -s -D - -o /dev/null "$B/?t=$TK" | grep -qi "^referrer-policy: no-referrer"'
   kill $pp 2>/dev/null; wait $pp 2>/dev/null
 else
@@ -793,6 +930,7 @@ printf 'not a note\n' > "$SW/a/knowledge/notes/bad-1.md"
 check "a turn end holds back a file with a key, and says so" 'turn "$PJ" | grep -q "config.txt looks like it holds a key or token"'
 check "the board and the project go to the team by themselves" 'waitteam "board/Pa demo.md" && waitteam projects/pa/STATE.md'
 check "the key file and a note that failed the gate stay on this computer" '! inteam projects/pa/config.txt && ! inteam knowledge/notes/bad-1.md'
+check "the team log says which cards and folders a turn changed" 'git -C "$SW/team.git" log --format=%s | grep -Eq "card(s)? .*Pa demo" && ! git -C "$SW/team.git" log --format=%s | grep -q "^update from"'
 check "the question goes out with the time it was asked" 'git -C "$SW/team.git" show "HEAD:board/Pa demo.md" | grep -q "^asked: 20"'
 rm "$PJ/config.txt" "$SW/a/knowledge/notes/bad-1.md"
 check "the teammate gets the board at session start" 'CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/briefing.sh" >/dev/null; i=0; while [ $i -lt 60 ] && [ ! -f "$SW/b/board/Pa demo.md" ]; do i=$((i+1)); sleep 0.1; done; [ -f "$SW/b/board/Pa demo.md" ]'
@@ -847,7 +985,7 @@ git -C "$SW/evil" pull -q 2>/dev/null; git -C "$SW/evil" rm -q projects/pa/.owne
 sh "$here/sync.sh" pull "$SW/b" >/dev/null 2>&1
 CLAUDE_PROJECT_DIR="$SW/b/central" T ok "$PB2" check yes >/dev/null
 echo mine > "$PB2/notes.md"; sh "$here/sync.sh" push "$SW/b" pb "$SW/b" projects/pb/notes.md >/dev/null 2>&1
-check "tc: this computer.s own push to the project does not stop the check" 'git -C "$SW/b" log -1 --format=%s -- projects/pb/notes.md | grep -q "update from pb" && T verify "$PB2" | grep -q "^check: pass"'
+check "tc: this computer.s own push to the project does not stop the check" 'git -C "$SW/b" log -1 --format=%s -- projects/pb/notes.md | grep -q "^pb: projects/pb (" && T verify "$PB2" | grep -q "^check: pass"'
 git -C "$SW/evil" pull -q 2>/dev/null; mkdir -p "$SW/evil/projects/pb"; printf 'touch pwned\n' > "$SW/evil/projects/pb/x.app"
 git -C "$SW/evil" add -A && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm "tweak pb" && git -C "$SW/evil" push -q 2>/dev/null
 git -C "$SW/b" reset -q 2>/dev/null; git -C "$SW/b" pull -q --rebase --autostash 2>/dev/null   # an earlier conflict test left the index unmerged

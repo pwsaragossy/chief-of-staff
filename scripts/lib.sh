@@ -3,10 +3,10 @@
 # Print the workspace root (the nearest folder holding a .chief-of-staff marker) or fail.
 cos_root() {
   d=${1:-$PWD}
-  case $d in /*) ;; *) return 1 ;; esac   # a relative path never reaches "/": dirname would loop on "."
+  case $d in /*) ;; *) return 1 ;; esac   # a relative path never reaches "/"
   while [ -n "$d" ] && [ "$d" != "/" ]; do
     [ -f "$d/.chief-of-staff" ] && { printf '%s\n' "$d"; return 0; }
-    d=$(dirname "$d")
+    d=${d%/*}   # no dirname: this runs in every hook call, and a fork per level is slow on WSL drives
   done
   return 1
 }
@@ -88,6 +88,32 @@ cos_libpath() {
 cos_cfg() { { cat "$1/.chief-of-staff"; for _f in "$1"/projects/*/.library; do [ -f "$_f" ] && { printf '%s\n' "$_f"; cat "$_f"; }; done; } 2>/dev/null | cksum | tr -d ' \t'; }
 cos_cfgrec() { printf '%s/cos-cfg-%s' "${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"; }
 cos_cfgsave() { _c=$(cos_cfgrec "$1"); mkdir -p "$(dirname "$_c")" && { [ -f "$_c" ] && chmod u+w "$_c"; cos_cfg "$1" > "$_c"; chmod 444 "$_c"; }; }
+# cos_limit SECONDS CMD... -> CMD with its output, stopped after SECONDS (status 124, nothing printed then). A hook
+# that hits Claude Code's own limit is killed and loses all it printed, so slow steps run inside a smaller budget.
+# timeout(1) where it exists (it stops the whole process group); else the command runs in the background into a
+# file, so a grandchild left running cannot hold the hook's output open
+cos_limit() {
+  _s=$1; shift
+  command -v timeout >/dev/null 2>&1 && { timeout "$_s" "$@"; return; }
+  _o=$(mktemp "${TMPDIR:-/tmp}/cos-limit.XXXXXX") || { "$@"; return; }
+  "$@" > "$_o" 2>/dev/null & _p=$!; _n=0; _m=$(( ${_s%.*} * 5 + 2 ))
+  while kill -0 "$_p" 2>/dev/null; do
+    [ $_n -ge $_m ] && { kill "$_p" 2>/dev/null; rm -f "$_o"; return 124; }
+    if sleep 0.2 2>/dev/null; then _n=$((_n + 1)); else sleep 1; _n=$((_n + 5)); fi
+  done
+  wait "$_p"; _r=$?; cat "$_o"; rm -f "$_o"; return $_r
+}
+# cos_cache NAME KEY -> a file for this computer's cache (never in a library or the workspace), one per KEY
+cos_cache() { printf '%s/%s-%s' "${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}" "$1" "$(printf '%s' "$2" | cksum | cut -d' ' -f1)"; }
+# cos_ids LIB -> the note ids of LIB, one per line, from a cache that stays valid until notes/ changes (adding,
+# removing or renaming a note changes the folder's mtime; ids are file names, so an edit inside a note cannot
+# change them). Saves a stat per note per hook on slow disks (WSL drives, cloud folders)
+cos_ids() {
+  [ -d "$1/notes" ] || return 0
+  _k=$(cos_cache ids "$1")
+  [ "$_k" -nt "$1/notes" ] || { mkdir -p "${_k%/*}"; ls "$1/notes" 2>/dev/null | sed -n 's/\.md$//p' > "$_k.$$" && mv -f "$_k.$$" "$_k"; }
+  cat "$_k" 2>/dev/null
+}
 # cos_libof ROOT FILE -> "name<TAB>path" of the library whose notes/ holds FILE (empty when none)
 cos_libof() {
   cos_libs "$1" | while IFS="$(printf '\t')" read -r _n _p; do
@@ -110,10 +136,57 @@ cos_epoch() {
 }
 # cos_ago MINUTES -> "12 min", "3 h 5 min", "2 d"
 cos_ago() { if [ "$1" -lt 60 ]; then echo "$1 min"; elif [ "$1" -lt 1440 ]; then echo "$(($1 / 60)) h $(($1 % 60)) min"; else echo "$(($1 / 1440)) d"; fi; }
+# A question line under "## For the owner to decide" carries the time it was asked: "- (asked 2026-10-25 18:00 -0300) ...".
+# The Stop hook stamps each new top-level line, so the oldest open question keeps its age when asked: is rewritten
+# or a later question is added (asked: alone, the old format, still counts)
+COS_ASKED='/^\(asked [0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]( [+-][0-2][0-9][0-5][0-9])?\) */'
 # cos_questions CARD -> the question lines under "## For the owner to decide", without the template's placeholder
+# and without their (asked ...) stamp
 cos_questions() {
   awk '{ sub(/\r$/, "") } /^## / { on = ($0 ~ /^## For the owner to decide/); next }
-    on { sub(/^[-*] +/, ""); if ($0 != "" && $0 !~ /^\(/) print }' "$1" 2>/dev/null | tr -d '\000-\010\013-\037' | cut -c1-300 | head -n 10
+    on { sub(/^[-*] +/, ""); if (match($0, '"$COS_ASKED"')) $0 = substr($0, RLENGTH + 1); if ($0 != "" && $0 !~ /^\(/) print }' "$1" 2>/dev/null | tr -d '\000-\010\013-\037' | cut -c1-300 | head -n 10
+}
+# cos_board ROOT -> one line per board card in one pass (hooks run it every turn), fields split by \037:
+#   file member project status asked due questions unstamped stamps lines bytes long text qstamps
+# questions: open question lines; unstamped: top-level ones without (asked ...); stamps: their times, split by \036;
+# lines, bytes, long: the card's size and its lines over 300 characters; text: the questions as cos_questions prints them;
+# qstamps: the (asked ...) time of each question in text, in the same order, empty when unstamped, split by \036
+cos_board() {
+  for _c in "$1"/board/*.md; do [ -f "$_c" ] || continue
+    LC_ALL=C awk '
+      function cl(s) { gsub(/[\001-\037\177]/, "", s); return s }
+      function out() { if (fn != "") printf "%s\037%s\037%s\037%s\037%s\037%s\037%d\037%d\037%s\037%d\037%d\037%d\037%s\037%s\n", fn, V["member"], V["project"], V["status"], V["asked"], V["due"], nq, nu, sp, nl, nb, lg, qt, qs }
+      FNR == 1 { out(); fn = FILENAME; split("", V); fm = 0; on = 0; nq = nu = nl = nb = lg = 0; sp = qt = qs = "" }
+      { nb += length($0) + 1; nl++; if (length($0) > 300) lg++; sub(/\r$/, "") }
+      FNR == 1 && $0 == "---" { fm = 1; next }
+      fm { if ($0 == "---") fm = 0
+           else if (match($0, /^[a-z_]+:/)) { k = substr($0, 1, RLENGTH - 1); if (!(k in V)) { v = substr($0, RLENGTH + 1); sub(/^ +/, "", v); V[k] = substr(cl(v), 1, 200) } }
+           next }
+      /^## / { on = ($0 ~ /^## For the owner to decide/); next }
+      on { l = $0; top = (l ~ /^[-*] +/); sub(/^[-*] +/, "", l); t = ""
+           if (match(l, '"$COS_ASKED"')) { t = substr(l, 8, RLENGTH - 7); sub(/\) *$/, "", t); l = substr(l, RLENGTH + 1) }
+           if (l == "" || l ~ /^\(/) next
+           nq++; if (top && t == "") nu++; if (t != "") sp = sp (sp == "" ? "" : "\036") t
+           if (nq <= 10) { qt = qt (qt == "" ? "" : "\036") substr(cl(l), 1, 300); qs = qs (nq == 1 ? "" : "\036") t } }
+      END { out() }' "$1"/board/*.md 2>/dev/null
+    return 0; done
+}
+# cos_stamp CARD WHEN -> stamp every unstamped top-level question line of CARD with (asked WHEN)
+cos_stamp() {
+  W=$2 awk '{ r = $0; sub(/\r$/, "") }
+    /^## / { on = ($0 ~ /^## For the owner to decide/); print r; next }
+    on && match($0, /^[-*] +/) { p = substr($0, 1, RLENGTH); l = substr($0, RLENGTH + 1)
+      if (l != "" && l !~ /^\(/) { print p "(asked " ENVIRON["W"] ") " l; next } }
+    { print r }' "$1" > "$1.tmp.$$" && mv "$1.tmp.$$" "$1"
+}
+# cos_decisions FILE -> the decisions in force in a project's DECISIONS.md, "when<TAB>decision<TAB>who", oldest first.
+# Line format: "- YYYY-MM-DD HH:MM | decision | who | replaces: <when of an earlier line, or ->"; a later line
+# replaces an earlier one, and "revoked: <why>" as the decision withdraws it. Lines are never edited
+cos_decisions() {
+  LC_ALL=C awk -F ' [|] ' '{ sub(/\r$/, "") } /^- [0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9] [|] / {
+      id = substr($1, 3); r = $4; sub(/^ *replaces: */, "", r); sub(/ *$/, "", r); if (r != "" && r != "-") R[r] = 1
+      n++; I[n] = id; D[n] = $2; Wh[n] = $3 }
+    END { for (i = 1; i <= n; i++) if (!(I[i] in R) && D[i] !~ /^revoked:/) { d = D[i]; w = Wh[i]; gsub(/[\001-\037]/, "", d); gsub(/[\001-\037]/, "", w); print I[i] "\t" d "\t" w } }' "$1" 2>/dev/null
 }
 # cos_shared ROOT -> true when the workspace is shared by a team (setup.sh create --share, or join)
 cos_shared() { grep -qx 'shared: yes' "$1/.chief-of-staff" 2>/dev/null; }

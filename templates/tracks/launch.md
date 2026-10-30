@@ -3,8 +3,11 @@ track: launch
 stage: 1
 delivery: 4
 stale_hours: 48
+deputy:
 target:
 check:
+public_urls:
+prod_ref:
 ---
 # Track: launch
 For taking an offer, product or feature to market. Pick it when there is something to release publicly and the result must be measured.

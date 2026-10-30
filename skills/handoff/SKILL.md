@@ -8,9 +8,13 @@ description: Close a session so the next one starts where this one stopped (I-PA
 The next session is a stranger with no memory of this one. Everything it needs is in files.
 
 1. **Update `STATE.md` as a snapshot of now**, not a diary (history lives in git):
-   - front matter: `updated` (today), `next` (the next action in one line), `status`;
+   - front matter: `updated` (now, `YYYY-MM-DD HH:MM`: the panel times the handoff from it, not from
+     the file date a git pull resets), `next` (the next action in one line), `status`;
    - section 1: severity (green / yellow / red) and one line;
-   - section 3: what is true now, with the source of each fact;
+   - section 3: what is true now, one line per fact: `- fact — source — verified: YYYY-MM-DD HH:MM`.
+     Never copy a fact that changes on its own (the commit running in production, balances, public
+     links and whether they open logged out, deploy state) from the previous STATE.md, a card or memory:
+     measure it now and write the new time, or leave it out and say so in section 7;
    - section 4: only what the next session must repeat or avoid;
    - section 5: next actions, each with an owner (a session or a specialist) and its "done" check;
    - section 6: contingencies as "if X, then Y";
@@ -22,6 +26,9 @@ The next session is a stranger with no memory of this one. Everything it needs i
    - `off` otherwise.
 3. **Update the card**: the file in `../../board/` whose front matter says `project: <this slug>`: `updated`, `status` (`waiting-owner` if any line waits on
    the owner, else `in-progress`; a finished card is removed and its result goes in STATE.md).
+   Keep each question's `(asked ...)` stamp as it is (the hook adds it; it times the oldest question)
+   and never rewrite `asked:`. Move done tasks and decided questions to `../../board/archive/` when the
+   card passes ~60 lines. Decisions taken this session go in `DECISIONS.md` (one new line each).
 4. **Knowledge**: list in STATE.md section 3 the `[[id]]` of each note this session wrote or relied
    on. The hooks have already checked them.
 5. **Lesson, at the final handoff only** (STATE.md `status: delivered`): save one lesson for the next

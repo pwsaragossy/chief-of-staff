@@ -39,7 +39,7 @@ the owner to pick, in the same round of buttons if possible.
 ## 3. Registration
 1. Check for an existing project with the same subject or a similar name in `../projects/` and in
    the central table. If one exists, stop and say so.
-2. Create `../projects/<slug>/` with `CLAUDE.md` and `STATE.md` from
+2. Create `../projects/<slug>/` with `CLAUDE.md`, `STATE.md` and `DECISIONS.md` from
    `${CLAUDE_PLUGIN_ROOT}/templates/project/` (copy the literal path shown here), filling the
    `{{...}}` fields from the answers. Put the answers in STATE.md section 2.
    Copy the chosen track to `../projects/<slug>/TRACK.md`. Set `delivery:` to the stage that
@@ -47,7 +47,11 @@ the owner to pick, in the same round of buttons if possible.
    `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" baseline ../projects/<slug>` once, which records how
    many items the map had at opening, so the panel shows how much was added later. When the project
    has a deadline, write it in TRACK.md as `deadline: YYYY-MM-DD HH:MM` in local time: the panel
-   counts down, turns yellow under 6 hours and red under 2 hours while the delivery is open. When the
+   counts down, turns yellow under 6 hours and red under 2 hours while the delivery is open. With a
+   deadline, ask the owner for a `deputy:` (who decides when the owner cannot answer): a question past
+   `owner_wait_minutes` less than 3 hours before the deadline goes to the deputy. Links that must open
+   for a stranger go in `public_urls:`, and `prod_ref: <url> <commit>` when production must serve a
+   known commit; the panel checks both as a logged-out visitor. When the
    success answer already has a number, write it as `target:` in TRACK.md (stage 1 cannot pass without
    target, check and the owner's approval of both). If an item truly cannot apply, mark it
    `[-]` with `why:` instead of deleting it, so the reviewer sees it.

@@ -7,6 +7,7 @@
 #   library.sh similar <title...>               active notes whose title shares 2+ words with this one
 #   library.sh check <file...>                  the save gate for these notes (exit 2 on problems)
 #   library.sh gate <file...>                   the turn-end gate: also links, Compared: and retirements
+#   library.sh index                            refresh the turn-end gate's index (the prompt hook runs it in the background)
 #   library.sh doctor [--count]                 every problem in the library, and duplicates never compared
 #   library.sh retire <old> <new|-> <reason>    retire the worse note; <new> = the note that replaces or merges it
 #   library.sh backlinks <id>                   notes that link to <id>
@@ -25,7 +26,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib.sh"
 
 die() { echo "library: $*" >&2; exit 1; }
-usage() { sed -n '4,24p' "$0" | sed 's/^# //' >&2; exit 1; }
+usage() { sed -n '4,25p' "$0" | sed 's/^# //' >&2; exit 1; }
 dir=${CLAUDE_PROJECT_DIR:-$PWD}
 root=$(cos_root "$dir") || die "not inside a chief-of-staff workspace"
 name=; [ "${1:-}" = --lib ] && { name=${2:-}; shift 2 || usage; }
@@ -48,15 +49,17 @@ offline() {
   esac
 }
 need_online() { [ $state = 0 ] || { offline >&2; exit 1; }; }
-notes() { ls "$lib/notes/"*.md >/dev/null 2>&1; }
+notes() { set -- "$lib/notes/"*.md; [ -e "$1" ]; }   # the glob alone: ls would stat every note (slow on WSL drives)
 # the ids of the other libraries, "id<TAB>library", so a link across libraries is seen (library.awk EXTF)
 ext() {
   [ -n "${EXTF:-}" ] && rm -f "$EXTF"
   EXTF=$(mktemp "${TMPDIR:-/tmp}/cos-ext.XXXXXX") || return 0; trap 'rm -f "$EXTF"' EXIT
+  # ids come from the per-library cache (cos_ids): no stat per note of every other library at each gate
+  cos_ids "$lib" > "$EXTF.own"
   cos_libs "$root" | while IFS="$(printf '\t')" read -r n p; do
     [ "$n" = "$name" ] && continue
-    for f in "$p/notes/"*.md; do [ -f "$f" ] && [ ! -f "$lib/notes/${f##*/}" ] && { b=${f##*/}; printf '%s\t%s\n' "${b%.md}" "$n"; }; done
-  done > "$EXTF"
+    cos_ids "$p" | awk -v n="$n" -v own="$EXTF.own" 'BEGIN { while ((getline l < own) > 0) O[l] = 1 } $0 != "" && !($0 in O) { print $0 "\t" n }'
+  done > "$EXTF"; rm -f "$EXTF.own"
   export EXTF
 }
 run() { # MODE [awk -v assignments...] -- runs library.awk over every note
@@ -64,6 +67,23 @@ run() { # MODE [awk -v assignments...] -- runs library.awk over every note
   notes || { [ "$m" = brief ] && echo "Library '$name': empty (0 notes)."; return 0; }
   case $m in gate|doctor|graph) ext ;; esac
   LC_ALL=C TODAY=$today awk -v MODE="$m" -v TODAY="$today" -v LIBNAME="$name" -v LIBKIND="$kind" "$@" -f "$here/library.awk" "$lib/notes/"*.md
+}
+# the turn-end gate reads only the notes changed since its last run and the targets; the facts of the others
+# (ids, states, titles, Compared:) come from a per-library index on this computer, so its time follows the turn's
+# notes, not the library's size. One find (a stat per note, no read) says what changed; ctime, so mv or touch -t count
+igate() {
+  notes || return 0
+  ext; k=$(cos_cache noteidx "$lib"); mkdir -p "${k%/*}"
+  : > "$EXTF.t0"   # taken before the scan: a note changed while the gate runs is read again next time
+  printf '%s\n' "$lib/notes/"*.md | grep -v '^$' > "$EXTF.all"
+  # COS_SINCE (protocol.sh, personal library): the turn's start, after which every changed note is a target; an
+  # index taken after it needs no scan
+  { [ -f "$k" ] && { [ -z "${COS_SINCE:-}" ] || [ ! "$k" -nt "$COS_SINCE" ]; } && find "$lib/notes" -name '*.md' -type f -cnewer "$k" 2>/dev/null
+    printf '%s\n' "$TARGETS"; } > "$EXTF.new"
+  trap 'rm -f "$EXTF" "$EXTF.t0" "$EXTF.all" "$EXTF.new" "$k.$$"' EXIT
+  LC_ALL=C TODAY=$today IDXF=$k IDXOUT=$k.$$ ALLF=$EXTF.all NEWF=$EXTF.new awk -v MODE=gate -v TODAY="$today" -v LIBNAME="$name" -v LIBKIND="$kind" -f "$here/library.awk"
+  r=$?; [ -s "$k.$$" ] && touch -r "$EXTF.t0" "$k.$$" && mv -f "$k.$$" "$k"
+  return $r
 }
 translit() { # fixed table, byte for byte, so ids do not depend on iconv or the locale
   LC_ALL=C sed 's/Á/a/g; s/À/a/g; s/Â/a/g; s/Ã/a/g; s/Ä/a/g; s/á/a/g; s/à/a/g; s/â/a/g; s/ã/a/g; s/ä/a/g; s/É/e/g; s/È/e/g; s/Ê/e/g; s/Ë/e/g; s/é/e/g; s/è/e/g; s/ê/e/g; s/ë/e/g; s/Í/i/g; s/Ì/i/g; s/Î/i/g; s/Ï/i/g; s/í/i/g; s/ì/i/g; s/î/i/g; s/ï/i/g; s/Ó/o/g; s/Ò/o/g; s/Ô/o/g; s/Õ/o/g; s/Ö/o/g; s/ó/o/g; s/ò/o/g; s/ô/o/g; s/õ/o/g; s/ö/o/g; s/Ú/u/g; s/Ù/u/g; s/Û/u/g; s/Ü/u/g; s/ú/u/g; s/ù/u/g; s/û/u/g; s/ü/u/g; s/Ç/c/g; s/ç/c/g; s/Ñ/n/g; s/ñ/n/g'
@@ -126,7 +146,10 @@ case ${1:-} in
     o=$(cos_libof "$root" "$1"); [ -n "$o" ] && setlib "${o%%	*}"   # the library of the files (protocol.sh passes one library at a time)
     [ $state = 0 ] || exit 0
     for f in "$@"; do [ -f "$f" ] && [ ! -s "$f" ] && { echo "notes/$(basename "$f"): is empty: write the note or delete the file"; exit 2; }; done
-    T=$(printf '%s\n' "$@") ; TARGETS=$T run gate ;;
+    TARGETS=$(printf '%s\n' "$@") igate ;;
+  index)
+    [ $state = 0 ] || exit 0
+    TARGETS= igate >/dev/null; exit 0 ;;
   doctor)
     [ $state = 0 ] || { offline; exit 0; }
     if [ "${2:-}" = --count ]; then run doctor -v COUNT=1; else run doctor; fi
