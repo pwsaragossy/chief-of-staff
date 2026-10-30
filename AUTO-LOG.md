@@ -223,6 +223,18 @@ se está tudo bem e o que espera por ele.
 - Pattern noticed (rounds 11-12): the hooks' requirements live in protocol.sh and the instructions live in skills
   and cards; they drifted apart twice. Both checks now tie them together in the selftest.
 
+### Round 13 — technical lens (instructions vs hooks: notes, delivery) — no change
+- Examined: `library.sh new` + the note template + the save check (`library.sh check`, `gate`): a fresh note fails
+  with 3 clear messages (each placeholder line, the Compared: entry); filled as the template says, it passes both.
+  DELIVERY.md: the gate's `## Sources` rule matches the project CLAUDE.md and the knowledge skill.
+- Found: nothing with evidence. No change.
+
+### Round 14 — user lens (team conflicts; tracks) — no change
+- Examined: sync.sh's conflict card (addressed to the session, says nothing was lost and the 4 steps); all 5 track
+  templates copied fresh pass `track.sh check` and brief cleanly; every `card:` a track names exists in
+  templates/specialists/; ROUTING.md names the same cards.
+- Found: nothing with evidence. No change. Next rounds move to other areas (panel text, dispatcher, knowledge skill).
+
 ## Ideas (no evidence of friction yet; not built)
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`
   on every push to a branch, and a run with TMPDIR containing a space. v0.5.1 was a bash 3.2 parse error that a
