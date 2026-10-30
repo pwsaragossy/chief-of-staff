@@ -166,10 +166,9 @@ for f in sub/DELIVERY.md NOTTRACK.md sub/DECISIONS.md DECISIONS.md; do
   h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/$f\"}")" "$P" >/dev/null
   check "$f is a real deliverable, not a control file" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
 done
-# DECISIONS.md: a control file only for what an append of new decisions adds (judged on the tool's own text)
+# DECISIONS.md is a deliverable: a text-only rule could not tell an append from a split, a move or a deletion of a guard: line
 dl='- 2026-10-30 10:00 | Price at 19 | owner | replaces: -'; d0='- 2026-10-26 09:20 | Demo on mainnet, guard: testnet | pedro | replaces: -'
 dw() { h "$(ev UserPromptSubmit)" "$P" >/dev/null; h "$(ev PostToolUse ",\"tool_name\":\"$1\",\"tool_input\":{\"file_path\":\"$P/DECISIONS.md\"$2}")" "$P" >/dev/null; rc "$(ev Stop ",\"stop_hook_active\":false")" "$P"; }
-check "appending a new decision to DECISIONS.md is not a deliverable" '[ "$(dw Edit ",\"old_string\":\"$d0\",\"new_string\":\"$d0\\n$dl\"")" = 0 ] && [ "$(dw MultiEdit ",\"edits\":[{\"old_string\":\"## Log\",\"new_string\":\"## Log\\n$dl\\n\"}]")" = 0 ]'
 check "a memo, a revoke or a replacement written into DECISIONS.md is still a deliverable" '[ "$(dw Write ",\"content\":\"# Investor memo\\nfive pages\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"$d0\",\"new_string\":\"$d0\\n- 2026-10-30 10:00 | revoked: no longer needed | agent | replaces: 2026-10-26 09:20\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"$d0\",\"new_string\":\"$d0\\n- 2026-10-30 10:00 | Demo on testnet | agent | replaces: 2026-10-26 09:20\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"a\",\"new_string\":\"a\\\\\\\" x\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"$d0\\n$dl\",\"new_string\":\"$dl\"")" = 2 ] && [ "$(dw Write ",\"content\":\"$dl\"")" = 2 ]'
 check "every turn is logged for the adherence metric" 'grep -q "substantive=1 agents=2 specialists=1 reviewers=1 library=1 web=1 saved=1" "$W/.protocol.log"'
 mkdir -p "$W/specialists"; : > "$W/specialists/researcher.md"

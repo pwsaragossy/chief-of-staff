@@ -20,11 +20,10 @@
 5. Mensagens de backup do setup sem jargão: em vez de "Add a private git remote and push", diz que o
    workspace está só neste computador e para pedir ao central um backup privado no GitHub (o central sabe o comando).
 
-6. Handoff não é mais bloqueado: registrar uma decisão em DECISIONS.md (o que o handoff manda fazer) era
-   tratado como "entregável" e exigia especialista + revisor no fim do turno. Agora só *acrescentar* linhas
-   de decisão novas (que não substituem nem revogam nada) é livre. O revisor independente achou que minha
-   1ª versão deixava esconder um memorando ou revogar uma decisão com `guard:` sem revisão: corrigido; revogar,
-   substituir, apagar ou reescrever o arquivo continua exigindo especialista + revisor.
+6. (Desfeito.) Tentei liberar o handoff que registra decisão em DECISIONS.md do gate de especialistas. Dois
+   revisores independentes provaram que qualquer regra baseada no texto da edição deixa esconder um memorando
+   ou apagar uma decisão com `guard:`. Voltei exatamente ao comportamento do main (o gate fica como estava).
+   O atrito continua; há um desenho seguro em "Ideas" para você decidir.
 
 7. Painel: "Waits on you" (as perguntas que esperam o dono, com a idade) agora vem primeiro, acima dos
    projetos. Antes ficava abaixo dos mapas de trilha de todos os projetos (fora da primeira tela).
@@ -50,8 +49,8 @@ na primeira tela, e mensagens que dizem o que fazer. Nenhuma regra de segurança
 de segurança continua igual; só mudaram textos, a ordem do painel e o que conta como "entregável".
 
 **Recomendo fazer merge de:** todos os commits do branch. Cada um tem teste que falhou antes e passa depois
-(selftest 479/479). Se quiser revisar só um: o de DECISIONS.md (muda o que o gate de fim de turno considera
-entregável) — é o único que muda comportamento de hook.
+(selftest 479/479). Nenhum commit final afrouxa um gate: o protocol.sh difere do main só no texto de uma mensagem
+de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não passa mais).
 
 ---
 
@@ -290,7 +289,27 @@ entregável) — é o único que muda comportamento de hook.
 - Proof: 2 new checks failed first, 3 pass after (told, not cleared by an empty turn, cleared by a reviewed one);
   selftest 485/485.
 
+### Round 18 — adversarial review of the narrowed DECISIONS.md rule: reverted
+- A second reviewer, briefed only to break `decadd`, rejected it with reproduced inputs (exit codes post=0, stop=0
+  under dash and bash --posix): an Edit that splits the guard line (`" | Demo"` → `"\n | Demo"`) lifts the guard;
+  `replace_all` breaks every decision; a MultiEdit pools lines so one edit deletes what another keeps; a 700 KB Write
+  makes the quadratic awk scan exceed the 5 s hook limit and the turn ends free; a 5000-character memo fits in one
+  decision line. Judging the tool's text cannot prove an append.
+- Changed: decadd removed; a project's DECISIONS.md write is a deliverable again, exactly as on main
+  (`git diff main -- scripts/protocol.sh` now shows only the block message and the stricter Versions check).
+  The memo/revoke/replace/delete/Write checks stay and pass.
+- Proof: selftest 484/484.
+- Cost accepted: a handoff that writes a decision is blocked again (1 block + 2 subagents). Security first.
+- Method lesson: the first fix of a gate passed my tests and one review, and still failed an adversarial one.
+  Gate changes need an adversarial reviewer before commit, and a rule that judges files, not tool text.
+
 ## Ideas (no evidence of friction yet; not built)
+- Handoff decisions without the specialists gate, done safely (friction is real: round 7; not built because it is a
+  gate change that needs the owner's eye): PreToolUse saves a copy of DECISIONS.md; PostToolUse accepts the write as a
+  control file only if the old file is a byte prefix of the new one, every added line is a decision line of at most
+  300 characters with `replaces: -`, and `cos_decisions` in force after ⊇ before; the deliverable mark is set before
+  the check and cleared only on success (a timeout fails closed). Alternative with no code: `track.sh decide "<text>"`
+  appends the line itself (a script cannot split or delete), and the handoff skill uses it.
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`
   on every push to a branch, and a run with TMPDIR containing a space. v0.5.1 was a bash 3.2 parse error that a
   macOS runner would have caught. Not built: adding CI is an owner decision (Actions minutes, repo settings).
