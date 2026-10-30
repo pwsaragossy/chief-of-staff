@@ -425,6 +425,7 @@ check "setup creates the workspace with the library inside the vault" 'U create 
 check "the new workspace is committed, with no leftover library copy" '[ -z "$(git -C "$Y/ws" status --porcelain)" ] && ! ls -d "$Y/ws"/knowledge* >/dev/null 2>&1 && [ -d "$Y/My Vault/Company library/notes" ]'
 check "without --backup it says there is no backup yet, in plain words, and who to ask" 'o=$(U create "$Y/ws2"); printf "%s\n" "$o" | grep -q "^Backup: none yet: the workspace is only on this computer. Ask central to back it up to a private GitHub repo when you want one.$" && ! printf "%s\n" "$o" | grep -q "git remote"'
 git init -q "$Y/Git Vault"; mkdir -p "$Y/Git Vault/.obsidian"
+check "a computer with one place for the library gets no Library question (the setup skill skips it)" '( H="$(mktemp -d)"; HOME="$H" sh "$here/setup.sh" detect | head -n 1 | grep -q "^Inside the workspace" && rm -rf "$H" && grep -q "only when \`detect\` printed two or more places" "$here/../skills/setup/SKILL.md" )'
 check "with two vaults it recommends the workspace and lists both" 'U detect | head -n 1 | grep -q "^Inside the workspace" && [ "$(U detect | grep -c "^Obsidian vault")" = 2 ]'
 check "a library inside a vault kept in git gets no repo of its own" 'U create "$Y/ws3" --library "$Y/Git Vault/Company library" >/dev/null && [ ! -d "$Y/Git Vault/Company library/.git" ]'
 printf '#!/bin/sh\necho "$*" >> "%s/gh.log"\n' "$Y" > "$Y/bin/gh"; chmod +x "$Y/bin/gh"

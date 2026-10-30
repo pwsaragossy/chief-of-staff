@@ -27,6 +27,9 @@
 7. Painel: "Waits on you" (as perguntas que esperam o dono, com a idade) agora vem primeiro, acima dos
    projetos. Antes ficava abaixo dos mapas de trilha de todos os projetos (fora da primeira tela).
 
+8. Setup pergunta uma coisa a menos quando só existe um lugar possível para a biblioteca (computador sem
+   Obsidian/iCloud/Dropbox/disco externo): antes perguntava com uma única opção.
+
 **Efeito para o usuário:** o selftest volta a ser prova confiável; sem python3, o dono vê em segundos
 se está tudo bem e o que espera por ele.
 
@@ -176,6 +179,18 @@ se está tudo bem e o que espera por ele.
 - Changed: README fixed; a check derives both from skills/ and hooks.json, so the README cannot drift again.
 - Proof: check failed first ("README Skills line misses ambition"), passes after; selftest 475/475.
 - Hook times: unchanged (docs only).
+
+### Round 10 — user lens (setup questions)
+- Examined: the setup skill's question block against `setup.sh detect` on a computer with no Obsidian vault,
+  iCloud, Dropbox, Google Drive, OneDrive, Box or external disk (this container; typical Linux/WSL, and a Mac
+  without those folders).
+- Found: detect prints one place ("Inside the workspace"), yet the skill still asked "Where should the company
+  library live?" — a question with one real option (AskUserQuestion needs 2-4 options, so the agent either
+  invents a second one or the call fails). Not a decision of the owner's.
+- Changed: the skill asks Library only when detect printed two or more places; otherwise it says where the
+  library went in the final summary (it can still move later: library.sh offload).
+- Proof: check failed first, passes after; selftest 476/476.
+- Simulation: questions in setup on such a computer, gh not signed in: 3 → 2 (Workspace, Team).
 
 ## Ideas (no evidence of friction yet; not built)
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`
