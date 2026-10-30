@@ -126,7 +126,7 @@ reverify() {
         out "STATE.md: status $(fm "$s" status), updated $(fm "$s" updated), dispatch $(fm "$s" dispatch)."
         out "Next action recorded: $(fm "$s" next)"
         if [ "$src" = compact ] && [ -n "$sid" ]; then turnrec
-        elif [ "$src" = resume ]; then out "Resumed session: your arrival synthesis is already in STATE.md; re-read STATE.md only if it changed since."
+        elif [ "$src" = resume ]; then out "Resumed session: if STATE.md already holds your arrival synthesis, do not write it again; if it does not, write it first."
         else out "Protocol: the arrival synthesis in STATE.md is written before any other action."; fi
         reverify "$s" "$root/projects/$p/TRACK.md"
       fi

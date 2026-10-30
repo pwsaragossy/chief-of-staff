@@ -21,8 +21,10 @@
    workspace está só neste computador e para pedir ao central um backup privado no GitHub (o central sabe o comando).
 
 6. Handoff não é mais bloqueado: registrar uma decisão em DECISIONS.md (o que o handoff manda fazer) era
-   tratado como "entregável" e exigia especialista + revisor no fim do turno. Agora é arquivo de controle,
-   como TRACK.md. Economiza 1 bloqueio e 2 subagentes por handoff com decisão.
+   tratado como "entregável" e exigia especialista + revisor no fim do turno. Agora só *acrescentar* linhas
+   de decisão novas (que não substituem nem revogam nada) é livre. O revisor independente achou que minha
+   1ª versão deixava esconder um memorando ou revogar uma decisão com `guard:` sem revisão: corrigido; revogar,
+   substituir, apagar ou reescrever o arquivo continua exigindo especialista + revisor.
 
 7. Painel: "Waits on you" (as perguntas que esperam o dono, com a idade) agora vem primeiro, acima dos
    projetos. Antes ficava abaixo dos mapas de trilha de todos os projetos (fora da primeira tela).
@@ -253,6 +255,24 @@ entregável) — é o único que muda comportamento de hook.
   Startup and clear still require the synthesis.
 - Proof: check failed first, passes after; selftest 479/479.
 - Agent work per resume: 1 arrival synthesis → 0.
+
+### Round 16 — reviewer findings on rounds 9-15 (one was a regression of mine)
+- Verdict: approve with changes. Finding 1 [major]: my round-7 rule trusted the path, not the content. Reproduced:
+  a memo written into DECISIONS.md, and a `revoked:` line that lifts a `guard:` decision, both ended the turn
+  with rc 0 (rc 2 before round 7). That weakened the gate; the fixed rules forbid it.
+- Changed: DECISIONS.md counts as a control file only for an Edit/MultiEdit whose added lines are all new decision
+  lines with `replaces: -` and no `revoked:`, and that drops no line of its old_string. A Write (whole file: what it
+  dropped is unseen), a revoke, a replacement, a deletion or any other text is a deliverable, as before round 7.
+  Unreadable input fails closed.
+- Finding 2 [minor, older]: the role card's `## Versions` placeholder text passed the SubagentStop hook as written.
+  Changed: `evidence: <...>` and `passed: <...>` are no evidence (regex rejects `<`). Stricter than main.
+- Finding 3 [minor]: the resume line asserted the synthesis exists. Now: "if STATE.md already holds your arrival
+  synthesis, do not write it again; if it does not, write it first."
+- Also: a timing flake in my health.sh text check (2 h 30 vs 31 min across a minute boundary) made tolerant.
+- Proof: new checks failed first (memo, revoke, replace, delete, Write, quote-escape; Versions placeholder), pass
+  after; the plain append (Edit and MultiEdit) still ends rc 0; selftest 482/482.
+- Lesson for the method: a gate change gets an adversarial reviewer *before* it is pushed, not in a later batch.
+  From now on every change to protocol.sh/track.sh/library.sh conditions is reviewed before its commit.
 
 ## Ideas (no evidence of friction yet; not built)
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`

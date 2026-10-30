@@ -118,7 +118,7 @@ check "prompt hook restates the protocol" 'h "$(ev UserPromptSubmit ",\"prompt\"
 check "prompt hook is silent outside a workspace" '[ -z "$(h "$(ev UserPromptSubmit)" /tmp)" ]'
 check "the next prompt of the session gets one line, not the whole protocol" 'o=$(h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P"); printf "%s" "$o" | grep -q "as stated at the start of this session" && ! printf "%s" "$o" | grep -q "the independent reviewer, as subagents"'
 check "after a compaction the next prompt gets the full protocol again" 'printf "{\"session_id\":\"s1\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh" >/dev/null; h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "the independent reviewer, as subagents"'
-check "a resumed session is not told to write a new arrival synthesis; a new one is" 'o=$(printf "{\"session_id\":\"s9\",\"source\":\"resume\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh"); ! printf "%s" "$o" | grep -q "arrival synthesis in STATE.md is written" && printf "%s" "$o" | grep -q "Resumed session: your arrival synthesis is already in STATE.md" && printf "{\"session_id\":\"s9\",\"source\":\"startup\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh" | grep -q "arrival synthesis in STATE.md is written"'
+check "a resumed session is not told to write a new arrival synthesis; a new one is" 'o=$(printf "{\"session_id\":\"s9\",\"source\":\"resume\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh"); ! printf "%s" "$o" | grep -q "arrival synthesis in STATE.md is written" && printf "%s" "$o" | grep -q "Resumed session: if STATE.md already holds your arrival synthesis, do not write it again" && printf "{\"session_id\":\"s9\",\"source\":\"startup\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh" | grep -q "arrival synthesis in STATE.md is written"'
 check "a compacted session gets its turn record, not a new arrival synthesis" 'o=$(printf "{\"session_id\":\"s1\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh"); printf "%s" "$o" | grep -q "Resumed after a compaction, same turn: .* 0 specialist" && ! printf "%s" "$o" | grep -q "arrival synthesis in STATE.md is written"'
 long() { awk -v n="$1" 'BEGIN { while (n-- > 0) printf "a" }'; }
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
@@ -156,16 +156,21 @@ h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/STATE.md\"}")" "$P"
 check "updating STATE.md is not a deliverable" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
-for f in TRACK.md DELIVERY.md DECISIONS.md; do
+for f in TRACK.md DELIVERY.md; do
   h "$(ev UserPromptSubmit)" "$P" >/dev/null
   h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/$f\"}")" "$P" >/dev/null
   check "updating $f is not a deliverable" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
 done
-for f in sub/DELIVERY.md NOTTRACK.md sub/DECISIONS.md; do
+for f in sub/DELIVERY.md NOTTRACK.md sub/DECISIONS.md DECISIONS.md; do
   h "$(ev UserPromptSubmit)" "$P" >/dev/null
   h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/$f\"}")" "$P" >/dev/null
   check "$f is a real deliverable, not a control file" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
 done
+# DECISIONS.md: a control file only for what an append of new decisions adds (judged on the tool's own text)
+dl='- 2026-10-30 10:00 | Price at 19 | owner | replaces: -'; d0='- 2026-10-26 09:20 | Demo on mainnet, guard: testnet | pedro | replaces: -'
+dw() { h "$(ev UserPromptSubmit)" "$P" >/dev/null; h "$(ev PostToolUse ",\"tool_name\":\"$1\",\"tool_input\":{\"file_path\":\"$P/DECISIONS.md\"$2}")" "$P" >/dev/null; rc "$(ev Stop ",\"stop_hook_active\":false")" "$P"; }
+check "appending a new decision to DECISIONS.md is not a deliverable" '[ "$(dw Edit ",\"old_string\":\"$d0\",\"new_string\":\"$d0\\n$dl\"")" = 0 ] && [ "$(dw MultiEdit ",\"edits\":[{\"old_string\":\"## Log\",\"new_string\":\"## Log\\n$dl\\n\"}]")" = 0 ]'
+check "a memo, a revoke or a replacement written into DECISIONS.md is still a deliverable" '[ "$(dw Write ",\"content\":\"# Investor memo\\nfive pages\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"$d0\",\"new_string\":\"$d0\\n- 2026-10-30 10:00 | revoked: no longer needed | agent | replaces: 2026-10-26 09:20\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"$d0\",\"new_string\":\"$d0\\n- 2026-10-30 10:00 | Demo on testnet | agent | replaces: 2026-10-26 09:20\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"a\",\"new_string\":\"a\\\\\\\" x\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"$d0\\n$dl\",\"new_string\":\"$dl\"")" = 2 ] && [ "$(dw Write ",\"content\":\"$dl\"")" = 2 ]'
 check "every turn is logged for the adherence metric" 'grep -q "substantive=1 agents=2 specialists=1 reviewers=1 library=1 web=1 saved=1" "$W/.protocol.log"'
 mkdir -p "$W/specialists"; : > "$W/specialists/researcher.md"
 check "a subagent without a role card is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"do research\"}")" "$P")" = 2 ]'
@@ -190,6 +195,7 @@ printf '#!/bin/sh\nsleep 9\n' > "$SL/track.sh"; printf '#!/bin/sh\nsleep 9\n' > 
 check "a turn-end track check slower than its budget blocks in time and says what to run" 's=$(date +%s); o=$(printf "%s" "{\"session_id\":\"s7\",\"hook_event_name\":\"Stop\",\"stop_hook_active\":false}" | CLAUDE_PROJECT_DIR="$P" sh "$SL/protocol.sh" 2>&1); r=$?; [ $r = 2 ] && [ $(($(date +%s) - s)) -lt 5 ] && printf "%s" "$o" | grep -q "track.sh check did not finish in time"'
 check "a briefing whose board read runs out of time says so and ends in time" 's=$(date +%s); o=$(CLAUDE_PROJECT_DIR="$W/central" sh "$SL/briefing.sh"); [ $(($(date +%s) - s)) -lt 9 ] && printf "%s" "$o" | grep -q "board was not read in time"'
 rm -rf "$SL" "$CLAUDE_PLUGIN_DATA"/slow-*
+check "the Versions placeholder of a role card does not pass the hook; a real line does" '( for m in "## Versions <one line> - evidence: <the command and its output>" "## Versions v1 passed: <what the judge printed>"; do [ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: engineer ## Never-skip checklist $m\"")" "$P")" = 2 ] || exit 1; done; [ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: engineer ## Never-skip checklist ## Versions v1 passed: npm test printed 12 passing\"")" "$P")" = 0 ] )'
 check "the specialists skill briefs the reviewer with the lines the hook requires (no block when followed literally)" 'awk "/^4\. \*\*Review/,/^5\./" "$here/../skills/specialists/SKILL.md" | tr "\n" " " | grep -q "same .Library:. and .Ambition: <goal> | judge: <judge>. lines"'
 check "every specialist card's output format has the ## Versions section the SubagentStop hook requires" '( for f in "$here"/../templates/specialists/*.md; do case $f in */reviewer.md) continue ;; esac; awk "/^## Output format/,/^## What the reviewer/" "$f" | grep -q "^## Versions" && awk "/^## Output format/,/^## What the reviewer/" "$f" | grep -q "evidence: <" || { echo "no Versions in $f"; exit 1; }; done )'
 check "README lists every skill the plugin ships, and counts them right" '( l=$(grep "^Skills: " "$here/../README.md"); n=0; for d in "$here"/../skills/*/; do k=${d%/}; k=${k##*/}; n=$((n + 1)); printf "%s" "$l" | grep -q "\`$k\`" || { echo "README Skills line misses $k"; exit 1; }; done; h=$(grep -o "scripts/[a-z-]*\.sh" "$here/../hooks/hooks.json" | sort -u | wc -l | tr -d " "); grep -q "$n skills, $h hook scripts" "$here/../README.md" || { echo "README count is not $n skills, $h hook scripts"; exit 1; } )'
@@ -741,9 +747,9 @@ printf -- "---\nstatus: waiting-owner\nproject: p\nmember: Bo\n---\nno questions
 t=$(sh "$here/health.sh" text "$d"); rm -rf "$d"; printf "%s\n" "$t"
 printf "%s" "$t" | tr -d "\n" | LC_ALL=C grep -q "[[:cntrl:]]" && exit 1
 [ "$(printf "%s\n" "$t" | head -n 1)" = "3 questions wait on you. Projects: 1 red." ] &&
-printf "%s\n" "$t" | grep -q "^p: red - a question has waited on the owner for 2 h 30 min" &&
-printf "%s\n" "$t" | grep -qx "Waits on you:" && printf "%s\n" "$t" | grep -qx -- "- Card (p): Price at 9 or 19? Recommend 19 - asked 2 h 30 min ago" &&
-printf "%s\n" "$t" | grep -qx -- "- Card (p): Name it Lex? - asked 0 min ago" && printf "%s\n" "$t" | grep -qx -- "- Bare (p): open the card" && ! printf "%s\n" "$t" | grep -q "Ana only" )'
+printf "%s\n" "$t" | grep -Eq "^p: red - a question has waited on the owner for 2 h 3[01] min" &&
+printf "%s\n" "$t" | grep -qx "Waits on you:" && printf "%s\n" "$t" | grep -Eqx -- "- Card \(p\): Price at 9 or 19\? Recommend 19 - asked 2 h 3[01] min ago" &&
+printf "%s\n" "$t" | grep -Eqx -- "- Card \(p\): Name it Lex\? - asked [01] min ago" && printf "%s\n" "$t" | grep -qx -- "- Bare (p): open the card" && ! printf "%s\n" "$t" | grep -q "Ana only" )'
 check "health.sh text says all is fine in its first line" '( d=$(mktemp -d); mkdir -p "$d/projects/p"; touch "$d/.chief-of-staff"; cp "$here/../templates/project/STATE.md" "$d/projects/p/STATE.md"; fm_set "$d/projects/p/STATE.md" updated "$(date "+%F %H:%M")"
 t=$(sh "$here/health.sh" text "$d"); rm -rf "$d"; [ "$(printf "%s\n" "$t" | head -n 1)" = "All fine: nothing waits on you." ] && printf "%s\n" "$t" | grep -qx "p: green - on track" )'
 check "health gives each question to the owner its own age, empty when unstamped" '( d=$(mktemp -d); mkdir -p "$d/board"; touch "$d/.chief-of-staff"; z=$(date +%z); o=$(date -d "-90 min" "+%F %H:%M" 2>/dev/null || date -v-90M "+%F %H:%M")

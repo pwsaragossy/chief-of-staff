@@ -60,6 +60,23 @@ real() { d=$1 r=; k=0
   case $r in */..|*/../*|*/.|*/./*) return 0 ;; esac; printf '%s%s' "$(cd "$d" && pwd -P)" "$r" | tr 'A-Z' 'a-z'; }
 case $rel in projects/?*) project=${rel#projects/}; project=${project%%/*} ;; *) project= ;; esac
 
+# decadd: true when the Write/Edit/MultiEdit text only appends new decision lines ("- <when> | <decision> | <who> |
+# replaces: -"): the lines of its new_string that its old_string does not hold, and no line of old_string dropped.
+# A revoke, a replacement or a deletion (each can lift a guard: term), a whole-file Write (what it dropped is not
+# seen), any other text, or text that cannot be read is a deliverable (fail closed)
+decadd() { printf '%s' "$in" | LC_ALL=C awk '{ s = s $0 "\n" } END {
+    while (match(s, /"(old_string|new_string|content)" *: *"/)) {
+      k = substr(s, RSTART + 1, 3); s = substr(s, RSTART + RLENGTH); v = ""; e = 0
+      for (j = 1; j <= length(s); j++) { c = substr(s, j, 1)
+        if (c == "\\") { j++; c = substr(s, j, 1); v = v (c == "n" ? "\n" : c == "t" ? " " : c); continue }
+        if (c == "\"") { e = 1; break } v = v c }
+      if (!e) exit 1
+      s = substr(s, j + 1); n = split(v, L, "\n")
+      for (i = 1; i <= n; i++) { sub(/\r$/, "", L[i]); if (k == "old") { O[L[i]] = 1; old = 1 } else { A[++na] = L[i]; N[L[i]] = 1; got = 1 } } }
+    if (!got || !old) exit 1
+    for (l in O) if (!(l in N) && l !~ /^[ \t]*$/) exit 1
+    for (i = 1; i <= na; i++) { l = A[i]; if (l in O || l ~ /^[ \t]*$/) continue
+      if (l !~ /^- [0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9] [|] [^|]+ [|] [^|]+ [|] replaces: -[ \t]*$/ || l ~ /[|] *revoked:/) exit 1 } }'; }
 # Flat JSON field (hook input is compact JSON); good enough for ids, names and booleans.
 jget() { printf '%s' "$in" | sed -n "s/.*\"$1\" *: *\"\{0,1\}\([^\",}]*\).*/\1/p" | head -n 1; }
 # the role a brief names: "Role card: <role>", or the card's path "Role card: <root>/specialists/<role>.md", which
@@ -161,7 +178,8 @@ $p"; fi ;;
               case $in in *"\"file_path\":\"$fp\""*|*"\"file_path\": \"$fp\""*)
                 # the workspace's own settings and Claude's memory (an owner preference) are not deliverables
                 case $fp in */CLAUDE.md|*/.claude/*|"$root/central/"*|"$root/specialists/"*|"$root/ROUTING.md") ctl=1 ;; esac ;; *) r= ;; esac
-              case $r in */*/*|.*) ;; */TRACK.md|*/DELIVERY.md|*/DECISIONS.md) [ "$r" != "$fp" ] && ctl=1 ;; esac
+              case $r in */*/*|.*) ;; */TRACK.md|*/DELIVERY.md) [ "$r" != "$fp" ] && ctl=1 ;;
+                */DECISIONS.md) [ "$r" != "$fp" ] && decadd && ctl=1 ;; esac
               [ -n "$ctl" ] || mark deliverable ;; esac ;;
         esac ;; esac ;;
     esac
@@ -370,7 +388,8 @@ $p"; fi ;;
     case $in in *"Role: reviewer"*) exit 0 ;; esac
     case $in in *"## Versions"*)
       # each verdict shows what the judge printed or wrote, so no version (failed or passed) is made up
-      printf '%s' "${in#*'## Versions'}" | grep -Eq '(evidence|passed): *[^ "\\]' && exit 0
+      # a <placeholder> copied from the role card's output format is no evidence
+      printf '%s' "${in#*'## Versions'}" | grep -Eq '(evidence|passed): *[^ "\\<]' && exit 0
       echo "Your '## Versions' lines need the judge's evidence: end each with 'evidence: <the command and its output, or the file that shows it>'. A first version that passed is fine as 'v1 passed: <what the judge printed>'; never invent a failed version." >&2
       exit 2 ;; esac
     echo "Your brief carries an Ambition line: add a '## Versions' section, one line per version (the lens, what changed, the verdict of the judge named in your brief, and its evidence: the command output or the file). A first version that passed is written 'v1 passed: <what the judge printed>'; then say why that judge measures the goal behind the goal." >&2
