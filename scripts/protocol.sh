@@ -356,7 +356,7 @@ $p"; fi ;;
              fi
              case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.library|*/.chief-of-staff/*|*/.owner-ok|*/.owner-items) ;; *) exit 0 ;; esac ;;
         esac
-        echo "Blocked by chief-of-staff: .chief-of-staff (where the libraries live), .library-id, a project's .library (which library it shares with) and .owner-ok (the owner's OKs) are changed only through library.sh offload, join, leave or use and track.sh ok, which the owner confirms." >&2
+        echo "Blocked by chief-of-staff: .chief-of-staff (where the libraries live), .library-id, a project's .library (which library it shares with) and .owner-ok (the owner's OKs) are changed only through library.sh offload, join, leave or use and track.sh ok, which the owner confirms.$([ "$(jget tool_name)" = Bash ] && printf ' This check is a word list: if the command only mentions one of these names (a commit message, an echo), rephrase it without the name.')" >&2
         exit 2 ;;
     esac
     ;;

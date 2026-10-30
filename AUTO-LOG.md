@@ -10,6 +10,10 @@
    (`newsletter^_green^_...`). Agora: primeira linha é o veredito ("All fine" ou "3 questions wait on you.
    Projects: 1 red."), depois uma linha por projeto e só as perguntas desta pessoa, cada uma com a própria idade.
 
+3. Mensagem de bloqueio mais clara: quando o guarda bloqueia um comando só porque ele *menciona* um arquivo
+   protegido (ex.: mensagem de commit com ".library"), a mensagem agora diz para reescrever sem o nome.
+   O bloqueio continua igual (segurança intacta); o agente só não fica tentando às cegas.
+
 **Efeito para o usuário:** o selftest volta a ser prova confiável; sem python3, o dono vê em segundos
 se está tudo bem e o que espera por ele.
 
@@ -68,5 +72,18 @@ se está tudo bem e o que espera por ele.
   my v1 already passed: exactly the failure the ambition skill warns about ("a worker left to pick its own judge
   picks one its first draft already passes"). The independent reviewer caught it. Lesson kept: for a change I
   judge myself, the selftest case must include the shared-workspace and multi-item variants.
+
+### Round 3 — technical lens (false guard blocks)
+- Examined: PreToolUse Bash guard with 30 commands an agent commonly runs in a project session (git add/commit/
+  push/log, cat/sed/grep/find/diff, cp/mv, python/node/npm, echo >> TRACK.md, track.sh verify/check,
+  library.sh search/new, reading .owner-ok and the marker). Probe script: scratchpad probe.sh.
+- Found: 29/30 pass with no block and no ask. 1 block: `git commit -m "docs: explain the .library file"`.
+  Kept on purpose: the guard is a word list, `git commit` can write, and telling a mention from a write would
+  need a shell parser (fail closed wins). The friction was the message: it explained the protected files but
+  not that a mere mention triggers it, so an agent would retry the same command.
+- Changed: Bash blocks on a protected name add one sentence: "This check is a word list: if the command only
+  mentions one of these names (a commit message, an echo), rephrase it without the name." Write/Edit unchanged.
+- Proof: new check failed first, passes after; selftest 470/470.
+- Hook times: unchanged (message only).
 
 ## Ideas (no evidence of friction yet; not built)
