@@ -313,3 +313,7 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`
   on every push to a branch, and a run with TMPDIR containing a space. v0.5.1 was a bash 3.2 parse error that a
   macOS runner would have caught. Not built: adding CI is an owner decision (Actions minutes, repo settings).
+- Known gap seen while testing (already on main, not changed): a file written by a Bash command (`printf >> x.md`,
+  `cat > deck.md`) never marks the turn substantive; only Write/Edit/MultiEdit do. An agent can produce a deliverable
+  through the shell without the specialists gate. Closing it needs the Stop hook to diff the project folder against
+  the turn's start (like the library's ctime scan), a design choice for the owner.
