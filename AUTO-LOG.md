@@ -100,4 +100,18 @@ se está tudo bem e o que espera por ele.
 - Proof: new check failed first, passes after; selftest 471/471.
 - Simulation after: Bia's briefing has 0 messages that say personal; confusing messages 1 → 0.
 
+### Round 5 — technical lens (environments)
+- Examined: full selftest (a) with TMPDIR holding a space, so every workspace path has a space (a folder in
+  "My Drive" or "Google Drive"); (b) with `sh` resolved to `bash --posix` (macOS /bin/sh is bash; only bash 5
+  exists here, not 3.2); (c) default dash.
+- Found: (a) 3 FAIL, all in the public_urls/prod_ref checks: the test wrote `file://<path with space>` as the URL;
+  public_urls is a space-separated list and a URL holds no raw space, so the test was wrong, not health.sh.
+  (b) 471/471. (c) 471/471.
+- Changed: the test percent-encodes the path (`%20`).
+- Proof: (a) 468 → 471/471 with a spaced TMPDIR; default run 471/471.
+- Not testable here: bash 3.2 itself (macOS), busybox ash, WSL drvfs. Idea below.
+
 ## Ideas (no evidence of friction yet; not built)
+- A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`
+  on every push to a branch, and a run with TMPDIR containing a space. v0.5.1 was a bash 3.2 parse error that a
+  macOS runner would have caught. Not built: adding CI is an owner decision (Actions minutes, repo settings).

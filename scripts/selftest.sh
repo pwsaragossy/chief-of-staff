@@ -706,10 +706,11 @@ fm_set "$G/STATE.md" updated "$(fut 0)"; touch -t 202601010000 "$G/STATE.md"
 check "a fresh updated: is not stale, whatever the file date" '! H gamma | grep -q "no handoff"'
 cp "$W/gs.bak" "$G/STATE.md"
 printf 'abc1234 deployed\n' > "$W/version.txt"
-fm_set "$G/TRACK.md" public_urls "file://$W/version.txt"; fm_set "$G/TRACK.md" prod_ref "file://$W/version.txt abc1234def"
+U=file://$(printf '%s' "$W" | sed 's/ /%20/g')   # a URL holds no raw space (TMPDIR may)
+fm_set "$G/TRACK.md" public_urls "$U/version.txt"; fm_set "$G/TRACK.md" prod_ref "$U/version.txt abc1234def"
 check "a public link that opens and production on the expected commit raise nothing" '! H gamma | grep -Eq "public link|production"'
-fm_set "$G/TRACK.md" public_urls "file://$W/missing.txt"; fm_set "$G/TRACK.md" prod_ref "file://$W/version.txt fff9999"
-check "a link closed to a logged-out visitor is yellow" 'H gamma | grep -q "^yellow: a public link does not open for a logged-out visitor: file://$W/missing.txt"'
+fm_set "$G/TRACK.md" public_urls "$U/missing.txt"; fm_set "$G/TRACK.md" prod_ref "$U/version.txt fff9999"
+check "a link closed to a logged-out visitor is yellow" 'H gamma | grep -q "^yellow: a public link does not open for a logged-out visitor: $U/missing.txt"'
 fm_set "$G/TRACK.md" public_urls ""
 check "production on another commit is yellow" 'H gamma | grep -q "^yellow: production does not serve the expected commit fff9999"'
 fm_set "$G/TRACK.md" prod_ref ""
