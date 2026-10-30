@@ -168,6 +168,15 @@ se está tudo bem e o que espera por ele.
   shows the question as the 4th line of the page.
 - Simulation: scrolls to see what waits on the owner, 1 per project → 0.
 
+### Round 9 — technical lens (README promises)
+- Examined: README's lists and counts against the repo (skills/, hooks/hooks.json).
+- Found: the "Skills:" line under Daily use omitted `ambition`, the skill central runs on every new request
+  (an owner reading the README to learn the slash commands never sees /chief-of-staff:ambition); the ECC section
+  said "5 skills, 2 shell hooks" — there are 7 skills and 3 hook scripts.
+- Changed: README fixed; a check derives both from skills/ and hooks.json, so the README cannot drift again.
+- Proof: check failed first ("README Skills line misses ambition"), passes after; selftest 475/475.
+- Hook times: unchanged (docs only).
+
 ## Ideas (no evidence of friction yet; not built)
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`
   on every push to a branch, and a run with TMPDIR containing a space. v0.5.1 was a bash 3.2 parse error that a

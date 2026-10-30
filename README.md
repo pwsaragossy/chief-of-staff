@@ -150,7 +150,7 @@ Nothing to migrate by hand; existing workspaces keep working:
 3. To work on a project, open Claude Code in `projects/<slug>`. The briefing shows the next action.
 4. Close every session with `/chief-of-staff:handoff`.
 
-Skills: `setup`, `new-project`, `handoff`, `specialists`, `knowledge`, `panel`.
+Skills: `setup`, `new-project`, `ambition`, `handoff`, `specialists`, `knowledge`, `panel`.
 
 ## Panel
 
@@ -259,7 +259,7 @@ What we reference or reuse as an idea:
   versioned in git, with no extra model call per response. The two can coexist; if you run both,
   every session start gets two briefings.
 - **Minimal profile.** ECC's `minimal` install profile (`manifests/install-profiles.json`) leaves out
-  its hook runtime. This package follows the same idea by default: 5 skills, 2 shell hooks that do
+  its hook runtime. This package follows the same idea by default: 7 skills, 3 hook scripts that do
   nothing outside a workspace, and the dispatcher off.
 - **Security scan.** ECC's AgentShield (`npx ecc-agentshield scan`, separate MIT package) scans
   `CLAUDE.md`, settings, MCP servers, hooks and agents for risky configuration. We do not bundle it.
