@@ -1,7 +1,7 @@
 # chief-of-staff
 
 An AI chief of staff for [Claude Code](https://code.claude.com): a small company of agents that
-works for one owner, or for a team. Version 0.5.0.
+works for one owner, or for a team. Version 0.5.1.
 
 What it gives you:
 

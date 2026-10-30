@@ -155,7 +155,7 @@ EOC
   fi
   # a delivery that points at a file outside the workspace: teammates and the reviewer cannot open it
   xo=$( { cat "$d/DELIVERY.md"; awk 'NR == 1 && /^---/ { f = 1; next } f && /^---/ { f = 0; next } !f' "$d/TRACK.md"; } 2>/dev/null | grep -oE '(^|[ (`"'"'"'])(~|/[A-Za-z0-9._-]+)(/[A-Za-z0-9._-]+)+' |
-    sed 's/^[ (`"'"'"']//' | while IFS= read -r x; do case $x in "$root"/*|/usr/*|/bin/*|/dev/*|/etc/*|/opt/*) ;; *) printf '%s\n' "$x" ;; esac; done | head -n 1)
+    sed 's/^[ (`"'"'"']//' | while IFS= read -r x; do case $x in ("$root"/*|/usr/*|/bin/*|/dev/*|/etc/*|/opt/*) ;; (*) printf '%s\n' "$x" ;; esac; done | head -n 1)
   [ -n "$xo" ] && yellow "the delivery points outside the workspace ($xo): copy the file into the project folder"
   if [ -n "$quiet" ]; then on="delivered: the original request is done"; else on="on track"; fi
   [ -n "$color" ] || { color=green; reason=$on; }
