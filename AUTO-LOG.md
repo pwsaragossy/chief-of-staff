@@ -17,6 +17,9 @@
 4. Workspace compartilhado: o briefing chamava a biblioteca do time de 'personal' (o setup dizia "the team's").
    Agora diz "the team's (shared workspace)": ninguém pensa que as notas são privadas.
 
+5. Mensagens de backup do setup sem jargão: em vez de "Add a private git remote and push", diz que o
+   workspace está só neste computador e para pedir ao central um backup privado no GitHub (o central sabe o comando).
+
 **Efeito para o usuário:** o selftest volta a ser prova confiável; sem python3, o dono vê em segundos
 se está tudo bem e o que espera por ele.
 
@@ -110,6 +113,15 @@ se está tudo bem e o que espera por ele.
 - Changed: the test percent-encodes the path (`%20`).
 - Proof: (a) 468 → 471/471 with a spaced TMPDIR; default run 471/471.
 - Not testable here: bash 3.2 itself (macOS), busybox ash, WSL drvfs. Idea below.
+
+### Round 6 — user lens (setup's last words)
+- Examined: every line `setup.sh create` prints to a solo founder (round 2 simulation, gh not signed in).
+- Found: 1 of 3 lines was jargon with no next step: `Backup: none yet. Add a private git remote to <path> and push.`
+  Same in 3 other backup messages. A non-engineer stops there (moment of "what do I do now?": 1).
+- Changed: 4 messages in setup.sh say what happened and what to do ("ask central to back it up"); central's
+  CLAUDE.md gets the one command for that (private repo only). Tests lock the new wording and forbid "git remote".
+- Proof: 2 tightened checks failed first, pass after; selftest 471/471.
+- Simulation after: "don't know what to do" moments in setup output 1 → 0.
 
 ## Ideas (no evidence of friction yet; not built)
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`

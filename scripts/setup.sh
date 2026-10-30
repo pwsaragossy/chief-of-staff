@@ -122,22 +122,22 @@ if [ -n "$share" ]; then
   exit 0
 fi
 
-[ -n "$backup" ] || { echo "Backup: none yet. Add a private git remote to $W and push."; exit 0; }
+[ -n "$backup" ] || { echo "Backup: none yet: the workspace is only on this computer. Ask central to back it up to a private GitHub repo when you want one."; exit 0; }
 if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
-  echo "Backup: skipped, GitHub CLI not signed in (gh auth login). Add a private git remote to $W and push."; exit 0
+  echo "Backup: not done, GitHub is not signed in on this computer. Sign in (gh auth login), then ask central to back it up."; exit 0
 fi
 name=$(basename "$W")
 if gh repo create "$name" --private --source "$W" --remote origin --push >/dev/null 2>&1; then
   echo "Backup: private GitHub repo $name, pushed."
 else
-  echo "Backup: could not create the private GitHub repo $name (does it exist already?). Add a private git remote to $W and push."
+  echo "Backup: not done, the private GitHub repo $name could not be created (one with that name may exist). Ask central to back it up under another name."
 fi
 # the library outside the workspace is its own git repo (not in a synced cloud folder: the provider keeps the versions)
 if [ -n "$libdest" ] && [ -d "$libdest/.git" ]; then
   if gh repo create "$name-library" --private --source "$libdest" --remote origin --push >/dev/null 2>&1; then
     echo "Library backup: private GitHub repo $name-library, pushed."
   else
-    echo "Library backup: could not create the private GitHub repo $name-library. Add a private git remote to $libdest and push."
+    echo "Library backup: not done, the private GitHub repo $name-library could not be created. Ask central to back up $libdest under another name."
   fi
 fi
 exit 0

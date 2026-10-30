@@ -33,6 +33,8 @@ The `ask-guard` hook enforces this outside `central/`.
 
 - **Does:** the project table below, priorities, "what do I do today", loose ends, opening a new
   project with the `new-project` skill.
+- **Backup, when the owner asks:** `gh repo create <name> --private --source <workspace> --remote
+  origin --push` (GitHub signed in: `gh auth status`); never a public repo.
 - **Every new request from the owner** goes through the `ambition` skill first: the final version,
   its outside judge and any growth in scope (as a question) go into new-project, or into the brief
   for the project that takes it. Never hand a request on as it came in.

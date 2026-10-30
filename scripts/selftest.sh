@@ -422,14 +422,14 @@ check "setup puts the only Obsidian vault first, then the workspace, then iCloud
 check "setup refuses a library folder that is not empty and creates nothing" 'mkdir -p "$Y/full"; : > "$Y/full/x"; U create "$Y/ws0" --library "$Y/full" | grep -q "not empty" && [ ! -e "$Y/ws0" ]'
 check "setup creates the workspace with the library inside the vault" 'U create "$Y/ws" --library "$Y/My Vault/Company library" | grep -q "^Library: $Y/My Vault/Company library" && [ "$(cd "$Y/ws/central" && CLAUDE_PROJECT_DIR="$Y/ws/central" sh "$here/library.sh" where)" = "$Y/My Vault/Company library" ]'
 check "the new workspace is committed, with no leftover library copy" '[ -z "$(git -C "$Y/ws" status --porcelain)" ] && ! ls -d "$Y/ws"/knowledge* >/dev/null 2>&1 && [ -d "$Y/My Vault/Company library/notes" ]'
-check "without --backup it says there is no backup yet" 'U create "$Y/ws2" | grep -q "^Backup: none yet"'
+check "without --backup it says there is no backup yet, in plain words, and who to ask" 'o=$(U create "$Y/ws2"); printf "%s\n" "$o" | grep -q "^Backup: none yet: the workspace is only on this computer. Ask central to back it up to a private GitHub repo when you want one.$" && ! printf "%s\n" "$o" | grep -q "git remote"'
 git init -q "$Y/Git Vault"; mkdir -p "$Y/Git Vault/.obsidian"
 check "with two vaults it recommends the workspace and lists both" 'U detect | head -n 1 | grep -q "^Inside the workspace" && [ "$(U detect | grep -c "^Obsidian vault")" = 2 ]'
 check "a library inside a vault kept in git gets no repo of its own" 'U create "$Y/ws3" --library "$Y/Git Vault/Company library" >/dev/null && [ ! -d "$Y/Git Vault/Company library/.git" ]'
 printf '#!/bin/sh\necho "$*" >> "%s/gh.log"\n' "$Y" > "$Y/bin/gh"; chmod +x "$Y/bin/gh"
 check "backup creates private repos for the workspace and the library" 'U create "$Y/ws4" --library "$Y/lib4" --backup | grep -q "^Library backup: private GitHub repo ws4-library" && grep -q "^repo create ws4 --private --source $Y/ws4 " "$Y/gh.log" && grep -q "^repo create ws4-library --private --source $Y/lib4 " "$Y/gh.log"'
 printf '#!/bin/sh\nexit 1\n' > "$Y/bin/gh"
-check "backup without a signed-in gh is skipped, not failed" 'U create "$Y/ws5" --backup | grep -q "^Backup: skipped, GitHub CLI not signed in"'
+check "backup without a signed-in gh is skipped, not failed, and says what to do" 'U create "$Y/ws5" --backup | grep -q "^Backup: not done, GitHub is not signed in on this computer. Sign in (gh auth login), then ask central to back it up.$"'
 check "offload refuses --remote for a library inside another repo" 'cd "$Y/ws3/central" && CLAUDE_PROJECT_DIR="$Y/ws3/central" sh "$here/library.sh" offload "$Y/Git Vault/lib2" --remote "$Y/r.git" 2>&1 | grep -q "inside the git repo"; r=$?; cd "$here"; [ $r = 0 ]'
 rm -rf "$Y"
 
