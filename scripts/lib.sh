@@ -195,3 +195,16 @@ cos_shared() { grep -qx 'shared: yes' "$1/.chief-of-staff" 2>/dev/null; }
 cos_fast() { grep -qx 'pace: fast' "$1/.chief-of-staff" 2>/dev/null; }
 # cos_member ROOT -> this person's name in a shared workspace (git config cos.member, local to this computer)
 cos_member() { git -C "$1" config cos.member 2>/dev/null | tr -d '\000-\037' | cut -c1-60; }
+# cos_broken ROOT PROJECT -> the time (seconds) of the latest turn of PROJECT in the last 24 h that ended without the
+# specialists, the reviewer or the track gate, and that nothing fixed since; empty when none. Fixed: a later turn of
+# the same session complied, or a later turn of any session ran a specialist and the reviewer without a violation
+cos_broken() {
+  [ -f "$1/.protocol.log" ] || return 0
+  awk -v p="project=$2" -v c=$(($(date +%s) - 86400)) 'index($0, " " p " ") {
+      t = 0; id = ""; for (i = 1; i <= NF; i++) { if ($i ~ /^t=/) t = substr($i, 3) + 0; if ($i ~ /^turn=/) id = $i }
+      if (/violation=1/) { if (t >= c) bad[id] = t; next }
+      if (/specialists=0 reviewers=0/) next
+      delete bad[id]
+      if (/substantive=1/ && !/specialists=0/ && !/reviewers=0/) for (k in bad) delete bad[k] }
+    END { for (k in bad) if (bad[k] > m) m = bad[k]; if (m) print m }' "$1/.protocol.log"
+}

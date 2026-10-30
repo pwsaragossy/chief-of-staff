@@ -130,6 +130,7 @@ reverify() {
         else out "Protocol: the arrival synthesis in STATE.md is written before any other action."; fi
         reverify "$s" "$root/projects/$p/TRACK.md"
       fi
+      bt=$(cos_broken "$root" "$p"); [ -n "$bt" ] && out "A turn at $(date -d "@$bt" +%H:%M 2>/dev/null || date -r "$bt" +%H:%M) ended without the specialists, the reviewer or the track gate: run the specialists skill on that turn's work before building on it (the panel shows this project red until a reviewed turn)."
       dc=$(decisions "$root/projects/$p/DECISIONS.md"); [ -n "$dc" ] && { out "Decisions in force (DECISIONS.md; a new line replaces one, never an edit):"; out "$dc"; }
       tb=$(cos_limit 2 sh "$(dirname "$0")/track.sh" brief "$root/projects/$p" | tr -d '\000-\011\013-\037' | cut -c1-600)
       [ -n "$tb" ] && out "$tb (TRACK.md: a stage passes only when every item is closed with its proof file.)"

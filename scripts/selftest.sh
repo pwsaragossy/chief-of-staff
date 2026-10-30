@@ -900,6 +900,12 @@ printf '2026-01-01 00:00:00 t=%s turn=z1 project=delta substantive=1 agents=1 sp
 check "an unresolved violation makes the project red" 'H delta | grep -q "^red: a turn ended"'
 printf '2026-01-01 00:00:01 t=%s turn=z1 project=delta substantive=0 agents=1 specialists=0 reviewers=1 pushed=false violation=0\n' "$(date +%s)" >> "$W/.protocol.log"
 check "a violation fixed later in the same session clears" '! H delta | grep -q "^red"'
+printf '2026-01-01 00:00:02 t=%s turn=z2 project=delta substantive=1 agents=1 specialists=1 reviewers=0 pushed=true violation=1\n' "$(date +%s)" >> "$W/.protocol.log"
+check "the project's next session is told about a turn that skipped the review, and what to do" 'H delta | grep -q "^red: a turn ended" && b "$W/projects/delta" | grep -q "^A turn at [0-2][0-9]:[0-5][0-9] ended without the specialists, the reviewer or the track gate: run the specialists skill on that turn.s work before building on it"'
+printf '2026-01-01 00:00:03 t=%s turn=z3 project=delta substantive=1 agents=0 specialists=0 reviewers=0 pushed=false violation=0\n' "$(date +%s)" >> "$W/.protocol.log"
+check "a later turn without specialists does not clear it" 'H delta | grep -q "^red: a turn ended"'
+printf '2026-01-01 00:00:04 t=%s turn=z3 project=delta substantive=1 agents=2 specialists=1 reviewers=1 pushed=false violation=0\n' "$(date +%s)" >> "$W/.protocol.log"
+check "a later reviewed turn of any session clears it, in the panel and the briefing" '! H delta | grep -q "^red" && ! b "$W/projects/delta" | grep -q "^A turn at"'
 
 # delivery line: the planned end of the original request
 D="$W/projects/eps"; mkdir -p "$D/o"; printf x > "$D/o/a"; printf x > "$D/o/r"

@@ -41,6 +41,9 @@
 11. README lista os 7 skills (faltava `ambition`) com as contagens certas; um teste impede que volte a divergir.
 12. Sessão retomada (`--resume`) não é mais mandada reescrever a "arrival synthesis" que já escreveu.
 
+13. Projeto vermelho por "turno sem especialistas/revisor" agora tem saída: a próxima sessão do projeto é avisada
+    no briefing e, ao fazer um turno revisado, o vermelho some. Antes ficava vermelho 24 h sem ninguém saber o que fazer.
+
 **Efeito para o usuário:** menos bloqueios sem motivo (handoff, revisor, especialista: até 4 por ciclo de
 trabalho), menos perguntas no setup, o painel e o texto respondem "está tudo bem?" e "o que espera por mim?"
 na primeira tela, e mensagens que dizem o que fazer. Nenhuma regra de segurança foi afrouxada: todo bloqueio
@@ -273,6 +276,19 @@ entregável) — é o único que muda comportamento de hook.
   after; the plain append (Edit and MultiEdit) still ends rc 0; selftest 482/482.
 - Lesson for the method: a gate change gets an adversarial reviewer *before* it is pushed, not in a later batch.
   From now on every change to protocol.sh/track.sh/library.sh conditions is reviewed before its commit.
+
+### Round 17 — user lens (a red nobody can act on)
+- Examined: the panel's red reason "a turn ended without the specialists, the reviewer or the track gate".
+- Found: nothing told the project's next session about it (briefing.sh never read .protocol.log), and only a later
+  turn of the *same* session cleared it; a new session could not. The owner saw red for up to 24 h with no action
+  available to anyone. Moments of "don't know what to do": 1 (owner) + 1 (next session, unaware).
+- Changed: one helper, `cos_broken` in lib.sh, used by health.sh (replacing its own awk) and by the project
+  briefing: "A turn at HH:MM ended without the specialists, the reviewer or the track gate: run the specialists
+  skill on that turn's work before building on it (the panel shows this project red until a reviewed turn)."
+  A later turn of any session in the project that ran a specialist and the reviewer with no violation clears it;
+  a turn with no specialist and no reviewer does not. Display only: no gate changed.
+- Proof: 2 new checks failed first, 3 pass after (told, not cleared by an empty turn, cleared by a reviewed one);
+  selftest 485/485.
 
 ## Ideas (no evidence of friction yet; not built)
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`
