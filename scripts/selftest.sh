@@ -6,6 +6,8 @@ here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib.sh"
 fail=0
 check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1"; fail=1; fi; }
+# read-only by its mode bits: test -w is always true for root (containers, CI)
+ro() { [ -e "$1" ] && ! ls -ld "$1" | cut -c1-10 | grep -q w; }
 
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
@@ -401,7 +403,7 @@ check "offload copies, verifies and pushes to a private repo" 'O "$X/disk/lib" -
 check "the inbox stays out of the library repo" 'grep -qx "inbox/" "$X/disk/lib/.gitignore" && ! git -C "$X/disk/lib" ls-files | grep -q "^inbox/"'
 check "the workspace now reads the moved library" '[ "$(L where)" = "$X/disk/lib" ] && L search rate services | grep -q "^1\. \[\[tax-2\]\]"'
 check "the old folder is kept, renamed and ignored by git" 'ls -d "$W"/knowledge.offloaded-* >/dev/null && grep -qx "knowledge.offloaded-\*/" "$W/.gitignore"'
-check "offload leaves the marker and the library id read-only" '! [ -w "$W/.chief-of-staff" ] && ! [ -w "$X/disk/lib/.library-id" ]'
+check "offload leaves the marker and the library id read-only" 'ro "$W/.chief-of-staff" && ro "$X/disk/lib/.library-id"'
 cp "$W/.chief-of-staff" "$W/marker.bak2"; chmod u+w "$W/.chief-of-staff"
 printf 'library: /Volumes/cos-selftest-no-disk/lib\n' > "$W/.chief-of-staff"
 check "an unplugged disk turns the library offline, not broken" 'L where | grep -q "Library offline"'
@@ -455,7 +457,7 @@ JB1=$(printf '{"command":"%s"}' 'echo t2 > projects/a/{.,x}library'); JB2=$(prin
 check "brace expansion and \$'...' quoting cannot spell the protected names" '[ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$JB1")" "$V/m1")" = 2 ] && [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$JB2")" "$V/m1")" = 2 ] && [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo \${HOME}/x > out.txt\"}")" "$V/m1")" = 0 ]'
 check "a library search does not ask" '[ -z "$(hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$J")" "$V/m1/projects/a")" ]'
 K m1 projects/a use t1 >/dev/null
-check "use leaves .library read-only" '[ ! -w "$V/m1/projects/a/.library" ]'
+check "use leaves .library read-only" 'ro "$V/m1/projects/a/.library"'
 check "a personal session cannot write into a team library, not even through .. or another letter case" 'W() { rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$1\"}")" "$2"; }; r=$(W "$V/m1/libraries/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/knowledge/../libraries/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/LIBRARIES/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/knowledge/nope/../../libraries/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/libraries/t1/notes/ok.md" "$V/m1/projects/a")$(W "$V/m1/knowledge/notes/ok.md" "$V/m1/central"); [ "$r" = 222200 ] || { echo "got $r"; false; }'
 check "a team project writes and searches its team's library" '[ "$(K m1 projects/a where)" = "$V/m1/libraries/t1" ] && [ "$(K m1 central where)" = "$V/m1/knowledge" ]'
 check "agents cannot write inside a library's git data" '[ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$V/m1/libraries/t1/.git/cos-foreign\"}")" "$V/m1/projects/a")" = 2 ]'
@@ -737,12 +739,12 @@ echo "Scope: login and export. Owner OK: yes" > "$W/t3/scope.md"
 check "an owner item cannot close on a line the agent wrote" 'T check "$W/t3" | grep -q "^scope closes only with the owner.s OK"'
 check "an owner item cannot be marked not applicable" 'sed "s/^- \[x\] scope /- [-] scope /; s/| evidence: scope.md/| why: skipped/" "$W/t3/TRACK.md" > "$W/t3b"; mkdir -p "$W/t4"; mv "$W/t3b" "$W/t4/TRACK.md"; T check "$W/t4" | grep -q "^scope waits on the owner.s OK and cannot be marked not applicable"'
 check "removing the owner mark after opening does not skip the owner" 'cp "$W/t3/TRACK.md" "$W/t5.md"; mkdir -p "$W/t5"; mv "$W/t5.md" "$W/t5/TRACK.md"; cp "$W/t3/scope.md" "$W/t5/"; T baseline "$W/t5" && sed -i.bak "s/ | owner: ok//" "$W/t5/TRACK.md" && T check "$W/t5" | grep -q "^scope needed the owner.s OK when the project opened"'
-check "nor does deleting the item, and the list of owner items is protected" 'sed -i.bak "/^- \[x\] scope /d; s/needs: scope/needs: -/" "$W/t5/TRACK.md" && T check "$W/t5" | grep -q "^scope needed the owner.s OK" && [ ! -w "$W/t5/.owner-items" ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/t5/.owner-items\"}")" "$P")" = 2 ]'
+check "nor does deleting the item, and the list of owner items is protected" 'sed -i.bak "/^- \[x\] scope /d; s/needs: scope/needs: -/" "$W/t5/TRACK.md" && T check "$W/t5" | grep -q "^scope needed the owner.s OK" && ro "$W/t5/.owner-items" && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/t5/.owner-items\"}")" "$P")" = 2 ]'
 check "baseline never rewrites the owner list, and a missing list fails closed" 'fm_set "$W/t5/TRACK.md" baseline ""; ! T baseline "$W/t5" 2>/dev/null && grep -qx scope "$W/t5/.owner-items" && T baseline "$W/t5" 2>&1 | grep -q "already" ; fm_set "$W/t5/TRACK.md" baseline 2; chmod u+w "$W/t5/.owner-items"; mv "$W/t5/.owner-items" "$W/t5/oi"; T check "$W/t5" | grep -q "list of owner items is missing"'
 check "the owner list cannot be removed by a glob spelling" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -f t5/.own*\"}")" "$P")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -f t5/*er-items\"}")" "$P")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"mv t5/.owner-i* /tmp/x\"}")" "$P")" = 2 ]'
 check "a project session cannot record the owner OK" '! CLAUDE_PROJECT_DIR="$W/t3" T ok "$W/t3" scope yes 2>/dev/null && [ ! -e "$W/t3/.owner-ok" ]'
 check "the OK is only for items marked owner: ok" '! CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" review-1 yes 2>/dev/null'
-check "central records the owner OK and the item closes" 'CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" scope "yes, freeze it" >/dev/null && ! T check "$W/t3" | grep -q "owner.s OK" && [ ! -w "$W/t3/.owner-ok" ]'
+check "central records the owner OK and the item closes" 'CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" scope "yes, freeze it" >/dev/null && ! T check "$W/t3" | grep -q "owner.s OK" && ro "$W/t3/.owner-ok"'
 check "recording the owner OK asks the owner" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/track.sh ok $W/t3 scope yes\"}")" "$W/central" | grep -q "permissionDecision\":\"ask"'
 # target and check: a hard number and an outside judge that runs (v0.3)
 TC="$W/projects/tc"; mkdir -p "$TC"; C="$W/central"
@@ -922,7 +924,7 @@ git clone -q "$SW/plain.git" "$SW/plainc" 2>/dev/null; printf x > "$SW/plainc/RE
 check "a shared workspace needs the member name" '! sh "$here/setup.sh" create "$SW/a" --share "$SW/team.git" 2>/dev/null && [ ! -e "$SW/a" ]'
 check "a shared workspace is created and pushed to the team repo" 'sh "$here/setup.sh" create "$SW/a" --share "$SW/team.git" --member Ana | grep -q "^Shared: pushed" && grep -qx "shared: yes" "$SW/a/.chief-of-staff" && git -C "$SW/team.git" ls-tree -r --name-only HEAD | grep -qx board/.gitkeep'
 check "a repo that is not a shared workspace cannot be joined, and leaves nothing" '! sh "$here/setup.sh" join "$SW/x" "$SW/plain.git" --member Bia 2>/dev/null && [ ! -e "$SW/x" ] && ! ls "$SW" | grep -q cos-join'
-check "a teammate joins with their own name" 'sh "$here/setup.sh" join "$SW/b" "$SW/team.git" --member Bia | grep -q "you are Bia" && [ "$(git -C "$SW/b" config cos.member)" = Bia ] && [ ! -w "$SW/b/.chief-of-staff" ]'
+check "a teammate joins with their own name" 'sh "$here/setup.sh" join "$SW/b" "$SW/team.git" --member Bia | grep -q "you are Bia" && [ "$(git -C "$SW/b" config cos.member)" = Bia ] && ro "$SW/b/.chief-of-staff"'
 check "a shared workspace takes no other library" 'CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/library.sh" join "$SW/plain.git" 2>&1 | grep -q "shared with the team"'
 turn() { hk "$(ev UserPromptSubmit)" "$1" >/dev/null 2>&1; hk "$(ev Stop ",\"stop_hook_active\":false")" "$1" 2>&1; }
 inteam() { git -C "$SW/team.git" ls-tree -r --name-only HEAD | grep -qxF "$1"; }
