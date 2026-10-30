@@ -303,6 +303,14 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
 - Method lesson: the first fix of a gate passed my tests and one review, and still failed an adversarial one.
   Gate changes need an adversarial reviewer before commit, and a rule that judges files, not tool text.
 
+### Round 19 — technical lens (speed at scale; dead code)
+- Hook times with a 2,000-note library (this container, ext4): UserPromptSubmit 475-498 ms (includes the
+  automatic lookup), central briefing 359 ms, project briefing 374 ms, Stop 95 ms, health 85 ms, doctor 330 ms.
+  All far under the 5 s / 10 s limits; the lookup's 2.5 s budget covers slow WSL drives. No speed change.
+- Found: `cos_questions` in lib.sh (6 lines) was used nowhere (cos_board replaced it); only a comment named it.
+- Changed: deleted; a check now fails on any lib.sh helper no other script uses.
+- Proof: check failed first ("unused: cos_questions"), passes after; selftest 485/485.
+
 ## Ideas (no evidence of friction yet; not built)
 - Handoff decisions without the specialists gate, done safely (friction is real: round 7; not built because it is a
   gate change that needs the owner's eye): PreToolUse saves a copy of DECISIONS.md; PostToolUse accepts the write as a

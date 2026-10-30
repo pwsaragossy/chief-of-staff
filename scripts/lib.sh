@@ -140,16 +140,10 @@ cos_ago() { if [ "$1" -lt 60 ]; then echo "$1 min"; elif [ "$1" -lt 1440 ]; then
 # The Stop hook stamps each new top-level line, so the oldest open question keeps its age when asked: is rewritten
 # or a later question is added (asked: alone, the old format, still counts)
 COS_ASKED='/^\(asked [0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]( [+-][0-2][0-9][0-5][0-9])?\) */'
-# cos_questions CARD -> the question lines under "## For the owner to decide", without the template's placeholder
-# and without their (asked ...) stamp
-cos_questions() {
-  awk '{ sub(/\r$/, "") } /^## / { on = ($0 ~ /^## For the owner to decide/); next }
-    on { sub(/^[-*] +/, ""); if (match($0, '"$COS_ASKED"')) $0 = substr($0, RLENGTH + 1); if ($0 != "" && $0 !~ /^\(/) print }' "$1" 2>/dev/null | tr -d '\000-\010\013-\037' | cut -c1-300 | head -n 10
-}
 # cos_board ROOT -> one line per board card in one pass (hooks run it every turn), fields split by \037:
 #   file member project status asked due questions unstamped stamps lines bytes long text qstamps
 # questions: open question lines; unstamped: top-level ones without (asked ...); stamps: their times, split by \036;
-# lines, bytes, long: the card's size and its lines over 300 characters; text: the questions as cos_questions prints them;
+# lines, bytes, long: the card's size and its lines over 300 characters; text: the question lines without the template's placeholder or their (asked ...) stamp;
 # qstamps: the (asked ...) time of each question in text, in the same order, empty when unstamped, split by \036
 cos_board() {
   for _c in "$1"/board/*.md; do [ -f "$_c" ] || continue
