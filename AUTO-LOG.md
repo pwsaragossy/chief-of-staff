@@ -30,6 +30,9 @@
 8. Setup pergunta uma coisa a menos quando só existe um lugar possível para a biblioteca (computador sem
    Obsidian/iCloud/Dropbox/disco externo): antes perguntava com uma única opção.
 
+9. O skill de especialistas, seguido ao pé da letra, fazia o hook bloquear o revisor 2 vezes (faltavam as
+   linhas Library: e Ambition: no brief do revisor). O texto do skill agora inclui essas linhas.
+
 **Efeito para o usuário:** o selftest volta a ser prova confiável; sem python3, o dono vê em segundos
 se está tudo bem e o que espera por ele.
 
@@ -191,6 +194,17 @@ se está tudo bem e o que espera por ele.
   library went in the final summary (it can still move later: library.sh offload).
 - Proof: check failed first, passes after; selftest 476/476.
 - Simulation: questions in setup on such a computer, gh not signed in: 3 → 2 (Workspace, Team).
+
+### Round 11 — technical lens (false blocks: skill vs hook)
+- Examined: the PreToolUse Agent gate against the specialists skill, followed literally.
+- Found: step 4 told the agent to brief the reviewer with its role card and the specialists' outputs; the hook
+  requires a `Library:` line and an `Ambition: ... | judge: ...` line for every role card, the reviewer included.
+  Reproduced: brief as written → block (Library); add Library → block (Ambition). 2 blocks per reviewer run.
+  The hook is right (the reviewer checks each verdict against the judge and each citation against the notes),
+  so the skill text was wrong; the guard is unchanged.
+- Changed: specialists SKILL.md step 4 tells to pass the same Library and Ambition lines, and why.
+- Proof: check failed first, passes after; selftest 477/477.
+- Blocks per reviewer run when the skill is followed literally: 2 → 0.
 
 ## Ideas (no evidence of friction yet; not built)
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`

@@ -32,7 +32,9 @@ use each, the checks a senior professional never skips, the evidence standard an
    Run independent specialists in parallel.
 4. **Review.** A separate subagent with `Role card: <workspace>/specialists/reviewer.md` receives the
    paths of the specialists' role cards and their full outputs (or the files they wrote), not your
-   summary; it reads each card itself. It checks every never-skip item,
+   summary, and the same `Library:` and `Ambition: <goal> | judge: <judge>` lines the specialists got
+   (the hook blocks a reviewer brief without them; the reviewer checks each verdict against that judge
+   and each citation against those notes); it reads each card itself. It checks every never-skip item,
    attacks the premises, recomputes the numbers and returns a verdict.
    In hackathon pace (`pace: fast` in the workspace's `.chief-of-staff`, set by the owner) skip this
    step for internal work (plans, code, cards, research for the team); run it on what goes outside:
