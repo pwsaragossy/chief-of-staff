@@ -485,8 +485,8 @@ select{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--line);
 </style></head><body><main>
 <div class="top"><span id="overall" class="dot"></span><h1>Chief of staff</h1><span class="grow"></span><span id="time" class="muted"></span></div>
 <div id="ws" class="muted"></div><button id="fetch" class="toggle" hidden>Fetch</button>
+<h2>Waits on you</h2><div id="cards" class="box"></div>
 <h2>Projects</h2><div id="projects" class="box"></div>
-<h2>Waiting on the owner</h2><div id="cards" class="box"></div>
 <h2>Tasks</h2><div id="tasks" class="box"></div>
 <h2>Import knowledge</h2>
 <div id="drop" class="box">Drop files here or click to choose<input id="file" type="file" multiple hidden></div>

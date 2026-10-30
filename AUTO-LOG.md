@@ -24,6 +24,9 @@
    tratado como "entregável" e exigia especialista + revisor no fim do turno. Agora é arquivo de controle,
    como TRACK.md. Economiza 1 bloqueio e 2 subagentes por handoff com decisão.
 
+7. Painel: "Waits on you" (as perguntas que esperam o dono, com a idade) agora vem primeiro, acima dos
+   projetos. Antes ficava abaixo dos mapas de trilha de todos os projetos (fora da primeira tela).
+
 **Efeito para o usuário:** o selftest volta a ser prova confiável; sem python3, o dono vê em segundos
 se está tudo bem e o que espera por ele.
 
@@ -152,6 +155,18 @@ se está tudo bem e o que espera por ele.
 - Proof: selftest 473/473.
 - Method log: second reviewer pass in a row that found real defects my own checks missed. Keeping one reviewer
   subagent per batch of user-facing changes (cost ~100k tokens, ~3 min, background while the next round runs).
+
+### Round 8 — user lens (the panel in 5 seconds)
+- Examined: panel.py rendered in Chromium (1280x800) on the simulated workspace with one launch project and one
+  question waiting on the owner.
+- Found: the first screen showed the title, a red dot, the project reasons and a 24-item track map; the question
+  itself ("Price at 9 or 19 per month? Recommend 19") was below every project's map, off the first screen.
+  "What waits on me?" took a scroll per project (1 project: ~1 screen; 5 projects: ~5 screens).
+- Changed: the "Waits on you" section (renamed from "Waiting on the owner": 3 words) comes first, above Projects.
+  No data or logic change.
+- Proof: new check (section order in the page) failed first, passes after; selftest 474/474; screenshot after
+  shows the question as the 4th line of the page.
+- Simulation: scrolls to see what waits on the owner, 1 per project → 0.
 
 ## Ideas (no evidence of friction yet; not built)
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`
