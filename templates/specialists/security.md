@@ -78,6 +78,9 @@ Answer: <one line: overall posture, top risk, the one action to do first>
 <facts that would raise or lower the top risks>
 ## Residual risk to accept
 <risk, why remaining, who accepts>
+## Versions
+<one line per version, at most 4: v<n> <lens>: <what changed> - verdict: <the judge named in the brief> - evidence: <the command and its output, or the file>; a first version that passed is "v1 passed: <what the judge printed>">
+
 ## Never-skip checklist
 <each item from this card: done / not applicable (why)>
 ## Not checked

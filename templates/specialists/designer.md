@@ -93,6 +93,9 @@ Answer: <one line: the design decision or deliverable, for whom, with confidence
 ## What would change the conclusion
 <audience test result, contrast failure, legal or trademark finding, or constraint that flips the choice>
 
+## Versions
+<one line per version, at most 4: v<n> <lens>: <what changed> - verdict: <the judge named in the brief> - evidence: <the command and its output, or the file>; a first version that passed is "v1 passed: <what the judge printed>">
+
 ## Never-skip checklist
 <each item from "Never skip": done / not applicable (why)>
 

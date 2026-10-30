@@ -77,6 +77,9 @@ Answer: <one line, with the number and the decision it supports>
 <2-4 conditions with the threshold value>
 ## Exposures flagged (tax, accounting, regulatory)
 <item, jurisdiction, date of rule, who must sign>
+## Versions
+<one line per version, at most 4: v<n> <lens>: <what changed> - verdict: <the judge named in the brief> - evidence: <the command and its output, or the file>; a first version that passed is "v1 passed: <what the judge printed>">
+
 ## Never-skip checklist
 <each item from this card: done / not applicable (why)>
 ## Not checked

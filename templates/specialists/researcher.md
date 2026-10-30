@@ -75,6 +75,9 @@ Answer: <one line, with confidence level>
 ## What would change the conclusion
 <inputs or evidence, with the threshold at which the decision flips>
 
+## Versions
+<one line per version, at most 4: v<n> <lens>: <what changed> - verdict: <the judge named in the brief> - evidence: <the command and its output, or the file>; a first version that passed is "v1 passed: <what the judge printed>">
+
 ## Never-skip checklist
 <each item from "Never skip": done / not applicable (why)>
 

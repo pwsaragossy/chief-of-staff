@@ -33,6 +33,9 @@
 9. O skill de especialistas, seguido ao pé da letra, fazia o hook bloquear o revisor 2 vezes (faltavam as
    linhas Library: e Ambition: no brief do revisor). O texto do skill agora inclui essas linhas.
 
+10. Os 8 cartões de especialista (exceto o revisor) não tinham a seção "## Versions" no formato de saída,
+    que o hook exige: o especialista que seguia o próprio cartão era bloqueado uma vez por execução. Corrigido.
+
 **Efeito para o usuário:** o selftest volta a ser prova confiável; sem python3, o dono vê em segundos
 se está tudo bem e o que espera por ele.
 
@@ -205,6 +208,20 @@ se está tudo bem e o que espera por ele.
 - Changed: specialists SKILL.md step 4 tells to pass the same Library and Ambition lines, and why.
 - Proof: check failed first, passes after; selftest 477/477.
 - Blocks per reviewer run when the skill is followed literally: 2 → 0.
+
+### Round 12 — user lens (the specialist agent as a user)
+- Examined: what a specialist subagent is told to output (its role card's "Output format") against what the
+  SubagentStop hook requires (`## Never-skip checklist`, and `## Versions` with evidence when it is not the reviewer).
+- Found: all 8 non-reviewer cards' output formats had no `## Versions`. The brief asks for it (specialists skill
+  step 3), but the card is the format the subagent copies; one that follows its card is blocked once per run
+  ("Your brief carries an Ambition line: add a '## Versions' section...") and spends a second turn.
+- Changed: each of the 8 cards' output formats has a `## Versions` block (v<n> lens - verdict - evidence; "v1 passed:").
+  Hook unchanged.
+- Proof: check failed first ("no Versions in designer.md"), passes after; the marketing card's own template fed to
+  the SubagentStop hook exits 0; selftest 478/478.
+- Blocks per specialist run that follows its card: 1 → 0.
+- Pattern noticed (rounds 11-12): the hooks' requirements live in protocol.sh and the instructions live in skills
+  and cards; they drifted apart twice. Both checks now tie them together in the selftest.
 
 ## Ideas (no evidence of friction yet; not built)
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`
