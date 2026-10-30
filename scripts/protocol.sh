@@ -156,12 +156,12 @@ $p"; fi ;;
           1:"$root/knowledge/"*) [ "$pers" = "$root/knowledge" ] || nope "the library moved to $pers; $root/knowledge is not read. Write the note in $pers/notes/ and delete $fp" ;;
           *) case $in in
           *.md\"*|*.html\"*|*.pptx\"*|*.docx\"*|*.pdf\"*) case $in in *STATE.md\"*|*"/board/"*) ;; *) ctl=; fp=$(jget file_path); r=${fp#"$root/projects/"}
-              # only a project's own TRACK.md / DELIVERY.md (projects/<slug>/FILE) is a control file; the path comes from file_path, not from the content
+              # only a project's own TRACK.md / DELIVERY.md / DECISIONS.md (projects/<slug>/FILE) is a control file; the path comes from file_path, not from the content
               # jget stops at , } or a quote: trust fp only if the raw input closes the string right after it
               case $in in *"\"file_path\":\"$fp\""*|*"\"file_path\": \"$fp\""*)
                 # the workspace's own settings and Claude's memory (an owner preference) are not deliverables
                 case $fp in */CLAUDE.md|*/.claude/*|"$root/central/"*|"$root/specialists/"*|"$root/ROUTING.md") ctl=1 ;; esac ;; *) r= ;; esac
-              case $r in */*/*|.*) ;; */TRACK.md|*/DELIVERY.md) [ "$r" != "$fp" ] && ctl=1 ;; esac
+              case $r in */*/*|.*) ;; */TRACK.md|*/DELIVERY.md|*/DECISIONS.md) [ "$r" != "$fp" ] && ctl=1 ;; esac
               [ -n "$ctl" ] || mark deliverable ;; esac ;;
         esac ;; esac ;;
     esac

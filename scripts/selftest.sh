@@ -155,12 +155,12 @@ h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/STATE.md\"}")" "$P"
 check "updating STATE.md is not a deliverable" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
-for f in TRACK.md DELIVERY.md; do
+for f in TRACK.md DELIVERY.md DECISIONS.md; do
   h "$(ev UserPromptSubmit)" "$P" >/dev/null
   h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/$f\"}")" "$P" >/dev/null
   check "updating $f is not a deliverable" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
 done
-for f in sub/DELIVERY.md NOTTRACK.md; do
+for f in sub/DELIVERY.md NOTTRACK.md sub/DECISIONS.md; do
   h "$(ev UserPromptSubmit)" "$P" >/dev/null
   h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/$f\"}")" "$P" >/dev/null
   check "$f is a real deliverable, not a control file" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'

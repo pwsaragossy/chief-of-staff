@@ -20,6 +20,10 @@
 5. Mensagens de backup do setup sem jargão: em vez de "Add a private git remote and push", diz que o
    workspace está só neste computador e para pedir ao central um backup privado no GitHub (o central sabe o comando).
 
+6. Handoff não é mais bloqueado: registrar uma decisão em DECISIONS.md (o que o handoff manda fazer) era
+   tratado como "entregável" e exigia especialista + revisor no fim do turno. Agora é arquivo de controle,
+   como TRACK.md. Economiza 1 bloqueio e 2 subagentes por handoff com decisão.
+
 **Efeito para o usuário:** o selftest volta a ser prova confiável; sem python3, o dono vê em segundos
 se está tudo bem e o que espera por ele.
 
@@ -122,6 +126,20 @@ se está tudo bem e o que espera por ele.
   CLAUDE.md gets the one command for that (private repo only). Tests lock the new wording and forbid "git remote".
 - Proof: 2 tightened checks failed first, pass after; selftest 471/471.
 - Simulation after: "don't know what to do" moments in setup output 1 → 0.
+
+### Round 7 — technical lens (gates without reason; selftest speed)
+- Selftest speed examined: per-check timing (131 s total). The 8 slowest checks (24 s) deliberately wait for time
+  budgets (cos_limit, gate and lookup cut-offs, lock waits); the rest is spread ~1 s each. No cheap win: no change.
+- Gate examined: what marks a turn "substantive" (PostToolUse Write/Edit on .md/.html/.pptx/.docx/.pdf).
+- Found: a project's DECISIONS.md was not a control file. The handoff skill (step 3) and the project CLAUDE.md tell
+  every session to append decisions there, so a plain handoff (STATE.md + DECISIONS.md) was blocked at Stop:
+  "This turn produced a deliverable ... 0 specialist(s) and 0 reviewer(s)". Reproduced in the simulation (rc=2).
+  Cost per handoff with a decision: 1 block + 2 subagent runs, for a one-line log entry.
+- Changed: projects/<slug>/DECISIONS.md is a control file, exactly like TRACK.md and DELIVERY.md (same path rule:
+  only the project's own file, not sub/DECISIONS.md, not a cut path).
+- Proof: "updating DECISIONS.md is not a deliverable" failed first; "sub/DECISIONS.md is a real deliverable" added;
+  selftest 473/473; simulation handoff Stop rc 2 → 0.
+- Blocks per handoff with a decision: 1 → 0.
 
 ## Ideas (no evidence of friction yet; not built)
 - A CI job on GitHub Actions (macos-latest runs /bin/sh = bash 3.2; ubuntu dash) running `sh scripts/selftest.sh`
