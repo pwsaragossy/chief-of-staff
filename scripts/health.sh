@@ -25,12 +25,23 @@
 . "$(dirname "$0")/lib.sh"
 
 if [ "${1:-}" = text ]; then shift
-  cos_root "${1:-$PWD}" >/dev/null || { echo "health.sh: no chief-of-staff workspace at ${1:-$PWD}" >&2; exit 2; }
-  sh "$0" "$@" | awk -F '\037' '{ print $1 ": " $2 " - " $3 } END { if (!NR) print "No projects yet." }'
-  sh "$0" cards "$@" | awk -F '\037' 'function ago(m) { return m < 60 ? m " min" : m < 1440 ? int(m / 60) " h " m % 60 " min" : int(m / 1440) " d" }
-    $1 == "C" && $4 == "waiting-owner" { n = split($11, q, "\036")
-      for (i = 1; i <= n; i++) { if (!w++) print "Waits on you:"; print "- " $2 " (" $3 ($5 != "" ? ", " $5 : "") ", " ago($7) "): " q[i] } }
-    END { if (!w) print "Nothing waits on you." }'
+  r=$(cos_root "${1:-$PWD}") || { echo "health.sh: no chief-of-staff workspace at ${1:-$PWD}" >&2; exit 2; }
+  US=$(printf '\037'); me=; cos_shared "$r" && me=$(cos_member "$r")
+  # a verdict first, then one line per project, then this person's questions (a teammate's central asks theirs)
+  { sh "$0" "$@"; sh "$0" cards "$@"; } | me=$me awk -F "$US" '
+    function ago(m) { return m < 60 ? m " min" : m < 1440 ? int(m / 60) " h " m % 60 " min" : int(m / 1440) " d" }
+    $1 != "C" { P[++np] = $1 ": " $2 " - " $3; c[$2]++; next }
+    $4 != "waiting-owner" || (ENVIRON["me"] != "" && $5 != "" && $5 != ENVIRON["me"]) { next }
+    { n = split($11, q, "\036"); split($14, a, "\036")
+      if (!n) Q[++nq] = "- " $2 " (" $3 "): open the card"
+      for (i = 1; i <= n; i++) Q[++nq] = "- " $2 " (" $3 "): " q[i] " - asked " ago(a[i] != "" ? a[i] : $7) " ago" }
+    END { s = (c["red"] ? c["red"] " red" : "") (c["red"] && c["yellow"] ? ", " : "") (c["yellow"] ? c["yellow"] " yellow" : "")
+      if (!nq && s == "") print "All fine: nothing waits on you."
+      else print (nq ? nq " question" (nq > 1 ? "s wait" : " waits") " on you." : "Nothing waits on you.") (s != "" ? " Projects: " s "." : "")
+      if (!np) print "No projects yet."
+      for (i = 1; i <= np; i++) print P[i]
+      if (nq) print "Waits on you:"
+      for (i = 1; i <= nq; i++) print Q[i] }'
   exit 0
 fi
 mode=projects; [ "${1:-}" = cards ] && { mode=cards; shift; }

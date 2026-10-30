@@ -726,11 +726,19 @@ fm_set "$G/TRACK.md" deadline "$(fut 14400)"
 check "a deadline under 6 h is yellow" 'H gamma | grep -Eq "^yellow: deadline in (3 h 59|4 h 0) min"'
 check "health gives the panel the deadline as a number" 'sh "$here/health.sh" "$W" | awk -F "$(printf "\037")" "\$1 == \"gamma\" { print \$12 }" | grep -q "^[0-9][0-9]*$"'
 check "health gives every reason, red ones first, each tagged with its color" 'sh "$here/health.sh" "$W" | awk -F "$(printf "\037")" "\$1 == \"gamma\" { print \$17 }" | tr "\036" "\n" | awk "!/^(red|yellow) / { exit 1 } /^yellow / { y = 1 } /^red / && y { exit 1 } END { exit NR < 1 }"'
-check "health.sh text answers in plain lines: each project's color and reason, then what waits on the owner" '( d=$(mktemp -d); mkdir -p "$d/board" "$d/projects/p"; touch "$d/.chief-of-staff"; cp "$here/../templates/project/STATE.md" "$d/projects/p/STATE.md"; fm_set "$d/projects/p/STATE.md" updated "$(date "+%F %H:%M")"
-printf -- "---\nstatus: waiting-owner\nproject: p\n---\n## For the owner to decide\n- (asked %s %s) Price at 9 or 19? Recommend 19\n" "$(date "+%F %H:%M")" "$(date +%z)" > "$d/board/Card.md"
+check "health.sh text answers in plain lines: a verdict first, each project's color and reason, then only this person's questions with their own age" '( d=$(mktemp -d); mkdir -p "$d/board" "$d/projects/p"; printf "shared: yes\n" > "$d/.chief-of-staff"; git -C "$d" init -q; git -C "$d" config cos.member Bo
+cp "$here/../templates/project/STATE.md" "$d/projects/p/STATE.md"; fm_set "$d/projects/p/STATE.md" updated "$(date "+%F %H:%M")"; z=$(date +%z); o=$(date -d "-150 min" "+%F %H:%M" 2>/dev/null || date -v-150M "+%F %H:%M")
+printf -- "---\nstatus: waiting-owner\nproject: p\nmember: Bo\n---\n## For the owner to decide\n- (asked %s %s) Price at 9 or 19? Recommend 19\n- (asked %s %s) Name it Lex?\n" "$o" "$z" "$(date "+%F %H:%M")" "$z" > "$d/board/Card.md"
+printf -- "---\nstatus: waiting-owner\nproject: p\nmember: Ana\n---\n## For the owner to decide\n- Ana only\n" > "$d/board/Other.md"
+printf -- "---\nstatus: waiting-owner\nproject: p\nmember: Bo\n---\nno questions section\n" > "$d/board/Bare.md"
 t=$(sh "$here/health.sh" text "$d"); rm -rf "$d"; printf "%s\n" "$t"
 printf "%s" "$t" | tr -d "\n" | LC_ALL=C grep -q "[[:cntrl:]]" && exit 1
-printf "%s\n" "$t" | grep -q "^p: yellow - waiting on the owner for 0 min: Card$" && printf "%s\n" "$t" | grep -q "^Waits on you:" && printf "%s\n" "$t" | grep -q "^- Card (p, 0 min): Price at 9 or 19? Recommend 19$" )'
+[ "$(printf "%s\n" "$t" | head -n 1)" = "3 questions wait on you. Projects: 1 red." ] &&
+printf "%s\n" "$t" | grep -q "^p: red - a question has waited on the owner for 2 h 30 min" &&
+printf "%s\n" "$t" | grep -qx "Waits on you:" && printf "%s\n" "$t" | grep -qx -- "- Card (p): Price at 9 or 19? Recommend 19 - asked 2 h 30 min ago" &&
+printf "%s\n" "$t" | grep -qx -- "- Card (p): Name it Lex? - asked 0 min ago" && printf "%s\n" "$t" | grep -qx -- "- Bare (p): open the card" && ! printf "%s\n" "$t" | grep -q "Ana only" )'
+check "health.sh text says all is fine in its first line" '( d=$(mktemp -d); mkdir -p "$d/projects/p"; touch "$d/.chief-of-staff"; cp "$here/../templates/project/STATE.md" "$d/projects/p/STATE.md"; fm_set "$d/projects/p/STATE.md" updated "$(date "+%F %H:%M")"
+t=$(sh "$here/health.sh" text "$d"); rm -rf "$d"; [ "$(printf "%s\n" "$t" | head -n 1)" = "All fine: nothing waits on you." ] && printf "%s\n" "$t" | grep -qx "p: green - on track" )'
 check "health gives each question to the owner its own age, empty when unstamped" '( d=$(mktemp -d); mkdir -p "$d/board"; touch "$d/.chief-of-staff"; z=$(date +%z); o=$(date -d "-90 min" "+%F %H:%M" 2>/dev/null || date -v-90M "+%F %H:%M")
 printf -- "---\nstatus: waiting-owner\nproject: p\n---\n## For the owner to decide\n- (asked %s %s) old one\n- (asked %s %s) new one\n- no stamp\n" "$o" "$z" "$(date "+%F %H:%M")" "$z" > "$d/board/c.md"
 a=$(sh "$here/health.sh" cards "$d" | awk -F "$(printf "\037")" "{ print \$14 }" | tr "\036" ,); rm -rf "$d"; case $a in 9[0-2],[01],|8[89],[01],) exit 0 ;; *) echo "ages: $a"; exit 1 ;; esac )'

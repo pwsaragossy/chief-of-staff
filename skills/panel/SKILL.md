@@ -18,4 +18,4 @@ set in your shell). It needs `python3` (standard library only) and runs on this 
    `knowledge/inbox/` and central processes them with the `knowledge` skill.
 
 No `python3`: say so in one line, run `sh "<plugin>/scripts/health.sh" text "<workspace>"` and show
-its lines as they are: each project's color and reason, then what waits on the owner.
+its lines as they are: a verdict, each project's color and reason, then the owner's questions.

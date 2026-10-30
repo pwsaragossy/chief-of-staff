@@ -7,7 +7,8 @@
    sempre verdadeiro para root. Agora checam os bits de permissão. Nenhuma regra de segurança mudou.
 
 2. `health.sh text`: sem python3 o painel não abre; antes o texto de reserva saía ilegível
-   (`newsletter^_green^_...`). Agora: uma linha por projeto (cor e motivo) e "Waits on you:" com cada pergunta.
+   (`newsletter^_green^_...`). Agora: primeira linha é o veredito ("All fine" ou "3 questions wait on you.
+   Projects: 1 red."), depois uma linha por projeto e só as perguntas desta pessoa, cada uma com a própria idade.
 
 **Efeito para o usuário:** o selftest volta a ser prova confiável; sem python3, o dono vê em segundos
 se está tudo bem e o que espera por ele.
@@ -54,5 +55,18 @@ se está tudo bem e o que espera por ele.
 - Hook times (this container, 10 runs avg, empty library): UserPromptSubmit 68 ms, PreToolUse Bash 68 ms,
   PostToolUse Read 6 ms, PostToolUse Write 43 ms, Stop 132 ms, track check 48 ms, health 170 ms, briefing 155 ms.
   No hook is near its 5 s budget on Linux ext4; slowness work should target WSL/macOS paths, not this box.
+
+### Round 2b — reviewer findings on health.sh text (specialists skill, reviewer role card)
+- Reviewer verdict: fix needed. Real bugs: (1) in a shared workspace "Waits on you" listed teammates'
+  questions (briefing.sh filters by member, text mode did not); (2) every question showed the card's oldest
+  wait, not its own age (field 14 ignored); (3) a waiting card with no questions section vanished;
+  (4) no first-line verdict, so "is everything fine?" still needed a scan.
+- Changed: verdict first line; member filter like briefing.sh; per-question age "asked N ago"; bare card shows
+  "open the card"; `-F "$US"` like the rest of the repo. Tests extended (shared + 2 ages + bare + other member;
+  and an all-green case); they failed first, pass now. Full selftest 469/469.
+- Method note (skills used on this work): the ambition judge I picked (one card, one question at 0 min) was one
+  my v1 already passed: exactly the failure the ambition skill warns about ("a worker left to pick its own judge
+  picks one its first draft already passes"). The independent reviewer caught it. Lesson kept: for a change I
+  judge myself, the selftest case must include the shared-workspace and multi-item variants.
 
 ## Ideas (no evidence of friction yet; not built)
