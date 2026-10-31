@@ -46,6 +46,13 @@
 14. O central não relê mais todos os STATE.md e cartões a cada sessão: parte do briefing, que já traz isso.
     Com 5 projetos e 5 cartões, ~10 leituras de arquivo a menos por sessão do central.
 
+15. (Pedido seu.) O plugin aprova sozinho os próprios comandos de leitura — `library.sh search` e afins,
+    `track.sh check/brief/status/items` — sem pedir OK. Só uma chamada, no caminho do próprio plugin, sem
+    nenhuma sintaxe de shell, com caminhos dentro do workspace; o resto pede OK como antes. Suas regras de
+    "deny"/"ask" do Claude Code continuam valendo por cima. A revisão adversária disso achou um problema que já
+    existia no main: o git do plugin podia ler a config de uma pasta que um colega commitou imitando um
+    repositório. Corrigido para todos os scripts.
+
 **Efeito para o usuário:** menos bloqueios sem motivo (handoff, revisor, especialista: até 4 por ciclo de
 trabalho), menos perguntas no setup, o painel e o texto respondem "está tudo bem?" e "o que espera por mim?"
 na primeira tela, e mensagens que dizem o que fazer. Nenhuma regra de segurança foi afrouxada: todo bloqueio
@@ -340,6 +347,28 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
 - Found: every promise is kept by the code. No change.
 - Pace note: rounds 13-14, 21-22 found nothing with evidence by reading; the next rounds space out (20 min) and
   favour measurement over reading.
+
+### Round 23 — owner request: auto-approve the plugin's own read-only commands
+- Asked by the user ("do it") after round 21's idea.
+- Docs checked first (claude-code-guide): a hook "allow" only skips the prompt; settings deny/ask rules still win,
+  plan mode is not bypassed, `--disallowedTools Bash` (the dispatcher) removes the tool, and any hook's deny wins.
+- v1 (1b696a0, pushed with the review pending): allow for one `sh <plugin>/library.sh|track.sh <read-only sub>`.
+- Adversarial review of v1 — fix needed: (1) critical, already on main: in a shared workspace `track.sh check`
+  runs `git ls-files` on any folder; a teammate can commit a folder laid out like a bare repository whose config git
+  would read (the reviewer reports `core.fsmonitor` code ran; I could not reproduce the code run on git 2.43, but
+  the discovery is real); the hooks already run track.sh check by themselves; (2) the hook read the last
+  `"command"` key of the input; (3) `--lib off` printed an ask and an allow; (4) path arguments outside the
+  workspace were approved; (6) the plugin path was not checked for quotes.
+- Changed (v2): lib.sh makes every git the scripts run refuse implicit bare repositories and ignore
+  core.fsmonitor (`GIT_CONFIG_COUNT`: safe.bareRepository=explicit, core.fsmonitor=, git 2.31+/2.38+; older git
+  ignores them); the allow is checked before the ask branches (one answer only), needs exactly one "command" key,
+  drops --lib, rejects `..` and absolute paths outside the workspace (arguments read with their quotes), and needs a
+  plugin path with no quote, $, ` or \.
+- Proof: 7 allowed and 30 near-miss inputs; a check that the plugin's git refuses a committed bare-layout folder
+  (failed first); selftest 489/489 under dash, bash --posix, and a TMPDIR with a space.
+- Hook time: PreToolUse Bash for an ordinary command 68 → 85 ms (10-run average); an allowed command 69 ms.
+- OK requests per research turn in default permission mode: 1 per library search and per track check → 0.
+- A second adversarial review runs on v2 before this is called done.
 
 ## Ideas (no evidence of friction yet; not built)
 - Fewer permission prompts for the plugin's own read-only commands. In default permission mode every

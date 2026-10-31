@@ -1,5 +1,14 @@
 # Shared helpers. Sourced by the other scripts; POSIX sh, no GNU- or macOS-only flags.
 
+# Every git the scripts run reads only real repositories: a folder a teammate committed that looks like a bare
+# repository (HEAD, config, objects/, refs/) is never discovered as one (its config could run code), and no
+# repository's core.fsmonitor runs. Passed as command-line config (GIT_CONFIG_COUNT, git 2.31+), added after any
+# the caller set
+_n=${GIT_CONFIG_COUNT:-0}; case $_n in ''|*[!0-9]*) _n=0 ;; esac
+eval "GIT_CONFIG_KEY_$_n=safe.bareRepository GIT_CONFIG_VALUE_$_n=explicit GIT_CONFIG_KEY_$((_n + 1))=core.fsmonitor GIT_CONFIG_VALUE_$((_n + 1))="
+eval "export GIT_CONFIG_KEY_$_n GIT_CONFIG_VALUE_$_n GIT_CONFIG_KEY_$((_n + 1)) GIT_CONFIG_VALUE_$((_n + 1))"
+GIT_CONFIG_COUNT=$((_n + 2)); export GIT_CONFIG_COUNT
+
 # Print the workspace root (the nearest folder holding a .chief-of-staff marker) or fail.
 cos_root() {
   d=${1:-$PWD}

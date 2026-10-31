@@ -280,6 +280,30 @@ $p"; fi ;;
                 grep -Eq '[^a-z0-9_.-](tee|mv|cp|rm|perl[0-9.]*|python[0-9.]*|ln|dd|install|rsync|touch|truncate|chmod|chflags|chown|chgrp|xattr|unlink|shred|tar|unzip|gunzip|patch|ditto|sponge|node|deno|bun|ruby|php|lua|swift|osascript|git|ed|ex)([^a-z0-9_.-]|$)' && blk=1
             fi
             if [ -z "$blk" ]; then
+              # the plugin's own read-only commands, the ones the hooks already run by themselves, skip the permission
+              # prompt (not the user's decision): one call of library.sh or track.sh at this plugin's own path, a
+              # read-only subcommand, no shell syntax, and paths only inside the workspace. Anything else goes on to
+              # the checks below and keeps the normal prompt; Claude Code's deny and ask rules still apply over this
+              ro=; [ "$(printf '%s' "$in" | grep -o '"command" *:' | wc -l | tr -d ' ')" = 1 ] &&
+                ro=$(printf '%s' "$in" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | head -n 1)
+              case $ro in *\\[!\"]*|*\\) ro= ;; esac   # a JSON escape other than \" (\n, \t, \\, \u): no
+              ro=$(printf '%s' "$ro" | sed 's/\\"/"/g'); H=$(cd "$(dirname "$0")" && pwd); r=
+              case $H in *[\"\'\$\`\\]*) ro= ;; esac
+              for s in library track; do for q in '"' "'" ''; do
+                [ -z "$q" ] && case $H in *[!A-Za-z0-9_./-]*) continue ;; esac
+                case $ro in "sh $q$H/$s.sh$q "*) r="$s ${ro#"sh $q$H/$s.sh$q "}" ;; esac; done; done
+              if [ -n "$r" ] && ! printf '%s' "$r" | LC_ALL=C grep -q '[][$`\;&|<>(){}*?!#~^[:cntrl:]]' &&
+                printf '%s\n' "$r" | grep -Eqx 'library (search|similar|check|gate|doctor|backlinks|brief|where|libs)( .*)?|track (check|brief|status|items) .+'; then
+                # each argument as the shell reads it (quotes join words); an unbalanced quote: no
+                out=1; ws=$(printf '%s\n' "$r" | awk '{ q = ""; w = ""; for (i = 1; i <= length($0); i++) { c = substr($0, i, 1)
+                    if (q == "" && (c == "\"" || c == "\047")) { q = c; continue } if (c == q) { q = ""; continue }
+                    if (q == "" && c == " ") { if (w != "") print w; w = ""; continue } w = w c }
+                  if (q != "") exit 1; if (w != "") print w }') || out=
+                while IFS= read -r w; do case $w in *..*) out= ;; /*) case $w in "$root"/*) ;; *) out= ;; esac ;; esac; done <<WS
+$ws
+WS
+                [ -n "$out" ] && { echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"chief-of-staff: its own read-only command"}}'; exit 0; }
+              fi
               # ponytail: a word match, not a shell parser. Quotes, backslashes and tabs are dropped first, so u''se or
               # "join" count, and a script name anywhere in a word counts (a renamed copy, my-library.sh, too)
               nq=$(printf '%s' "$cq" | tr -d "\"'\\\\")
@@ -340,20 +364,6 @@ $p"; fi ;;
                   hitg=$(printf '%s\n' "$gt" | while IFS= read -r t; do printf '%s\n' "$dv" | grep -qiF -- "$t" && printf '%s, ' "$t"; done | tr -d '"\\\000-\037')
                   [ -n "$hitg" ] && echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this push changes '"${hitg%, }"', guarded by a decision in DECISIONS.md. Approve only if that decision still holds or was replaced by a new line."}}'
                 fi
-              fi
-              # the plugin's own read-only commands, the ones the hooks already run by themselves, skip the permission
-              # prompt (not the user's decision): one call of library.sh or track.sh at this plugin's own path, a
-              # read-only subcommand, no shell syntax in the arguments. Anything else keeps the normal prompt, and
-              # Claude Code's deny and ask rules still apply over this allow
-              ro=$(printf '%s' "$in" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | head -n 1)
-              case $ro in *\\[!\"]*|*\\) ro= ;; esac   # a JSON escape other than \" (\n, \t, \\, \u): no
-              ro=$(printf '%s' "$ro" | sed 's/\\"/"/g'); H=$(cd "$(dirname "$0")" && pwd); r=
-              for s in library track; do for q in '"' "'" ''; do
-                [ -z "$q" ] && case $H in *[!A-Za-z0-9_./-]*) continue ;; esac
-                case $ro in "sh $q$H/$s.sh$q "*) r="$s ${ro#"sh $q$H/$s.sh$q "}" ;; esac; done; done
-              if [ -n "$r" ] && ! printf '%s' "$r" | LC_ALL=C grep -q '[][$`\\;&|<>(){}*?!#~^[:cntrl:]]' &&
-                printf '%s\n' "$r" | grep -Eqx 'library (--lib [a-z0-9-]+ )?(search|similar|check|gate|doctor|backlinks|brief|where|libs)( .*)?|track (check|brief|status|items) .+'; then
-                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"chief-of-staff: its own read-only command"}}'
               fi
               exit 0
             fi ;;
