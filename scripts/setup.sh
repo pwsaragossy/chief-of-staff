@@ -77,6 +77,8 @@ if [ "$cmd" = join ]; then
   git -C "$W" config cos.member "$member"
   git -C "$W" config user.name >/dev/null || git -C "$W" config user.name "$member"
   git -C "$W" config user.email >/dev/null || git -C "$W" config user.email "chief-of-staff@localhost"
+  # a workspace made before the Inbox existed gets one; the next turn end shares it
+  [ -f "$W/board/Inbox.md" ] || { mkdir -p "$W/board" && sed "s/{{DATE}}/$(date +%F)/g" "$here/../templates/board/Inbox.md" > "$W/board/Inbox.md"; }
   echo "Workspace: $W (shared, you are $member)"
   echo "Library: $W/knowledge (the team's)"
   exit 0
@@ -92,6 +94,7 @@ mkdir -p "$W/central" "$W/board" "$W/projects" "$W/knowledge/inbox" "$W/knowledg
   die "cannot create $W"
 for d in board projects knowledge/inbox knowledge/notes; do : > "$W/$d/.gitkeep"; done
 cp "$T/central/CLAUDE.md" "$W/central/CLAUDE.md"
+sed "s/{{DATE}}/$(date +%F)/g" "$T/board/Inbox.md" > "$W/board/Inbox.md"
 cp "$T/ROUTING.md" "$W/ROUTING.md"
 cp "$T"/specialists/*.md "$W/specialists/"
 cp "$T/knowledge/note.md" "$W/knowledge/templates/note.md"

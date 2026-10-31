@@ -67,6 +67,13 @@ bigcards() { # cards too long to read whole; $1 = project slug filter (empty = a
     [ "$k" = C ] && [ -n "$big" ] && { [ -z "$1" ] || [ "$p" = "$1" ]; } && out "$n ($big)"
   done | head -n 3 | awk 'NR == 1 { printf "Cards too long to read whole (keep the open part, move the rest to board/archive/): " } { printf "%s%s", (NR > 1 ? "; " : ""), $0 } END { if (NR) print "" }'
 }
+grabs() { # open cards' "Unassigned: <task>" lines under ## Tasks: work any member may take (5 shown, then a count)
+  for c in "$root"/board/*.md; do [ -f "$c" ] || continue
+    case $(fm "$c" status) in done|closed|cancelled|dropped) continue ;; esac
+    n=$(basename "$c" .md); LC_ALL=C awk -v n="$n" '{ sub(/\r$/, "") } /^## / { on = (tolower($0) == "## tasks"); next }
+      on && tolower($0) ~ /^[-*] +unassigned *:/ { t = $0; sub(/^[-*] +[^:]*: */, "", t); gsub(/[\001-\037`]/, "", t); if (t != "") print "- " substr(t, 1, 160) " · " n }' "$c"
+  done | awk 'NR <= 5 { print } END { if (NR > 5) print "- and " NR - 5 " more on the panel" }'
+}
 syncline() {
   cos_shared "$root" && out "Shared workspace: last sync $(head -n 1 "$root/.git/cos-sync" 2>/dev/null | tr -d '\000-\037' | cut -c1-120 | grep . || echo never)."
   cos_shared "$root" && [ -n "$lag" ] && out "Teammate data as of sync $(head -n 1 "$root/.git/cos-sync" 2>/dev/null | cut -c12-16 | tr -cd '0-9:' | grep . || echo never): the pull still runs; read the card again before acting on a teammate's work."
@@ -104,6 +111,7 @@ reverify() {
       w=$(waiting ""); [ -n "$cardslow" ] && w="- the board was not read in time (slow disk): read board/ before asking anything"; out "${w:-- none}"
       cos_shared "$root" && if [ -n "$me" ]; then out "Shared workspace: you are '$me'. Cards of other members are on the panel; their own central asks them."
         else out "Shared workspace, but this computer has no member name: set it with git -C \"$root\" config cos.member <name>. Until then every card is listed here."; fi
+      gb=$(grabs); [ -n "$gb" ] && { out "Up for grabs (anyone may take one: write your name in place of Unassigned):"; out "$gb"; }
       dd=$(due7); [ -n "$dd" ] && { out "Due in the next 7 days:"; out "$dd"; }
       bigcards ""
       out "Projects:"
@@ -122,6 +130,7 @@ reverify() {
       p=${rel#projects/}; p=${p%%/*}
       s="$root/projects/$p/STATE.md"
       out "This session is the agent of project '$p'. It does not ask the owner; questions go to the project card with status waiting-owner."
+      out "A task that comes up and is not this job: one line in board/Inbox.md, Unassigned: <task> (from <who>, <date>)."
       if [ -f "$s" ]; then
         out "STATE.md: status $(fm "$s" status), updated $(fm "$s" updated), dispatch $(fm "$s" dispatch)."
         out "Next action recorded: $(fm "$s" next)"

@@ -21,6 +21,17 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
   undone (push, publish, delete, spend), ask whoever gave it, in one plain sentence, before that
   step. Do the reversible part first.
 - **Commit each finished step** with only the files you touched; do not wait for the end.
+- **A new task never stays in the chat.** A task that comes up mid-work and is not this job (a bug you
+  found, a teammate's request, a missing piece) becomes one line under `## Tasks` in `../../board/Inbox.md`:
+  `Unassigned: <task> (from <who>, <date>)`. Then carry on with this job.
+- **Any member may take a task.** In a shared workspace, whoever has time takes an `Unassigned` line (on the
+  Inbox or on any card) by writing their name in its place, and does it in the project's session; nobody
+  has to assign it. Inside a task the technical choices are the taker's own:
+  only scope, money, publishing and the delivery OK go to the project's member, as a question on the card.
+- **Every file lives inside this project folder** (subfolders are fine): the deliverable, its sources, assets,
+  exports. Never Downloads, Desktop or a temp folder. The turn end shares the folder with the team and git keeps
+  every version; read a teammate's file before you change it. A file over 20 MB or a repository of its own stays
+  off the team repo (the panel lists it under "Kept on this computer"): share it by a link kept in the project.
 - **Go past the literal request.** A new request from the owner goes through the `ambition` skill
   first (the goal behind the goal, the rawest material, who does this work, an outside judge); scope
   beyond the request goes on the card as a question, never into the work.

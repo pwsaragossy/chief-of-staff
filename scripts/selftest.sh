@@ -830,6 +830,18 @@ check "panel lists ## Tasks lines by person, from open cards only" '( d=$(mktemp
 printf -- "---\nstatus: in-progress\nproject: p\n---\n## Tasks\n- (template line)\n- Leo, now: deploy by 13:00\n- Vhendala: video cut\n- check the page\n## For the owner to decide\n- Pedro: title A or B?\n" > "$d/board/a.md"
 printf -- "---\nstatus: done\nproject: p\n---\n## Tasks\n- Leo: old task\n" > "$d/board/b.md"
 python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; g = {x[\"who\"]: [i[\"task\"] for i in x[\"items\"]] for x in panel.tasks(sys.argv[2])}; assert g == {\"Leo\": [\"deploy by 13:00\"], \"Vhendala\": [\"video cut\"], \"Unassigned\": [\"check the page\"]}, g" "$here" "$d"; r=$?; rm -rf "$d"; exit $r )'
+check "panel lists a project.s files with last author, age and versions, and the files kept off the team repo" '( d=$(mktemp -d); g() { git -C "$d" -c user.email=t@t "$@" >/dev/null 2>&1; }; touch "$d/.chief-of-staff"; git init -q "$d"
+mkdir -p "$d/projects/p/src"; printf s > "$d/projects/p/STATE.md"; printf v1 > "$d/projects/p/deck.pdf"; printf x > "$d/projects/p/src/a.js"; printf "<b>x</b>" > "$d/projects/p/<b>.md"
+g -c user.name=Ana add -A; g -c user.name=Ana commit -m one; printf v2 > "$d/projects/p/deck.pdf"; g -c user.name=Leo add -A; g -c user.name=Leo commit -m two; printf new > "$d/projects/p/notes.md"
+printf "projects/p/demo.mov is over 20 MB, too big for the team repo: share it by a link\n" > "$d/.git/cos-held"
+python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel
+f = {x[\"path\"]: x for x in panel.files(sys.argv[2], sys.argv[2], \"p\")}
+assert set(f) == {\"deck.pdf\", \"src/a.js\", \"<b>.md\", \"notes.md\"}, f
+assert f[\"deck.pdf\"][\"who\"] == \"Leo\" and f[\"deck.pdf\"][\"versions\"] == 2 and f[\"deck.pdf\"][\"age\"] >= 0, f[\"deck.pdf\"]
+assert f[\"src/a.js\"][\"versions\"] == 1 and f[\"notes.md\"][\"versions\"] == 0 and f[\"notes.md\"][\"who\"] == \"\", f
+assert panel.held(sys.argv[2]) == [\"projects/p/demo.mov is over 20 MB, too big for the team repo: share it by a link\"]
+assert \"innerHTML\" not in panel.PAGE" "$here" "$d"; r=$?; rm -rf "$d"; exit $r )'
+check "the templates tell agents where new tasks go and that any member may take one" 'grep -q "board/Inbox.md" "$here/../templates/project/CLAUDE.md" && grep -q "Unassigned: " "$here/../templates/project/CLAUDE.md" && grep -q "only scope, money, publishing and the delivery OK go to the project.s member" "$here/../templates/project/CLAUDE.md" && grep -q "Up for grabs" "$here/../templates/central/CLAUDE.md" && grep -q "inside this project folder" "$here/../templates/project/CLAUDE.md"'
 check "panel shows a shared workspace as GitHub has it, with this computer's owner OKs, without touching the local folder" '( d=$(mktemp -d); g() { git -c user.email=t@t -c user.name=t "$@" >/dev/null 2>&1; }
 git init -q --bare "$d/o.git"; g clone "$d/o.git" "$d/a"; mkdir -p "$d/a/central" "$d/a/board"; printf "chief-of-staff workspace v0.1\nshared: yes\n" > "$d/a/.chief-of-staff"; mkdir -p "$d/a/projects/p"; touch "$d/a/central/.gitkeep" "$d/a/projects/p/STATE.md" "$d/victim"; ln -s "$d/victim" "$d/a/projects/p/.owner-ok"
 g -C "$d/a" add -A; g -C "$d/a" commit -m seed; g -C "$d/a" push origin HEAD; g clone "$d/o.git" "$d/ws"; g clone "$d/o.git" "$d/b"
@@ -923,6 +935,10 @@ check "a shared workspace needs the member name" '! sh "$here/setup.sh" create "
 check "a shared workspace is created and pushed to the team repo" 'sh "$here/setup.sh" create "$SW/a" --share "$SW/team.git" --member Ana | grep -q "^Shared: pushed" && grep -qx "shared: yes" "$SW/a/.chief-of-staff" && git -C "$SW/team.git" ls-tree -r --name-only HEAD | grep -qx board/.gitkeep'
 check "a repo that is not a shared workspace cannot be joined, and leaves nothing" '! sh "$here/setup.sh" join "$SW/x" "$SW/plain.git" --member Bia 2>/dev/null && [ ! -e "$SW/x" ] && ! ls "$SW" | grep -q cos-join'
 check "a teammate joins with their own name" 'sh "$here/setup.sh" join "$SW/b" "$SW/team.git" --member Bia | grep -q "you are Bia" && [ "$(git -C "$SW/b" config cos.member)" = Bia ] && [ ! -w "$SW/b/.chief-of-staff" ]'
+check "every workspace starts with an Inbox card that no member claims" '[ -f "$SW/a/board/Inbox.md" ] && grep -qx "member: team" "$SW/a/board/Inbox.md" && grep -q "^## Tasks" "$SW/a/board/Inbox.md" && [ -f "$SW/b/board/Inbox.md" ]'
+printf -- '---\nstatus: in-progress\nproject: pa\nmember: Ana\n---\n# Pa work\n\n## Tasks\n- (one line per task)\n- Unassigned: fix the login timeout (from Ana, 2026-10-31)\n- Ana: deploy the demo\n' > "$SW/b/board/Pa work.md"
+check "a member.s central lists the unassigned tasks anyone may take, not the assigned ones" 'o=$(b "$SW/b/central"); printf "%s" "$o" | grep -q "^Up for grabs (anyone may take" && printf "%s" "$o" | grep -q "fix the login timeout (from Ana, 2026-10-31) · Pa work" && ! printf "%s" "$o" | grep -q "deploy the demo"'
+rm -f "$SW/b/board/Pa work.md"
 check "a shared workspace takes no other library" 'CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/library.sh" join "$SW/plain.git" 2>&1 | grep -q "shared with the team"'
 turn() { hk "$(ev UserPromptSubmit)" "$1" >/dev/null 2>&1; hk "$(ev Stop ",\"stop_hook_active\":false")" "$1" 2>&1; }
 inteam() { git -C "$SW/team.git" ls-tree -r --name-only HEAD | grep -qxF "$1"; }

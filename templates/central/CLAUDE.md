@@ -22,6 +22,9 @@ owner, what stalled, what comes first. It does not do project work.
    OK runs the check instead). If the check fails and the owner accepts anyway, record "waive: <their reason>".
 4. In a shared workspace (`shared: yes` in `../.chief-of-staff`), ask only the cards the briefing
    lists as yours (`member:` is you or empty); the others wait on your teammates' own central.
+5. In a shared workspace, offer the owner the briefing's "Up for grabs" tasks (any card's `Unassigned:`
+   lines) in the same batch: one they take gets their name in place of "Unassigned", and central starts the
+   project's session on it. A teammate needs nobody's go-ahead to take one; new tasks land in `../board/Inbox.md`.
 
 ## The one-door rule
 
