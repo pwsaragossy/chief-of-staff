@@ -472,6 +472,14 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
 - Proof: new checks failed first and pass; selftest 502/502 under dash, bash --posix and a spaced TMPDIR.
 - Round 23 closed: the auto-allow is done (seven reviews; the last one passed against main).
 
+### Round 24 — technical lens (after round 23) — no change
+- The scheduled wakeup for 07:25 did not fire (the session sat idle ~9 h); the owner noticed ("nao comecou") and the
+  loop resumed at 16:25 UTC.
+- Selftest 502/502. Hook times now (10-run average, empty library): UserPromptSubmit 79 ms, PreToolUse Bash 89 ms,
+  PostToolUse Read 7 ms, PostToolUse Write 51 ms, Stop 92 ms. Round 2 baseline: 68 / 68 / 6 / 43 / 132 ms. The
+  Bash guard costs ~20 ms more for the auto-allow and git protections; all far under the 5 s limit.
+- Found nothing with evidence to change.
+
 ## Ideas (no evidence of friction yet; not built)
 - Fewer permission prompts for the plugin's own read-only commands. In default permission mode every
   `sh .../library.sh search <terms>` (which the protocol requires before web research) and `track.sh brief/check`
