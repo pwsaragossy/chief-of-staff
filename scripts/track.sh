@@ -74,6 +74,11 @@ if cos_anyshared "$dir"; then
   case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) OKF=/nonexistent/.owner-ok ;; esac
   case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-items*) OIF=/nonexistent/.owner-items ;; esac
 fi
+# a file the disk only reads as an owner file (macOS: .owner-oK with a Kelvin sign, .owner-itemſ with a long s) is not
+# the owner's: git and the guards never see it under that name. Moved aside the same way, in any workspace
+folded=; for _b in .owner-ok .owner-items; do [ -e "$dir/$_b" ] && ! ls -a "$dir" | grep -qxF "$_b" || continue
+  for _x in "$dir"/.[!.]*; do [ "$_x" -ef "$dir/$_b" ] && { chmod u+w "$_x"; mv -f "$_x" "$_x.from-team"; folded="$folded ${_x##*/}"; }; done 2>/dev/null
+done
 has_tc=; awk 'NR == 1 && /^---/ { f = 1; next } f && /^---/ { exit } f && /^target:/ { h = 1 } END { exit !h }' "$t" && has_tc=1
 grep -qx 'target:' "$OIF" 2>/dev/null && has_tc=1
 grep -q '^check	' "$OKF" 2>/dev/null && has_tc=1
@@ -188,6 +193,7 @@ check() {
   # an item that needed the owner's OK at opening still needs it: removing the mark does not skip the owner
   # (.owner-items, read-only and written once by baseline: TRACK.md itself is the agent's to edit)
   # a project opened with a baseline always has the list: without it the owner gate would be off (fail closed)
+  for _f in $folded; do echo "$_f is not named exactly like the owner's file, though this disk reads it as one, so this computer does not trust it; it was moved aside to $_f.from-team: have the owner give their OKs again"; done
   for _f in $forged; do echo "$_f came from the team repo (git tracks it), so this computer does not trust it; it was moved aside to $_f.from-team: remove it from git (git rm --cached $_f) and have the owner give their OKs again"; done
   [ -n "$(fm_get "$t" baseline)" ] && [ ! -r "$OIF" ] &&
     echo "the list of owner items is missing (.owner-items, written when the project opened): restore it from git or ask the owner"

@@ -17,7 +17,7 @@ US = "\x1f"
 def find_root(path):
     d = os.path.abspath(path)
     while d != os.path.dirname(d):
-        if os.path.isfile(os.path.join(d, ".chief-of-staff")):
+        if os.path.isfile(os.path.join(d, ".chief-of-staff")) and ".chief-of-staff" in os.listdir(d):  # as cos_root
             return d
         d = os.path.dirname(d)
     return None

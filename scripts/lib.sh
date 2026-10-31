@@ -18,7 +18,9 @@ cos_root() {
   d=${1:-$PWD}
   case $d in /*) ;; *) return 1 ;; esac   # a relative path never reaches "/"
   while [ -n "$d" ] && [ "$d" != "/" ]; do
-    [ -f "$d/.chief-of-staff" ] && { printf '%s\n' "$d"; return 0; }
+    # exactly that name: macOS also opens .chief-of-ſtaff (a long s) as the marker, a name git, join and pull do not
+    # see as one, so a teammate's commit could move the root
+    [ -f "$d/.chief-of-staff" ] && ls -a "$d" | grep -qxF .chief-of-staff && { printf '%s\n' "$d"; return 0; }
     d=${d%/*}   # no dirname: this runs in every hook call, and a fork per level is slow on WSL drives
   done
   return 1
