@@ -5,6 +5,7 @@
 #   status <project_dir>  "stage<US>stages<US>closed<US>total<US>delivery<US>delivered<US>baseline<US>baseline_delivery" for health.sh
 #   items  <project_dir>  the map for the panel: S<US>n<US>name and I<US>stage<US>state<US>id<US>card<US>needs<US>deliverable
 #   baseline <project_dir>  records the item count when the project opens (new-project runs it once)
+#   decide <project_dir> <decision> <who>  appends one new decision line to DECISIONS.md (nothing else)
 # delivery: N in the front matter is the stage that delivers the original request (default: the last stage).
 # Item line: - [ ] id | deliverable | card: role | needs: a, b | evidence: path   ([x] done, [-] n/a + why:)
 # target: and check: (front matter) are the hard number and the command that measures it (exit 0 = met, last
@@ -18,6 +19,19 @@
 
 cmd=$1; dir=$2; [ -d "$dir" ] && dir=$(cd "$dir" && pwd)   # absolute: the guards find the workspace from it
 t="$dir/TRACK.md"
+# decide <project_dir> <decision> <who>: append one new decision to DECISIONS.md (the handoff's way to record one).
+# It only appends a fresh line that replaces nothing: a revocation or a replacement is a hand edit of DECISIONS.md,
+# which the turn-end gate treats as a deliverable (specialists and reviewer). One line, at most 300 characters
+if [ "$cmd" = decide ]; then
+  f="$dir/DECISIONS.md"; x=${3:-}; who=${4:-}
+  [ -f "$f" ] || { echo "decide: $f does not exist (copy templates/project/DECISIONS.md first)" >&2; exit 1; }
+  nl='
+'; cr=$(printf '\r')
+  case "$x$who" in *'|'*|*"$nl"*|*"$cr"*) echo "decide: one line, without |" >&2; exit 1 ;; esac
+  case $x in ''|revoked:*) echo "decide: write the decision itself; to revoke or replace one, edit DECISIONS.md (the turn then goes through the specialists)" >&2; exit 1 ;; esac
+  [ ${#x} -le 300 ] && [ -n "$who" ] && [ ${#who} -le 60 ] || { echo "decide: the decision is at most 300 characters and who decided at most 60" >&2; exit 1; }
+  printf -- '- %s | %s | %s | replaces: -\n' "$(date '+%F %H:%M')" "$x" "$who" | tee -a "$f"; exit 0
+fi
 if [ ! -f "$t" ]; then # a project made from the template names TRACK.md in its CLAUDE.md: deleting the file must not open the gate
   [ "$cmd" = check ] && grep -qs 'TRACK.md' "$dir/CLAUDE.md" 2>/dev/null && { echo "TRACK.md is missing, but this project's CLAUDE.md requires it: restore it (git) instead of deleting it"; exit 1; }
   exit 0

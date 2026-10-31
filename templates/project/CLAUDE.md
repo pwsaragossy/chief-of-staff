@@ -44,9 +44,10 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
   delivery line is closed, write `DELIVERY.md` (what was asked, what was delivered, the proof files)
   and set STATE.md `status: delivered`. After that, new work is a proposal on the project card,
   not something you start.
-- **Record decisions in [DECISIONS.md](DECISIONS.md)**, one line each (`date time | decision | who |
-  replaces`), the moment they are taken: by the owner, a teammate or a gate. Never edit an old line;
-  a new line replaces or revokes it. Before acting against a decision in force, read it there.
+- **Record decisions in [DECISIONS.md](DECISIONS.md)** the moment they are taken (by the owner, a teammate or a
+  gate): `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" decide . "<decision>" "<who>"` appends the line. Never edit an
+  old line; to replace or revoke one, add a line by hand (`date time | decision | who | replaces: <its date time>`).
+  Before acting against a decision in force, read it there.
 - **Re-measure what changes on its own.** What runs in production, balances, public links and deploy
   state are measured again before you repeat them (to the owner, a card, a deliverable), never copied
   from STATE.md, a card or an earlier turn. Write each fact with `verified: YYYY-MM-DD HH:MM`.
