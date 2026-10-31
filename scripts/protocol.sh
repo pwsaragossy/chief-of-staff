@@ -43,21 +43,26 @@ SENT='
 sentences() { LC_ALL=C awk -v want="${want:-}" "$SENT" "$@"; }
 # (the library may be a folder of a bigger repo, the shared workspace: paths come back relative to the library)
 libchanges() {
-  _pre=$(git -C "$1" rev-parse --show-prefix 2>/dev/null)
+  # git reads the library's own repository, or the shared workspace's by name: a folder there laid out like a
+  # repository is never taken for it. A git that cannot answer returns 1 (nothing is pushed; the turn says so)
+  _lq=$1; lg() { if [ -e "$_lq/.git" ]; then git -C "$_lq" "$@"; else git --git-dir="$root/.git" --work-tree="$root" -C "$_lq" "$@"; fi; }
+  _pre=$(lg rev-parse --show-prefix 2>/dev/null) || return 1
   # -z: git never quotes a name (a space, an accent) there; a name with a line break is cut, and caught as bad
-  { git -C "$1" status --porcelain -z -uall --no-renames -- . 2>/dev/null | tr '\0' '\n' | grep -Ev '^(D.|.D) ' | cut -c4-
-    if git -C "$1" rev-parse -q --verify '@{u}' >/dev/null; then git -C "$1" diff -z --name-only --diff-filter=d '@{u}...HEAD' -- . | tr '\0' '\n'
-    else git -C "$1" diff -z --name-only --diff-filter=d "$(git -C "$1" rev-list --max-parents=0 HEAD 2>/dev/null | tail -n 1)" HEAD -- . 2>/dev/null | tr '\0' '\n'; fi; } |
+  lg status --porcelain -z -uall --no-renames -- . > "$st/libst" 2>/dev/null || return 1
+  { tr '\0' '\n' < "$st/libst" | grep -Ev '^(D.|.D) ' | cut -c4-
+    if lg rev-parse -q --verify '@{u}' >/dev/null 2>&1; then lg diff -z --name-only --diff-filter=d '@{u}...HEAD' -- . 2>/dev/null | tr '\0' '\n'
+    else lg diff -z --name-only --diff-filter=d "$(lg rev-list --max-parents=0 HEAD 2>/dev/null | tail -n 1)" HEAD -- . 2>/dev/null | tr '\0' '\n'; fi; } |
     while IFS= read -r _f; do case $_f in "$_pre"*) printf '%s\n' "${_f#"$_pre"}" ;; esac; done | sort -u
 }
 shared=; cos_shared "$root" && shared=1
 # a key or token in a file that would go to the team (same list as the panel's import check, plus Stellar secret seeds)
 SECRETS='sk_live_[0-9A-Za-z]{20}|rk_live_[0-9A-Za-z]{20}|_authToken=[^ ]{20}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40}|sk-[A-Za-z0-9_-]{32}|xox[baprs]-[A-Za-z0-9-]{10}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10}[.]eyJ[A-Za-z0-9_-]{10}[.]|(^|[^A-Z0-9])S[A-Z2-7]{55}([^A-Z0-9]|$)'
 # a path with .., symlinks and letter case resolved (macOS ignores case); "" when a part that does not exist yet holds ..
-real() { d=$1 r=; k=0
+real() { realp "$1" | tr 'A-Z' 'a-z'; }
+realp() { d=$1 r=; k=0
   while [ -L "$d" ] && [ $k -lt 20 ]; do t=$(readlink "$d"); case $t in /*) d=$t ;; *) d=${d%/*}/$t ;; esac; k=$((k+1)); done   # a symlinked file
   while [ ! -d "$d" ]; do r="/${d##*/}$r"; d=${d%/*}; [ -n "$d" ] || d=/; done
-  case $r in */..|*/../*|*/.|*/./*) return 0 ;; esac; printf '%s%s' "$(cd "$d" && pwd -P)" "$r" | tr 'A-Z' 'a-z'; }
+  case $r in */..|*/../*|*/.|*/./*) return 0 ;; esac; printf '%s%s' "$(cd "$d" && pwd -P)" "$r"; }
 case $rel in projects/?*) project=${rel#projects/}; project=${project%%/*} ;; *) project= ;; esac
 
 # Flat JSON field (hook input is compact JSON); good enough for ids, names and booleans.
@@ -301,10 +306,10 @@ $p"; fi ;;
                   if (q != "") exit 1; if (w != "") print w }') || out=
                 # a path is absolute and, symlinks resolved, inside the workspace (a relative one is read from a folder
                 # the hook does not know); track.sh, library.sh check and gate take only paths, the rest only words
-                rr=$(cd "$root" && pwd -P | tr 'A-Z' 'a-z'); k=0; pa=
+                rr=$(cd "$root" && pwd -P); k=0; pa=   # compared as written: on Linux Ws and ws are two folders
                 while IFS= read -r w; do k=$((k + 1)); [ $k -le 2 ] && { [ $k = 2 ] && case $r in track*|"library check"*|"library gate"*) pa=1 ;; esac; continue; }
                   case $w in */*|.*) [ -n "$pa" ] || out= ;; *) [ -z "$pa" ] || out= ;; esac
-                  [ -n "$pa" ] && case $w in /*) case $(real "$w") in "$rr"/*) ;; *) out= ;; esac ;; *) out= ;; esac; done <<WS
+                  [ -n "$pa" ] && case $w in /*) case $(realp "$w") in "$rr"/*) ;; *) out= ;; esac ;; *) out= ;; esac; done <<WS
 $ws
 WS
                 [ -n "$out" ] && { echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"chief-of-staff: its own read-only command"}}'; exit 0; }
@@ -465,7 +470,7 @@ WS
         if [ -n "$team" ]; then
           # what would leave this computer: every path git sees changed here or committed and not pushed
           # (a teammate's pulled note is neither), so the push set is exactly the gated set
-          ch=$(libchanges "$q")
+          ch=$(libchanges "$q") || { ch=; gap "git cannot read the library '$n' at $q (a folder there may only look like a git repository), so none of its notes were checked or sent to the team this turn. Run git -C \"$root\" status, remove what does not belong in $q, then end the turn again."; }
         else
           # ctime, not mtime: mv, cp -p or touch -t keep or set an old mtime, never an old ctime
           ch=$(find "$q/notes" -name '*.md' -type f -cnewer "$st/start" 2>/dev/null | while IFS= read -r f; do printf '%s\n' "${f#"$q/"}"; done)

@@ -54,6 +54,8 @@ W=${W%/}
 # a Windows drive seen from WSL (drvfs): every file read there is about 70 times slower than in the Linux home,
 # and the hooks run on each prompt and tool call
 case $W in /mnt/[a-z]/*) echo "Warning: $W is on a Windows drive seen from WSL, where the hooks are about 70 times slower. Prefer a folder in the Linux home (~/chief-of-staff); Windows apps reach it at \\\\wsl\$\\<distro>\\home." ;; esac
+# a workspace inside another would split it: the outer one's marker wins (lib.sh cos_root)
+d=${W%/*}; while [ -n "$d" ]; do [ -f "$d/.chief-of-staff" ] && die "$W is inside the workspace $d: choose a folder outside it"; d=${d%/*}; done
 if [ -d "$W" ] && [ -n "$(ls -A "$W")" ]; then die "$W exists and is not empty: choose a new or empty folder"; fi
 member=$(printf '%s' "$member" | tr -d '\000-\037' | cut -c1-60)
 if [ -n "$share" ] || [ "$cmd" = join ]; then
@@ -71,6 +73,10 @@ if [ "$cmd" = join ]; then
   if [ ! -f "$tmp/.chief-of-staff" ] || ! grep -qx 'shared: yes' "$tmp/.chief-of-staff"; then
     rm -rf "$tmp"; die "$url is not a shared chief-of-staff workspace (no 'shared: yes' marker, or no access); nothing was created"
   fi
+  # what sync.sh pull refuses, refused at join too: settings and hooks that run code here, a marker inside a folder
+  # (it would split the workspace and switch its gates off) and an owner's OK, which never comes from the team
+  bad=$(git -C "$tmp" ls-files 2>/dev/null | grep -Ei '(^|/)(\.claude/|\.mcp\.json$|\.gitattributes$|\.owner-ok$|\.owner-items$)|/\.chief-of-staff$|/\.gitignore$' | head -n 3 | tr '\n' ' ')
+  if [ -n "$bad" ]; then rm -rf "$tmp"; die "$url holds files that would run code or stand in for the owner here ($bad): ask the teammate who added them to remove them; nothing was created"; fi
   { [ ! -d "$W" ] || rmdir "$W"; } && mv "$tmp" "$W" || { rm -rf "$tmp"; die "cannot create $W"; }
   chmod 444 "$W/.chief-of-staff"
   git -C "$W" config core.symlinks false

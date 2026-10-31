@@ -9,15 +9,16 @@ eval "GIT_CONFIG_KEY_$_n=safe.bareRepository GIT_CONFIG_VALUE_$_n=explicit GIT_C
 eval "export GIT_CONFIG_KEY_$_n GIT_CONFIG_VALUE_$_n GIT_CONFIG_KEY_$((_n + 1)) GIT_CONFIG_VALUE_$((_n + 1))"
 GIT_CONFIG_COUNT=$((_n + 2)); export GIT_CONFIG_COUNT
 
-# Print the workspace root (the nearest folder holding a .chief-of-staff marker) or fail.
+# Print the workspace root (the outermost folder holding a .chief-of-staff marker) or fail. The outermost: a marker
+# a teammate commits inside a project must not make that project a workspace of its own, outside the shared rules
 cos_root() {
-  d=${1:-$PWD}
+  d=${1:-$PWD}; _w=
   case $d in /*) ;; *) return 1 ;; esac   # a relative path never reaches "/"
   while [ -n "$d" ] && [ "$d" != "/" ]; do
-    [ -f "$d/.chief-of-staff" ] && { printf '%s\n' "$d"; return 0; }
+    [ -f "$d/.chief-of-staff" ] && _w=$d
     d=${d%/*}   # no dirname: this runs in every hook call, and a fork per level is slow on WSL drives
   done
-  return 1
+  [ -n "$_w" ] && printf '%s\n' "$_w"
 }
 
 # fm_get FILE KEY -> value of KEY in the YAML front matter (first --- block), empty if absent.

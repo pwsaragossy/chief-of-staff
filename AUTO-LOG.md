@@ -53,6 +53,9 @@
     existia no main: o git do plugin podia ler a config de uma pasta que um colega commitou imitando um
     repositório. Corrigido para todos os scripts. A 2ª revisão achou que minha correção abria outro buraco
     (OK do dono forjado passava a ser aceito) e que links simbólicos escapavam do workspace: ambos corrigidos.
+    A 3ª revisão achou um buraco antigo (do main): um colega podia commitar um marcador `.chief-of-staff` dentro
+    de um projeto e desligar os gates daquele projeto; e o `setup.sh join` aceitava isso. Corrigido: vale o
+    marcador mais externo, e o join recusa repositórios com arquivos que rodam código ou forjam o OK do dono.
 
 **Efeito para o usuário:** menos bloqueios sem motivo (handoff, revisor, especialista: até 4 por ciclo de
 trabalho), menos perguntas no setup, o painel e o texto respondem "está tudo bem?" e "o que espera por mim?"
@@ -383,6 +386,22 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
   near-miss list (the symlink case was approved by v2, verified by running both versions); malformed counts check;
   selftest 492/492 under dash, bash --posix and a spaced TMPDIR.
 - Rule kept: a gate change is not done until an adversarial review of its latest version passes; a third runs on v3.
+- Third adversarial review of v3 — fix needed: (1) critical, on main: a teammate commits an empty
+  `projects/p/.chief-of-staff`; cos_root took the nearest marker, so that project became a workspace of its own:
+  a forged `.owner-ok` was trusted, the Stop hook's track gate and the guarded-push ask went silent; `setup.sh join`
+  cloned it (sync.sh pull already refused it); (2) a fake repository layout at a shared `knowledge/` made
+  `libchanges`' git fail and the library gate skipped the turn's notes (they were held back, silently); (3) on
+  Linux the allow compared paths in lower case, so `/x/ws` passed for a workspace at `/x/Ws`; (4, not changed)
+  the allow ignores the shell's folder for search/brief (reads the library of CLAUDE_PROJECT_DIR).
+- Changed (v4): cos_root takes the outermost marker, and `setup.sh create` refuses a workspace inside another;
+  `setup.sh join` refuses a repo that tracks what sync.sh pull refuses (nested marker, .claude/, .mcp.json,
+  .gitattributes, nested .gitignore, .owner-ok/.owner-items) and creates nothing; libchanges reads the library's
+  own repository or the shared workspace's by name (`--git-dir`), and a git failure stops the turn with a gap;
+  the allow compares resolved paths exactly as written (`realp`, no lower case).
+- Proof: checks for the nested marker, join refusal (3 kinds), the fake knowledge/ layout and letter case failed
+  first; the fake knowledge/ case ends the turn with rc 0 on v3 and rc 2 now (both versions run). The `tc:` tests
+  that joined a team repo carrying a forged OK now clone it by hand (join refuses it, as checked). selftest 497/497
+  under dash, bash --posix and a spaced TMPDIR. A fourth review runs on v4.
 
 ## Ideas (no evidence of friction yet; not built)
 - Fewer permission prompts for the plugin's own read-only commands. In default permission mode every
