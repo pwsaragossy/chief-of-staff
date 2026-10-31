@@ -876,6 +876,9 @@ check "health is red after a violation" 'H gamma | grep -q "^red: a turn ended w
 gcard "$(fut 0)"
 
 check "the panel puts what waits on the owner first, above the projects and their track maps" 'python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; h = panel.PAGE if hasattr(panel, \"PAGE\") else open(sys.argv[1] + \"/panel.py\").read(); i = h.index(\"<h2>Waits on you</h2><div id=\\\"cards\\\"\"); assert i < h.index(\"<div id=\\\"projects\\\"\")" "$here"'
+check "the panel lists the projects worst first, so a red one is on the first screen" '( d=$(cd "$(mktemp -d)" && pwd -P); for p in a b; do mkdir -p "$d/projects/$p"; sed "s/{{DATE}}/$(date "+%F %H:%M")/" "$here/../templates/project/STATE.md" > "$d/projects/$p/STATE.md"; done; mkdir -p "$d/central"; : > "$d/.chief-of-staff"
+  printf -- "---\nstage: 2\n---\n## Stage 1: A\n- [ ] x | X | card: reviewer | needs: - | evidence:\n## Stage 2: B\n- [ ] y | Y | card: reviewer | needs: - | evidence:\n" > "$d/projects/b/TRACK.md"
+  o=$(python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; print(\",\".join(p[\"slug\"] + \":\" + p[\"color\"] for p in panel.snapshot(sys.argv[2])[\"projects\"]))" "$here" "$d"); rm -rf "$d"; [ "$o" = "b:red,a:green" ] || { echo "order: $o"; exit 1; } )'
 check "panel keeps every question of a card (rows split on newlines only, not on \\x1e)" 'python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; assert panel.rows(\"C\\x1fq1\\x1eq2\\x1eq3\\nX\\n\") == [\"C\\x1fq1\\x1eq2\\x1eq3\", \"X\"]" "$here" && ! grep -n "sh(.*splitlines" "$here/panel.py"'
 check "panel shows the latest progress line of each open card, newest first" '( d=$(mktemp -d); mkdir -p "$d/board"; touch "$d/.chief-of-staff"
 printf -- "---\nstatus: in-progress\nproject: p\nupdated: 2026-10-25\n---\n## Sunday\n- 09:00: planned, not progress\n- 11:16 UTC (agent-a): step 0 pass\n- 11:30 UTC (agent-a): contract and 16 tests\n" > "$d/board/a.md"

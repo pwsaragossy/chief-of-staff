@@ -357,6 +357,7 @@ def snapshot(root, libname="personal", fetch=False):
     lib = library(root, libname)
     lib["name"] = libname
     rank = {"red": 2, "yellow": 1, "green": 0}
+    projects.sort(key=lambda p: -rank.get(p["color"], 0))   # worst first (stable): a red project is on the first screen
     overall = max([p["color"] for p in projects] + [lib["color"]], key=lambda c: rank.get(c, 0))
 
     todo = tasks(view)

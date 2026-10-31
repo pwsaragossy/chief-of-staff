@@ -27,7 +27,8 @@
    especialistas, como no main. Nenhum gate mudou.
 
 7. Painel: "Waits on you" (as perguntas que esperam o dono, com a idade) agora vem primeiro, acima dos
-   projetos. Antes ficava abaixo dos mapas de trilha de todos os projetos (fora da primeira tela).
+   projetos. Antes ficava abaixo dos mapas de trilha de todos os projetos (fora da primeira tela). E os projetos vêm do
+   pior para o melhor (vermelho, amarelo, verde): o projeto vermelho aparece na primeira tela, com o motivo.
 
 8. Setup pergunta uma coisa a menos quando só existe um lugar possível para a biblioteca (computador sem
    Obsidian/iCloud/Dropbox/disco externo): antes perguntava com uma única opção.
@@ -499,6 +500,18 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
   with decide ending rc 0 while a hand edit still ends rc 2, and for the skill text; selftest 505/505 under dash,
   bash --posix and a spaced TMPDIR.
 - Blocks per handoff with a decision: 1 (+2 subagent runs) → 0.
+
+### Round 26 — user lens (the panel's first screen)
+- Examined: panel.py in Chromium (1280x800) with three projects (green "brand", red "site": a stage item marked done
+  without evidence, and "newsletter" with a question waiting on the owner).
+- Found: the dot by the title was red, but the red project was off the first screen: projects came in folder order,
+  and the green "brand" with its 24-item map filled the screen. "Is everything fine? If not, why?" needed a scroll
+  past a whole map. Moments of "don't know what to do": 1.
+- Changed: panel.py sorts projects worst first (red, yellow, green; stable within a color). No other change.
+- Proof: check (a green "a" and a red "b" come back as b, a) failed first ("order: a:green,b:red"), passes after;
+  screenshot after: the waiting question, then "site" with its reason, on the first screen; selftest 506/506 under
+  dash, bash --posix and a spaced TMPDIR.
+- Scrolls to see why the panel is red: ~1 per project listed before it → 0.
 
 ## Ideas (no evidence of friction yet; not built)
 - Fewer permission prompts for the plugin's own read-only commands. In default permission mode every
