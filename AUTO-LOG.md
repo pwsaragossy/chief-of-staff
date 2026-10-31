@@ -20,10 +20,11 @@
 5. Mensagens de backup do setup sem jargão: em vez de "Add a private git remote and push", diz que o
    workspace está só neste computador e para pedir ao central um backup privado no GitHub (o central sabe o comando).
 
-6. (Desfeito.) Tentei liberar o handoff que registra decisão em DECISIONS.md do gate de especialistas. Dois
-   revisores independentes provaram que qualquer regra baseada no texto da edição deixa esconder um memorando
-   ou apagar uma decisão com `guard:`. Voltei exatamente ao comportamento do main (o gate fica como estava).
-   O atrito continua; há um desenho seguro em "Ideas" para você decidir.
+6. Handoff sem bloqueio: registrar uma decisão era tratado como "entregável" e exigia especialista + revisor.
+   Minha 1ª tentativa (afrouxar o gate) foi derrubada por dois revisores e desfeita. Agora existe
+   `track.sh decide <projeto> "<decisão>" "<quem>"`, que só sabe *acrescentar* uma linha nova (até 300 caracteres,
+   sem revogar nem substituir). O handoff usa esse comando; editar DECISIONS.md à mão continua passando pelos
+   especialistas, como no main. Nenhum gate mudou.
 
 7. Painel: "Waits on you" (as perguntas que esperam o dono, com a idade) agora vem primeiro, acima dos
    projetos. Antes ficava abaixo dos mapas de trilha de todos os projetos (fora da primeira tela).
@@ -479,6 +480,25 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
   PostToolUse Read 7 ms, PostToolUse Write 51 ms, Stop 92 ms. Round 2 baseline: 68 / 68 / 6 / 43 / 132 ms. The
   Bash guard costs ~20 ms more for the auto-allow and git protections; all far under the 5 s limit.
 - Found nothing with evidence to change.
+
+### Round 25 — user lens (new user end to end; second look at the handoff)
+- Simulated from an empty HOME: detect (1 place) → create (3 lines, plain backup line) → central briefing (7 lines)
+  → first prompt (protocol text: 4 lines, 1,155 characters) → a launch project registered as new-project says
+  (4 files + baseline + card) → `health.sh text` ("All fine: nothing waits on you." / "newsletter: green - on track")
+  → project briefing (9 lines) → a handoff turn. Steps to the first project with one card: 2 install commands,
+  1 slash command, 2 question blocks (setup 2 questions on this machine, new-project 5-6), 0 OK requests.
+- Found: the handoff turn was still blocked ("This turn produced a deliverable ... 0 specialist(s) and 0
+  reviewer(s)") because it records a decision in DECISIONS.md: the friction of round 7, reverted in round 18.
+- Changed (the safe design logged under Ideas in round 18, now with reproduced evidence): `track.sh decide
+  <project> "<decision>" "<who>"` appends one line `- <now> | <decision> | <who> | replaces: -`: one line, no `|`,
+  at most 300 characters (no memo fits), never `revoked:`; it cannot split, move, delete or replace a line, so it
+  cannot lift a `guard:`. The handoff skill and the project CLAUDE.md use it; a replacement or revocation is still a
+  hand edit of DECISIONS.md, which the turn-end gate still treats as a deliverable (unchanged from main). The guard
+  neither asks nor blocks `track.sh decide` (normal permission prompt: it writes).
+- Proof: checks for decide (appends; refuses revoke, `|`, >300 chars, empty, newline, a missing file), for a handoff
+  with decide ending rc 0 while a hand edit still ends rc 2, and for the skill text; selftest 505/505 under dash,
+  bash --posix and a spaced TMPDIR.
+- Blocks per handoff with a decision: 1 (+2 subagent runs) → 0.
 
 ## Ideas (no evidence of friction yet; not built)
 - Fewer permission prompts for the plugin's own read-only commands. In default permission mode every

@@ -28,7 +28,9 @@ The next session is a stranger with no memory of this one. Everything it needs i
    the owner, else `in-progress`; a finished card is removed and its result goes in STATE.md).
    Keep each question's `(asked ...)` stamp as it is (the hook adds it; it times the oldest question)
    and never rewrite `asked:`. Move done tasks and decided questions to `../../board/archive/` when the
-   card passes ~60 lines. Decisions taken this session go in `DECISIONS.md` (one new line each).
+   card passes ~60 lines. Record each decision taken this session with one command:
+   `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" decide . "<decision>" "<who decided>"`. It appends the line; to
+   replace or revoke a decision, edit `DECISIONS.md` by hand (that turn goes through the specialists).
 4. **Knowledge**: list in STATE.md section 3 the `[[id]]` of each note this session wrote or relied
    on. The hooks have already checked them.
 5. **Lesson, at the final handoff only** (STATE.md `status: delivered`): save one lesson for the next
