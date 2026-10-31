@@ -51,7 +51,8 @@
     nenhuma sintaxe de shell, com caminhos dentro do workspace; o resto pede OK como antes. Suas regras de
     "deny"/"ask" do Claude Code continuam valendo por cima. A revisão adversária disso achou um problema que já
     existia no main: o git do plugin podia ler a config de uma pasta que um colega commitou imitando um
-    repositório. Corrigido para todos os scripts.
+    repositório. Corrigido para todos os scripts. A 2ª revisão achou que minha correção abria outro buraco
+    (OK do dono forjado passava a ser aceito) e que links simbólicos escapavam do workspace: ambos corrigidos.
 
 **Efeito para o usuário:** menos bloqueios sem motivo (handoff, revisor, especialista: até 4 por ciclo de
 trabalho), menos perguntas no setup, o painel e o texto respondem "está tudo bem?" e "o que espera por mim?"
@@ -368,7 +369,20 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
   (failed first); selftest 489/489 under dash, bash --posix, and a TMPDIR with a space.
 - Hook time: PreToolUse Bash for an ordinary command 68 → 85 ms (10-run average); an allowed command 69 ms.
 - OK requests per research turn in default permission mode: 1 per library search and per track check → 0.
-- A second adversarial review runs on v2 before this is called done.
+- Second adversarial review of v2 — fix needed: (1) critical, introduced by v2: safe.bareRepository made
+  `git -C <project> ls-files` fail on a teammate's fake repository layout, track.sh hid the error, and a forged
+  `.owner-ok` committed beside it stayed trusted (fail-open); teamsent() failed open the same way; (2) a symlink
+  inside the workspace let an approved `track.sh check` rename files outside it; (3) relative paths were read from
+  the shell's folder, which the hook does not know; (4) a caller's GIT_CONFIG_COUNT=08 made dash abort every hook.
+- Changed (v3): track.sh runs git on the workspace's own repository by name (`--git-dir=$root/.git`), and any git
+  failure means nothing of the owner's is trusted (OK file and owner list ignored; teamsent reports a change); the
+  allow takes only absolute paths for track.sh and library.sh check/gate, resolved through symlinks (`real`) and
+  inside the workspace, and only plain words for the other subcommands; a GIT_CONFIG_COUNT that is not 0-99 is
+  replaced by ours.
+- Proof: the forged-OK attack rebuilt as a check (failed on v2, passes); symlink, relative, `.`, `a/b` added to the
+  near-miss list (the symlink case was approved by v2, verified by running both versions); malformed counts check;
+  selftest 493/493 under dash, bash --posix and a spaced TMPDIR.
+- Rule kept: a gate change is not done until an adversarial review of its latest version passes; a third runs on v3.
 
 ## Ideas (no evidence of friction yet; not built)
 - Fewer permission prompts for the plugin's own read-only commands. In default permission mode every

@@ -299,7 +299,12 @@ $p"; fi ;;
                     if (q == "" && (c == "\"" || c == "\047")) { q = c; continue } if (c == q) { q = ""; continue }
                     if (q == "" && c == " ") { if (w != "") print w; w = ""; continue } w = w c }
                   if (q != "") exit 1; if (w != "") print w }') || out=
-                while IFS= read -r w; do case $w in *..*) out= ;; /*) case $w in "$root"/*) ;; *) out= ;; esac ;; esac; done <<WS
+                # a path is absolute and, symlinks resolved, inside the workspace (a relative one is read from a folder
+                # the hook does not know); track.sh, library.sh check and gate take only paths, the rest only words
+                rr=$(cd "$root" && pwd -P | tr 'A-Z' 'a-z'); k=0; pa=
+                while IFS= read -r w; do k=$((k + 1)); [ $k -le 2 ] && { [ $k = 2 ] && case $r in track*|"library check"*|"library gate"*) pa=1 ;; esac; continue; }
+                  case $w in */*|.*) [ -n "$pa" ] || out= ;; *) [ -z "$pa" ] || out= ;; esac
+                  [ -n "$pa" ] && case $w in /*) case $(real "$w") in "$rr"/*) ;; *) out= ;; esac ;; *) out= ;; esac; done <<WS
 $ws
 WS
                 [ -n "$out" ] && { echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"chief-of-staff: its own read-only command"}}'; exit 0; }
