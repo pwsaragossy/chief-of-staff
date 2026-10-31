@@ -341,6 +341,20 @@ $p"; fi ;;
                   [ -n "$hitg" ] && echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this push changes '"${hitg%, }"', guarded by a decision in DECISIONS.md. Approve only if that decision still holds or was replaced by a new line."}}'
                 fi
               fi
+              # the plugin's own read-only commands, the ones the hooks already run by themselves, skip the permission
+              # prompt (not the user's decision): one call of library.sh or track.sh at this plugin's own path, a
+              # read-only subcommand, no shell syntax in the arguments. Anything else keeps the normal prompt, and
+              # Claude Code's deny and ask rules still apply over this allow
+              ro=$(printf '%s' "$in" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | head -n 1)
+              case $ro in *\\[!\"]*|*\\) ro= ;; esac   # a JSON escape other than \" (\n, \t, \\, \u): no
+              ro=$(printf '%s' "$ro" | sed 's/\\"/"/g'); H=$(cd "$(dirname "$0")" && pwd); r=
+              for s in library track; do for q in '"' "'" ''; do
+                [ -z "$q" ] && case $H in *[!A-Za-z0-9_./-]*) continue ;; esac
+                case $ro in "sh $q$H/$s.sh$q "*) r="$s ${ro#"sh $q$H/$s.sh$q "}" ;; esac; done; done
+              if [ -n "$r" ] && ! printf '%s' "$r" | LC_ALL=C grep -q '[][$`\\;&|<>(){}*?!#~^[:cntrl:]]' &&
+                printf '%s\n' "$r" | grep -Eqx 'library (--lib [a-z0-9-]+ )?(search|similar|check|gate|doctor|backlinks|brief|where|libs)( .*)?|track (check|brief|status|items) .+'; then
+                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"chief-of-staff: its own read-only command"}}'
+              fi
               exit 0
             fi ;;
           *) # each session writes only its own library: a team's notes never come from a personal or another
