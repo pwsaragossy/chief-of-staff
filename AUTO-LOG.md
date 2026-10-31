@@ -381,7 +381,7 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
   replaced by ours.
 - Proof: the forged-OK attack rebuilt as a check (failed on v2, passes); symlink, relative, `.`, `a/b` added to the
   near-miss list (the symlink case was approved by v2, verified by running both versions); malformed counts check;
-  selftest 493/493 under dash, bash --posix and a spaced TMPDIR.
+  selftest 492/492 under dash, bash --posix and a spaced TMPDIR.
 - Rule kept: a gate change is not done until an adversarial review of its latest version passes; a third runs on v3.
 
 ## Ideas (no evidence of friction yet; not built)
