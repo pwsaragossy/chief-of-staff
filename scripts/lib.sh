@@ -9,21 +9,25 @@ eval "GIT_CONFIG_KEY_$_n=safe.bareRepository GIT_CONFIG_VALUE_$_n=explicit GIT_C
 eval "export GIT_CONFIG_KEY_$_n GIT_CONFIG_VALUE_$_n GIT_CONFIG_KEY_$((_n + 1)) GIT_CONFIG_VALUE_$((_n + 1))"
 GIT_CONFIG_COUNT=$((_n + 2)); export GIT_CONFIG_COUNT
 
-# Print the workspace root or fail: the nearest folder holding a .chief-of-staff marker and a .git, else (a workspace
-# without git) the nearest marker. A teammate can commit a marker inside a project but never a .git, and a stray
-# marker above the workspace is farther than its own: neither moves the root, so neither switches its gates off
+# Print the workspace root or fail: the nearest folder holding a .chief-of-staff marker that setup recorded as a root
+# (.git/cos-root holds its own path: git never moves that file through clone, pull or push, so neither a teammate's
+# commit, a project that is its own repository, nor a copied .git can make one), else, in a workspace nobody recorded
+# (older versions, no git), the nearest marker
 cos_root() {
   d=${1:-$PWD}; _w=
   case $d in /*) ;; *) return 1 ;; esac   # a relative path never reaches "/"
   while [ -n "$d" ] && [ "$d" != "/" ]; do
     if [ -f "$d/.chief-of-staff" ]; then
-      [ -e "$d/.git" ] && { printf '%s\n' "$d"; return 0; }
+      _r=; [ -f "$d/.git/cos-root" ] && IFS= read -r _r < "$d/.git/cos-root"
+      [ "$_r" = "$d" ] && { printf '%s\n' "$d"; return 0; }
       [ -n "$_w" ] || _w=$d
     fi
     d=${d%/*}   # no dirname: this runs in every hook call, and a fork per level is slow on WSL drives
   done
   [ -n "$_w" ] && printf '%s\n' "$_w"
 }
+# cos_rootmark ROOT -> record ROOT as a workspace root (setup create and join; a central session for older workspaces)
+cos_rootmark() { [ -d "$1/.git" ] && { [ -f "$1/.git/cos-root" ] && chmod u+w "$1/.git/cos-root"; printf '%s\n' "$1" > "$1/.git/cos-root"; chmod 444 "$1/.git/cos-root"; }; }
 
 # fm_get FILE KEY -> value of KEY in the YAML front matter (first --- block), empty if absent.
 # Tolerates CRLF line endings.

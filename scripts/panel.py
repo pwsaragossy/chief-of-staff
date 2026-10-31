@@ -15,12 +15,17 @@ US = "\x1f"
 
 
 def find_root(path):
-    """The workspace root as lib.sh cos_root finds it: the nearest marker with a .git, else the nearest marker."""
+    """The workspace root as lib.sh cos_root finds it: the nearest marker recorded as a root (.git/cos-root holds its
+    own path), else the nearest marker."""
     d, first = os.path.abspath(path), None
     while d != os.path.dirname(d):
         if os.path.isfile(os.path.join(d, ".chief-of-staff")):
-            if os.path.exists(os.path.join(d, ".git")):
-                return d
+            try:
+                with open(os.path.join(d, ".git", "cos-root"), encoding="utf-8") as f:
+                    if f.readline().rstrip("\n") == d:
+                        return d
+            except OSError:
+                pass
             first = first or d
         d = os.path.dirname(d)
     return first

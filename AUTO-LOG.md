@@ -418,6 +418,22 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
 - Proof: checks for nested + stray + inner-workspace roots, the join marker, and the deleted-note advice (run as
   written) failed first and pass; selftest 499/499 under dash, bash --posix and a spaced TMPDIR. A fifth review
   runs on v5.
+- Fifth adversarial review of v5 — reject: a project that is its own git repository (software projects are) became
+  the root once a marker arrived in it (an upstream pull, or an agent's `git clone` + `cp -a`), switching off the
+  guarded-push ask and the Stop track gate; an agent can write a `.git` file; a workspace without git can be taken by
+  a parent with a marker and a .git; join's marker strip was undone by `git checkout -- .`; a CRLF marker broke join.
+  The reviewer's point: a legitimate nested workspace and a project repo with a marker look the same on disk, so the
+  root must be recorded, not inferred.
+- Changed (v6): setup.sh create and join write the root's own path in `.git/cos-root` (git never moves that file
+  through clone, pull or push; a copied .git carries the wrong path). cos_root and panel.py take the nearest marker
+  whose `.git/cos-root` names it, else, in a workspace nobody recorded (older versions, no git), the nearest marker
+  (main's rule, unchanged for them). A central session records its workspace once (a planted marker is never between
+  central/ and the root). Writes to cos-root are blocked like the other protected names. join marks the stripped
+  marker skip-worktree (a checkout keeps it) and reads CRLF markers.
+- Proof: checks for the teammate marker, a project repo with a marker, a copied .git, a stray parent marker with a
+  .git, an inner workspace, an unrecorded workspace and its migration from central, the cos-root guard (v5 allowed
+  the Write, rc 0; v6 blocks, rc 2), join after a checkout and with CRLF; selftest 501/501 under dash, bash --posix
+  and a spaced TMPDIR. A sixth review runs on v6.
 
 ## Ideas (no evidence of friction yet; not built)
 - Fewer permission prompts for the plugin's own read-only commands. In default permission mode every

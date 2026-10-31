@@ -68,7 +68,7 @@ ignore() { # what never leaves this computer: logs, locks, raw imports, secrets 
 if [ "$cmd" = join ]; then
   tmp="$W.cos-join-$$"   # cloned aside, so a wrong link leaves nothing where the workspace goes
   git clone -q -c core.symlinks=false "$url" "$tmp" 2>&1 | head -n 3 >&2
-  if [ ! -f "$tmp/.chief-of-staff" ] || ! grep -qx 'shared: yes' "$tmp/.chief-of-staff"; then
+  if [ ! -f "$tmp/.chief-of-staff" ] || ! tr -d '\r' < "$tmp/.chief-of-staff" | grep -qx 'shared: yes'; then
     rm -rf "$tmp"; die "$url is not a shared chief-of-staff workspace (no 'shared: yes' marker, or no access); nothing was created"
   fi
   # what sync.sh pull refuses, refused at join too: settings and hooks that run code here, a marker inside a folder
@@ -77,10 +77,12 @@ if [ "$cmd" = join ]; then
   if [ -n "$bad" ]; then rm -rf "$tmp"; die "$url holds files that would run code or stand in for the owner here ($bad): ask the teammate who added them to remove them; nothing was created"; fi
   # the marker keeps only what makes it a shared workspace: pace, library and team lines are this computer's to set
   # (sync.sh pull refuses any later change to it), so the team repo cannot set them for the joiner
-  ign=$(sed -n '2,$p' "$tmp/.chief-of-staff" | grep -vx 'shared: yes' | tr -d '\000-\037' | cut -c1-80 | head -n 3 | tr '\n' ';' | sed 's/;$//; s/;/; /g')
+  ign=$(sed -n '2,$p' "$tmp/.chief-of-staff" | tr -d '\r' | grep -vx 'shared: yes' | tr -d '\000-\037' | cut -c1-80 | head -n 3 | tr '\n' ';' | sed 's/;$//; s/;/; /g')
   printf 'chief-of-staff workspace v0.1\nshared: yes\n' > "$tmp/.chief-of-staff"
   { [ ! -d "$W" ] || rmdir "$W"; } && mv "$tmp" "$W" || { rm -rf "$tmp"; die "cannot create $W"; }
   chmod 444 "$W/.chief-of-staff"
+  git -C "$W" update-index --skip-worktree .chief-of-staff   # a checkout never brings the team's lines back
+  (. "$here/lib.sh"; cos_rootmark "$W")
   [ -n "$ign" ] && echo "Ignored from the team's marker: $ign (set on this computer only, by its owner)"
   git -C "$W" config core.symlinks false
   git -C "$W" config cos.member "$member"
@@ -109,6 +111,7 @@ git -C "$W" init -q
 git -C "$W" config user.name >/dev/null || git -C "$W" config user.name "chief-of-staff"
 git -C "$W" config user.email >/dev/null || git -C "$W" config user.email "chief-of-staff@localhost"
 { printf 'chief-of-staff workspace v0.1\n'; [ -n "$share" ] && printf 'shared: yes\n'; } > "$W/.chief-of-staff"; chmod 444 "$W/.chief-of-staff"   # last: a failed run can be repeated
+(. "$here/lib.sh"; cos_rootmark "$W")
 
 if [ -n "$libdest" ]; then
   out=$(CLAUDE_PROJECT_DIR="$W/central" sh "$here/library.sh" offload "$libdest" 2>&1) ||
