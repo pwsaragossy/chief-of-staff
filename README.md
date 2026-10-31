@@ -368,6 +368,11 @@ What is ours, with no equivalent found in ECC:
   moved to `.env`, the rest is listed in the next briefing; a change to
   settings coming from the team is refused at pull. A file name with a line break stops the push
   until it is renamed.
+- The workspace root is the nearest folder with a `.chief-of-staff` marker. A marker that arrives inside a project
+  (a hand `git pull`, or an agent building the name in a variable) makes that project look like a workspace of its
+  own, and its track gate and guarded-push ask stop. `sync.sh pull` and `setup.sh join` refuse such a commit, and a
+  forged owner OK stays untrusted (the guards read every marker above), but nothing else catches it: keep project
+  repositories without a marker, and look at `git status` after a pull by hand.
 - An offloaded library: no automatic sync; Windows paths are not supported; in iCloud, keep the
   folder downloaded on the computer (placeholder files are not seen).
 

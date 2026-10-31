@@ -5,9 +5,6 @@
 
 dir=${CLAUDE_PROJECT_DIR:-$PWD}
 root=$(cos_root "$dir") || exit 0
-# a workspace from before roots were recorded: its central session records it (a marker someone plants inside the
-# workspace is never between central/ and the root, so the root found from central/ is the real one)
-case ${dir#"$root"/} in central|central/*) [ -f "$root/.git/cos-root" ] || cos_rootmark "$root" ;; esac
 rel=${dir#"$root"}
 rel=${rel#/}
 

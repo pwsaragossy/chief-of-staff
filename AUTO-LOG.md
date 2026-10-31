@@ -56,8 +56,9 @@
     A 3ª revisão achou um buraco antigo (do main): um colega podia commitar um marcador `.chief-of-staff` dentro
     de um projeto e desligar os gates daquele projeto; e o `setup.sh join` aceitava isso. Corrigido: vale o
     raiz verdadeira do workspace (a pasta com marcador e .git), e o join recusa repositórios com arquivos que
-    rodam código ou forjam o OK do dono. (A 4ª revisão mostrou que "o marcador mais externo" abria outro buraco;
-    a regra final é "o marcador mais próximo que tem .git".)
+    rodam código ou forjam o OK do dono. (As revisões 4 a 6 mostraram que cada nova regra para achar a raiz do
+    workspace abria outro buraco; voltei à regra do main e fechei o dano onde ele acontece: o OK do dono forjado
+    continua não confiável. O que sobra, igual ao main, está documentado no README em "Known limits".)
 
 **Efeito para o usuário:** menos bloqueios sem motivo (handoff, revisor, especialista: até 4 por ciclo de
 trabalho), menos perguntas no setup, o painel e o texto respondem "está tudo bem?" e "o que espera por mim?"
@@ -434,6 +435,27 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
   .git, an inner workspace, an unrecorded workspace and its migration from central, the cos-root guard (v5 allowed
   the Write, rc 0; v6 blocks, rc 2), join after a checkout and with CRLF; selftest 501/501 under dash, bash --posix
   and a spaced TMPDIR. A sixth review runs on v6.
+- Sixth adversarial review of v6 — fix needed, five holes all new to v6: a recorded stray parent captures an
+  upgraded workspace for good; the record's path spelling (a symlinked HOME, /tmp vs /private/tmp) never matches, so
+  the old rule applies silently; the Bash word list misses most spellings of cos-root (`cos-$(echo root)`, python,
+  globs, `mv`, a symlink then Write); a wrong record is never repaired; a session in projects/app/central records the
+  project.
+- Decision (v7): stop changing the root rule. v4, v5 and v6 each closed one hole and opened others that main did not
+  have; the fixed rules forbid a change that weakens anything, and "prefer deleting" applies. cos_root and panel.py go
+  back to main's nearest marker, and the recording machinery is deleted. The nested-marker attack is closed where it
+  does damage instead: track.sh's owner-OK guards treat the project as shared when any marker above it says
+  `shared: yes` (cos_anyshared), and its git names the root's .git, which a planted folder does not have, so git fails
+  and nothing of the owner's is trusted. join and sync.sh pull refuse the commit. What stays open (on main too): a
+  planted marker silences that project's track gate and guarded-push ask; README "Known limits" says so.
+- Kept from v4-v6 (each reviewed, none reopened): join refuses settings, nested markers and owner files and keeps only
+  safe marker lines (skip-worktree, CRLF); libchanges and track.sh name the repository; git refuses implicit bare
+  repositories and core.fsmonitor; the auto-allow (one call, read-only subcommands, absolute paths resolved through
+  symlinks inside the workspace, compared as written); the deleted-note advice.
+- Proof: a planted marker plus a forged OK in a shared project: v6 printed nothing (trusted), v7 prints "scope closes
+  only with the owner's OK"; a stray parent marker and an inner workspace keep their roots; selftest 500/500 under
+  dash, bash --posix and a spaced TMPDIR.
+- Lesson for the method: six adversarial reviews on one change. Each found real holes, half of them introduced by the
+  previous fix. The productive move was to stop moving the trust boundary and close the damage at its point of use.
 
 ## Ideas (no evidence of friction yet; not built)
 - Fewer permission prompts for the plugin's own read-only commands. In default permission mode every

@@ -65,7 +65,7 @@ OKF="$dir/.owner-ok"; OIF="$dir/.owner-items"; forged=
 # git reads the workspace's own repository, named outright: a folder of the project laid out like a repository
 # (a teammate can commit one) is never taken for it. If git cannot answer, nothing of the owner's is trusted
 wroot=$(cos_root "$dir"); wg() { git --git-dir="$wroot/.git" --work-tree="$wroot" -C "$dir" "$@"; }
-if cos_shared "$wroot" 2>/dev/null; then
+if cos_anyshared "$dir"; then
   _l=$(wg ls-files -- ':(icase).owner-ok' ':(icase).owner-items' 2>/dev/null) || { OKF=/nonexistent/.owner-ok; OIF=/nonexistent/.owner-items; }
   for _f in $_l; do
     forged="$forged $_f"; [ -e "$dir/$_f" ] && { [ -L "$dir/$_f" ] || chmod u+w "$dir/$_f"; mv -f "$dir/$_f" "$dir/$_f.from-team"; } 2>/dev/null
@@ -98,7 +98,7 @@ frozen() { awk -F '\t' '$1 == "check" { for (i = 4; i <= NF; i++) if ($i ~ /^fre
 # this computer did not make (sync.sh lists its own in cos-own): a pull, by sync.sh or by hand. The approval keeps
 # the commit shared with the team repo then (head=), which a push never rewrites; local commits after it are
 # folded by sync.sh push, and the folded one is listed as this computer's own
-teamsent() { cos_shared "$wroot" 2>/dev/null || return 1
+teamsent() { cos_anyshared "$dir" || return 1
   _g=$(wg rev-parse --absolute-git-dir 2>/dev/null) || { echo "its history (git cannot read this project)"; return 0; }; _p=$(wg rev-parse --show-prefix 2>/dev/null)
   _h=$(awk -F '\t' '$1 == "check" { h = ""; for (i = 4; i <= NF; i++) if ($i ~ /^head=/) h = substr($i, 6) } END { print h }' "$OKF" 2>/dev/null)
   [ -n "$_h" ] && wg merge-base --is-ancestor "$_h" HEAD 2>/dev/null || { echo "the history since the approval (its commit is gone)"; return 0; }

@@ -82,7 +82,6 @@ if [ "$cmd" = join ]; then
   { [ ! -d "$W" ] || rmdir "$W"; } && mv "$tmp" "$W" || { rm -rf "$tmp"; die "cannot create $W"; }
   chmod 444 "$W/.chief-of-staff"
   git -C "$W" update-index --skip-worktree .chief-of-staff   # a checkout never brings the team's lines back
-  (. "$here/lib.sh"; cos_rootmark "$W")
   [ -n "$ign" ] && echo "Ignored from the team's marker: $ign (set on this computer only, by its owner)"
   git -C "$W" config core.symlinks false
   git -C "$W" config cos.member "$member"
@@ -111,7 +110,6 @@ git -C "$W" init -q
 git -C "$W" config user.name >/dev/null || git -C "$W" config user.name "chief-of-staff"
 git -C "$W" config user.email >/dev/null || git -C "$W" config user.email "chief-of-staff@localhost"
 { printf 'chief-of-staff workspace v0.1\n'; [ -n "$share" ] && printf 'shared: yes\n'; } > "$W/.chief-of-staff"; chmod 444 "$W/.chief-of-staff"   # last: a failed run can be repeated
-(. "$here/lib.sh"; cos_rootmark "$W")
 
 if [ -n "$libdest" ]; then
   out=$(CLAUDE_PROJECT_DIR="$W/central" sh "$here/library.sh" offload "$libdest" 2>&1) ||

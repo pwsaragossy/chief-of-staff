@@ -217,7 +217,7 @@ $p"; fi ;;
             uq=$(printf '%s' "$cq" | tr -d "\"'\\\\")
             # the names, or a glob or brace that could spell them (.[c]hief, .l*, ?library, {.,x}library)
             # ponytail: a name built in a variable (a=.chi; ...${a}ef) is not seen; the files are read-only on disk
-            LIT='\.chief|\.library|cos-foreign|cos-cfg|cos-root|owner-ok|owner-items'   # not "chief-of-staff": the plugin's own folder has that name
+            LIT='\.chief|\.library|cos-foreign|cos-cfg|owner-ok|owner-items'   # not "chief-of-staff": the plugin's own folder has that name
             # a glob at the start of a path or right after a redirect (a regex .* inside a word, foo.*bar or (.*?), is
             # not one), a glob after a piece of a name (.ch*, .l?brary, .own?r-ok), or a glob before one (?library, *-ok)
             GLOB='(^|[ /=]|(^|[^a-z_:-])[0-9]*>+ *)\.[][?*]|(^|[^a-z0-9_.-])\.(c(h(i(e(f)?)?)?)?|l(i(b(r(a(r(y)?)?)?)?)?)?|o(w(n(e(r(-(o(k)?|i(t(e(m(s)?)?)?)?)?)?)?)?)?)?)[][?*]|[][?*](l?ibrary|c?hief)|[][?*][a-z]*-(ok|items)([^a-z0-9_-]|$)'
@@ -389,7 +389,7 @@ WS
              if [ -n "$o" ] && [ "$o" != "$lname" ]; then
                echo "Blocked by chief-of-staff: $fp is in the library '$o', and this session works in '$lname'. A session writes only its own library, so nothing personal or from another team leaks into a shared one. Write the note in $lib/notes/." >&2; exit 2
              fi
-             case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.library|*/.chief-of-staff/*|*/.owner-ok|*/.owner-items|*/cos-root) ;; *) exit 0 ;; esac ;;
+             case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.library|*/.chief-of-staff/*|*/.owner-ok|*/.owner-items) ;; *) exit 0 ;; esac ;;
         esac
         echo "Blocked by chief-of-staff: .chief-of-staff (where the libraries live), .library-id, a project's .library (which library it shares with) .owner-ok (the owner's OKs) and .owner-items are changed only through library.sh offload, join, leave or use and track.sh ok, which the owner confirms.$([ "$(jget tool_name)" = Bash ] && printf ' If the command only mentions one of these names (a commit message, an echo), rephrase it without the name.')" >&2
         exit 2 ;;

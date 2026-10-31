@@ -9,25 +9,23 @@ eval "GIT_CONFIG_KEY_$_n=safe.bareRepository GIT_CONFIG_VALUE_$_n=explicit GIT_C
 eval "export GIT_CONFIG_KEY_$_n GIT_CONFIG_VALUE_$_n GIT_CONFIG_KEY_$((_n + 1)) GIT_CONFIG_VALUE_$((_n + 1))"
 GIT_CONFIG_COUNT=$((_n + 2)); export GIT_CONFIG_COUNT
 
-# Print the workspace root or fail: the nearest folder holding a .chief-of-staff marker that setup recorded as a root
-# (.git/cos-root holds its own path: git never moves that file through clone, pull or push, so neither a teammate's
-# commit, a project that is its own repository, nor a copied .git can make one), else, in a workspace nobody recorded
-# (older versions, no git), the nearest marker
+# Print the workspace root (the nearest folder holding a .chief-of-staff marker) or fail.
 cos_root() {
-  d=${1:-$PWD}; _w=
+  d=${1:-$PWD}
   case $d in /*) ;; *) return 1 ;; esac   # a relative path never reaches "/"
   while [ -n "$d" ] && [ "$d" != "/" ]; do
-    if [ -f "$d/.chief-of-staff" ]; then
-      _r=; [ -f "$d/.git/cos-root" ] && IFS= read -r _r < "$d/.git/cos-root"
-      [ "$_r" = "$d" ] && { printf '%s\n' "$d"; return 0; }
-      [ -n "$_w" ] || _w=$d
-    fi
+    [ -f "$d/.chief-of-staff" ] && { printf '%s\n' "$d"; return 0; }
     d=${d%/*}   # no dirname: this runs in every hook call, and a fork per level is slow on WSL drives
   done
-  [ -n "$_w" ] && printf '%s\n' "$_w"
+  return 1
 }
-# cos_rootmark ROOT -> record ROOT as a workspace root (setup create and join; a central session for older workspaces)
-cos_rootmark() { [ -d "$1/.git" ] && { [ -f "$1/.git/cos-root" ] && chmod u+w "$1/.git/cos-root"; printf '%s\n' "$1" > "$1/.git/cos-root"; chmod 444 "$1/.git/cos-root"; }; }
+# cos_anyshared DIR -> true when any workspace marker above DIR says shared: yes. The owner-OK guards use it, not the
+# root's marker alone: a marker planted inside a project (a hand pull) would otherwise read as an unshared workspace
+cos_anyshared() {
+  d=$1; case $d in /*) ;; *) return 1 ;; esac
+  while [ -n "$d" ] && [ "$d" != "/" ]; do grep -qx 'shared: yes' "$d/.chief-of-staff" 2>/dev/null && return 0; d=${d%/*}; done
+  return 1
+}
 
 # fm_get FILE KEY -> value of KEY in the YAML front matter (first --- block), empty if absent.
 # Tolerates CRLF line endings.
