@@ -8,7 +8,7 @@ description: Open the local panel of a chief-of-staff workspace — green, yello
 The panel is `${CLAUDE_PLUGIN_ROOT}/scripts/panel.py` (copy that literal path; the variable is not
 set in your shell). It needs `python3` (standard library only) and runs on this computer only.
 
-1. Find the workspace root: the outermost folder above the current one holding `.chief-of-staff`.
+1. Find the workspace root: the nearest folder above the current one holding `.chief-of-staff`.
    None: say "No workspace here. Run /chief-of-staff:setup first." and stop.
 2. Start it in the background: `python3 "<plugin>/scripts/panel.py" "<workspace>"`. It prints one
    line, `Panel: http://127.0.0.1:<port>/?t=<token>`. The token is required, so give the user the

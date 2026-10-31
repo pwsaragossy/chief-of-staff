@@ -8,6 +8,10 @@ _n=${GIT_CONFIG_COUNT:-0}; case $_n in [0-9]|[1-9][0-9]) ;; *) _n=0 ;; esac   # 
 eval "GIT_CONFIG_KEY_$_n=safe.bareRepository GIT_CONFIG_VALUE_$_n=explicit GIT_CONFIG_KEY_$((_n + 1))=core.fsmonitor GIT_CONFIG_VALUE_$((_n + 1))="
 eval "export GIT_CONFIG_KEY_$_n GIT_CONFIG_VALUE_$_n GIT_CONFIG_KEY_$((_n + 1)) GIT_CONFIG_VALUE_$((_n + 1))"
 GIT_CONFIG_COUNT=$((_n + 2)); export GIT_CONFIG_COUNT
+# cos_gitenv_off -> drop those two settings again (the caller's own stay) before running something for the user: the
+# owner's check command, a dispatched session. They guard the plugin's own git calls, not the user's work
+cos_gitenv_off() { eval "unset GIT_CONFIG_KEY_$_n GIT_CONFIG_VALUE_$_n GIT_CONFIG_KEY_$((_n + 1)) GIT_CONFIG_VALUE_$((_n + 1))"
+  if [ "$_n" = 0 ]; then unset GIT_CONFIG_COUNT; else GIT_CONFIG_COUNT=$_n; fi; }
 
 # Print the workspace root (the nearest folder holding a .chief-of-staff marker) or fail.
 cos_root() {

@@ -456,6 +456,16 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
   dash, bash --posix and a spaced TMPDIR.
 - Lesson for the method: six adversarial reviews on one change. Each found real holes, half of them introduced by the
   previous fix. The productive move was to stop moving the trust boundary and close the damage at its point of use.
+- Seventh review, of the whole branch against main (each candidate run on main and on the branch, dash and
+  bash --posix): **pass on security** — no forged OK trusted that main refuses, no gate or ask switched off, no
+  auto-approved command beyond reading inside the workspace. Minor findings fixed: the plugin's git settings leaked
+  into what it starts for the user (the owner's check, a dispatched session: git refused bare repositories there) —
+  `cos_gitenv_off` drops them first and keeps the caller's own; join listed files without `-z`, so an accented folder
+  hid a refused file; `track.sh check ./p` (a relative path, same on main) trusted a forged OK — the path is made
+  absolute first; the panel skill said "outermost" again. Left as is: join refusing a hand-committed nested
+  .gitignore (pull refuses it too); cos_broken clearing on another session's reviewed turn (intended, documented).
+- Proof: new checks failed first and pass; selftest 502/502 under dash, bash --posix and a spaced TMPDIR.
+- Round 23 closed: the auto-allow is done (seven reviews; the last one passed against main).
 
 ## Ideas (no evidence of friction yet; not built)
 - Fewer permission prompts for the plugin's own read-only commands. In default permission mode every

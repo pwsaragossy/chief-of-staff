@@ -73,7 +73,7 @@ if [ "$cmd" = join ]; then
   fi
   # what sync.sh pull refuses, refused at join too: settings and hooks that run code here, a marker inside a folder
   # (it would split the workspace and switch its gates off) and an owner's OK, which never comes from the team
-  bad=$(git -C "$tmp" ls-files 2>/dev/null | grep -Ei '(^|/)(\.claude/|\.mcp\.json$|\.gitattributes$|\.owner-ok$|\.owner-items$)|/\.chief-of-staff$|/\.gitignore$' | head -n 3 | tr '\n' ' ')
+  bad=$(git -C "$tmp" ls-files -z 2>/dev/null | tr '\0' '\n' | grep -Ei '(^|/)(\.claude/|\.mcp\.json$|\.gitattributes$|\.owner-ok$|\.owner-items$)|/\.chief-of-staff$|/\.gitignore$' | head -n 3 | tr '\n' ' ')
   if [ -n "$bad" ]; then rm -rf "$tmp"; die "$url holds files that would run code or stand in for the owner here ($bad): ask the teammate who added them to remove them; nothing was created"; fi
   # the marker keeps only what makes it a shared workspace: pace, library and team lines are this computer's to set
   # (sync.sh pull refuses any later change to it), so the team repo cannot set them for the joiner
