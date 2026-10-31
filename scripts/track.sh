@@ -77,7 +77,7 @@ fi
 # a file the disk only reads as an owner file (macOS: .owner-oK with a Kelvin sign, .owner-itemſ with a long s) is not
 # the owner's: git and the guards never see it under that name. Moved aside the same way, in any workspace
 # (find compares bytes, and a name with a line break cannot pose as the real one); one that stays is not read
-folded=; for _b in .owner-ok .owner-items; do [ -e "$dir/$_b" ] && [ -z "$(find -H "$dir" -maxdepth 1 -name "$_b" 2>/dev/null)" ] || continue
+folded=; for _b in .owner-ok .owner-items; do [ -e "$dir/$_b" ] && [ -z "$(find -H "$dir" -mindepth 1 -maxdepth 1 -name "$_b" 2>/dev/null)" ] || continue
   for _x in "$dir"/.[!.]*; do [ "$_x" -ef "$dir/$_b" ] && { [ -L "$_x" ] || chmod u+w "$_x"; mv -f "$_x" "$_x.from-team"; folded="$folded ${_x##*/}"; }; done 2>/dev/null
   [ -e "$dir/$_b" ] && case $_b in .owner-ok) OKF=/nonexistent/.owner-ok ;; *) OIF=/nonexistent/.owner-items ;; esac
 done

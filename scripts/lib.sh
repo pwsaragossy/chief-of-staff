@@ -18,9 +18,9 @@ cos_root() {
   d=${1:-$PWD}
   case $d in /*) ;; *) return 1 ;; esac   # a relative path never reaches "/"
   while [ -n "$d" ] && [ "$d" != "/" ]; do
-    # exactly that name (find compares bytes; a name with a line break cannot pose as it): macOS also opens
-    # .chief-of-ſtaff or .chief-of-staﬀ as the marker, names git, join and pull do not read as one (cos_fold)
-    [ -f "$d/.chief-of-staff" ] && [ -n "$(find -H "$d" -maxdepth 1 -name .chief-of-staff 2>/dev/null)" ] && { printf '%s\n' "$d"; return 0; }
+    # exactly that name, inside the folder (find compares bytes; a name with a line break cannot pose as it): macOS
+    # also opens .chief-of-ſtaff or .chief-of-staﬀ as the marker, names git, join and pull do not read as one (cos_fold)
+    [ -f "$d/.chief-of-staff" ] && [ -n "$(find -H "$d" -mindepth 1 -maxdepth 1 -name .chief-of-staff 2>/dev/null)" ] && { printf '%s\n' "$d"; return 0; }
     d=${d%/*}   # no dirname: this runs in every hook call, and a fork per level is slow on WSL drives
   done
   return 1
