@@ -67,6 +67,13 @@ bigcards() { # cards too long to read whole; $1 = project slug filter (empty = a
     [ "$k" = C ] && [ -n "$big" ] && { [ -z "$1" ] || [ "$p" = "$1" ]; } && out "$n ($big)"
   done | head -n 3 | awk 'NR == 1 { printf "Cards too long to read whole (keep the open part, move the rest to board/archive/): " } { printf "%s%s", (NR > 1 ? "; " : ""), $0 } END { if (NR) print "" }'
 }
+grabs() { # open cards' "Unassigned: <task>" lines under ## Tasks: work any member may take (5 shown, then a count)
+  for c in "$root"/board/*.md; do [ -f "$c" ] || continue
+    case $(fm "$c" status) in done|closed|cancelled|dropped) continue ;; esac
+    n=$(basename "$c" .md); LC_ALL=C awk -v n="$n" '{ sub(/\r$/, "") } /^## / { on = (tolower($0) == "## tasks"); next }
+      on && tolower($0) ~ /^[-*] +unassigned *:/ { t = $0; sub(/^[-*] +[^:]*: */, "", t); gsub(/[\001-\037`]/, "", t); if (t != "") print "- " substr(t, 1, 100) " · " substr(n, 1, 40) }' "$c"
+  done | awk 'NR <= 3 { print } END { if (NR > 3) print "- and " NR - 3 " more on the panel" }'
+}
 syncline() {
   cos_shared "$root" && out "Shared workspace: last sync $(head -n 1 "$root/.git/cos-sync" 2>/dev/null | tr -d '\000-\037' | cut -c1-120 | grep . || echo never)."
   cos_shared "$root" && [ -n "$lag" ] && out "Teammate data as of sync $(head -n 1 "$root/.git/cos-sync" 2>/dev/null | cut -c12-16 | tr -cd '0-9:' | grep . || echo never): the pull still runs; read the card again before acting on a teammate's work."
@@ -113,6 +120,8 @@ reverify() {
         m=$(fm "$s" member)
         out "- $p${m:+ ($m)}: status $(fm "$s" status), updated $(fm "$s" updated), next: $(fm "$s" next)"
       done
+      # after the projects: a teammate's long lines must not push the project list past the briefing's cap
+      gb=$(grabs); [ -n "$gb" ] && { out "Up for grabs (anyone may take one: write your name in place of Unassigned):"; out "$gb"; }
       n=$(ls "$(cos_lib "$root")"/inbox 2>/dev/null | wc -l | tr -d ' ')
       out "Knowledge inbox: $n item(s) waiting to be processed."
       cos_limit 2 sh "$(dirname "$0")/library.sh" brief | tr -d '\000-\011\013-\037'
@@ -122,6 +131,7 @@ reverify() {
       p=${rel#projects/}; p=${p%%/*}
       s="$root/projects/$p/STATE.md"
       out "This session is the agent of project '$p'. It does not ask the owner; questions go to the project card with status waiting-owner."
+      out "A task that comes up and is not this job: one line in board/Inbox.md, Unassigned: <task> (from <who>, <date>)."
       if [ -f "$s" ]; then
         out "STATE.md: status $(fm "$s" status), updated $(fm "$s" updated), dispatch $(fm "$s" dispatch)."
         out "Next action recorded: $(fm "$s" next)"

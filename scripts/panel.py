@@ -237,6 +237,71 @@ def decisions(pdir, keep=5):
     return [{k: v[:200] for k, v in d.items()} for d in got[-keep:][::-1]]
 
 
+CONTROL = {"STATE.md", "TRACK.md", "CLAUDE.md", "DELIVERY.md", "DECISIONS.md"}
+SKIPDIRS = {".git", "node_modules", "__pycache__", ".venv"}
+
+
+def files(root, view, slug, cap=200):
+    """The project's own files (control files and dotfiles left out), newest first, each with who changed it
+    last, how long ago (seconds) and how many versions git holds. History comes from this computer's branch and
+    the team's (HEAD and its upstream), never from other refs a teammate could push. A file git never saw has
+    versions 0, no author and its modification time."""
+    pdir = os.path.join(view, "projects", slug)
+    if os.path.islink(pdir) or not os.path.isdir(pdir):   # a linked project folder points outside the workspace
+        return []
+    found = []
+    for top, dirs, names in os.walk(pdir):
+        dirs[:] = sorted(d for d in dirs if d not in SKIPDIRS and not d.startswith(".") and not os.path.islink(os.path.join(top, d)))
+        for n in names:
+            full = os.path.join(top, n)
+            rel = os.path.relpath(full, pdir).replace(os.sep, "/")
+            if not n.startswith(".") and not os.path.islink(full) and rel not in CONTROL:
+                found.append(rel)
+        if len(found) >= 2000:   # a huge tree is not walked to the end on every refresh
+            break
+    refs = ["HEAD"]
+    try:
+        if subprocess.run(["git", "-C", root, "rev-parse", "-q", "--verify", "@{u}"], capture_output=True, timeout=5).returncode == 0:
+            refs.append("@{u}")
+        out = subprocess.run(["git", "-C", root, "log", "-z", "--name-only", "--format=\x1e%an\x1f%ct", *refs,
+                              "--", ":(literal)projects/" + slug], capture_output=True, timeout=10).stdout.decode("utf-8", "replace")
+    except (subprocess.TimeoutExpired, OSError):
+        out = ""
+    seen, pre = {}, "projects/" + slug + "/"
+    for block in out.split("\x1e")[1:]:   # "<author>\x1f<time>\0\n<path>\0<path>\0..." per commit
+        head, _, body = block.partition("\0")
+        who, _, ts = head.partition("\x1f")
+        for path in body.lstrip("\n").split("\0"):
+            if not path.startswith(pre):
+                continue
+            v = seen.setdefault(path[len(pre):], {"who": who[:60], "t": int(ts) if ts.isdigit() else 0, "versions": 0})
+            v["versions"] += 1
+    now = int(time.time())
+    got = []
+    for rel in found:
+        v = seen.get(rel)
+        if v:
+            t = v["t"]
+        else:
+            try:
+                t = int(os.path.getmtime(os.path.join(pdir, rel)))
+            except OSError:
+                t = now
+        got.append({"path": re.sub(r"[\x00-\x1f]", " ", rel)[:200], "who": re.sub(r"[\x00-\x1f]", "", v["who"]) if v else "",
+                    "versions": v["versions"] if v else 0, "age": max(0, now - t)})
+    got.sort(key=lambda x: x["age"])
+    return got[:cap]
+
+
+def held(root, keep=10):
+    """What the last turn end kept off the team repo (protocol.sh writes .git/cos-held), one line per file."""
+    try:
+        with open(os.path.join(root, ".git", "cos-held"), encoding="utf-8", errors="replace") as f:
+            return [re.sub(r"[\x00-\x1f]", "", l).strip()[:300] for l in f.read().split("\n") if l.strip()][:keep]
+    except OSError:
+        return []
+
+
 def outside(field):
     """health.sh's public_urls and prod_ref results: "public <url> <code> ok|closed", "prod <url> <commit> ok|down|other"."""
     out = []
@@ -349,7 +414,7 @@ def snapshot(root, libname="personal", fetch=False):
             "next": front_matter(os.path.join(pdir, "STATE.md")).get("next", ""),
             "progress": progress(view, slug),
             "reasons": reasons or ([{"color": color, "text": reason}] if color != "green" else []),
-            "outside": outside(out), "decisions": decisions(pdir),
+            "outside": outside(out), "decisions": decisions(pdir), "files": files(root, view, slug),
         })
     libs = libraries(root)
     if libname not in [x["name"] for x in libs]:
@@ -391,7 +456,7 @@ def snapshot(root, libname="personal", fetch=False):
     rank_c = [c["color"] for c in cards] + [x["sync_color"] for x in libs] + ([sh_ws["color"]] if sh_ws else [])
     overall = max([overall] + rank_c, key=lambda c: rank.get(c, 0))
     return {"library": lib, "libs": libs, "workspace": root, "overall": overall, "projects": projects, "cards": cards, "tasks": todo, "source": source,
-            "counts": counts, "shared": sh_ws,
+            "counts": counts, "shared": sh_ws, "held": held(root),
             "inbox": n_inbox, "notes": n_notes, "time": time.strftime("%H:%M:%S")}
 
 
@@ -488,6 +553,7 @@ select{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--line);
 <div id="ws" class="muted"></div><button id="fetch" class="toggle" hidden>Fetch</button>
 <h2>Waits on you</h2><div id="cards" class="box"></div>
 <h2>Projects</h2><div id="projects" class="box"></div>
+<div id="held" class="box" hidden></div>
 <h2>Tasks</h2><div id="tasks" class="box"></div>
 <h2>Import knowledge</h2>
 <div id="drop" class="box">Drop files here or click to choose<input id="file" type="file" multiple hidden></div>
@@ -791,7 +857,14 @@ function render(){
       body.append(drawMap(p))}
     else if(p.next)body.append(el("div","muted","Next: "+p.next));
     (p.progress||[]).forEach(g=>body.append(el("div","muted","Latest on "+g.card+" ("+g.when+", "+g.who+"): "+g.what)));
+    if((p.files||[]).length){const f=el("div","facts"),li=x=>el("li","",x.path+" · "+(x.who?x.who+", ":"")+ago(Math.round(x.age/60))+" ago"+(x.versions>1?" · v"+x.versions:"")),u=el("ul");
+      f.append(el("b","","Files ("+p.files.length+")"));p.files.slice(0,6).forEach(x=>u.append(li(x)));f.append(u);
+      if(p.files.length>6){const m=el("details"),w=el("ul");m.append(el("summary","",(p.files.length-6)+" more"));p.files.slice(6).forEach(x=>w.append(li(x)));m.append(w);f.append(m)}
+      body.append(f)}
     return row}));
+  const H=document.getElementById("held");H.hidden=!(d.held||[]).length;
+  if((d.held||[]).length){const r=el("div","row"),b=el("div","grow"),u=el("ul","q");r.append(el("span","dot yellow"),b);b.append(el("div","name","Kept on this computer"));
+    d.held.forEach(x=>u.append(el("li","",x)));b.append(u);H.replaceChildren(r)}
   const C=document.getElementById("cards");
   if(!d.cards.length)empty(C,"Nothing waiting");else C.replaceChildren(...d.cards.map(c=>{
     const row=el("div","row"),b=el("div","grow");row.append(el("span","dot "+c.color),b);
