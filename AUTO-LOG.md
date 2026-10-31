@@ -60,13 +60,18 @@
     workspace abria outro buraco; voltei à regra do main e fechei o dano onde ele acontece: o OK do dono forjado
     continua não confiável. O que sobra, igual ao main, está documentado no README em "Known limits".)
 
+16. Revisão final do branch inteiro contra o main (7ª revisão adversária): **aprovado em segurança** — nada no
+    branch é mais fraco que o main. Pequenos acertos aplicados (configurações de git do plugin não vazam para o
+    seu comando de checagem nem para a sessão do dispatcher; caminhos relativos e pastas com acento não escapam
+    das proteções).
+
 **Efeito para o usuário:** menos bloqueios sem motivo (handoff, revisor, especialista: até 4 por ciclo de
 trabalho), menos perguntas no setup, o painel e o texto respondem "está tudo bem?" e "o que espera por mim?"
 na primeira tela, e mensagens que dizem o que fazer. Nenhuma regra de segurança foi afrouxada: todo bloqueio
 de segurança continua igual; só mudaram textos, a ordem do painel e o que conta como "entregável".
 
 **Recomendo fazer merge de:** todos os commits do branch. Cada um tem teste que falhou antes e passa depois
-(selftest 479/479). Nenhum commit final afrouxa um gate: o protocol.sh difere do main só no texto de uma mensagem
+(selftest 502/502). Nenhum commit final afrouxa um gate: o protocol.sh difere do main só no texto de uma mensagem
 de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não passa mais).
 
 ---
