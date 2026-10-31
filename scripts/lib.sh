@@ -1,15 +1,43 @@
 # Shared helpers. Sourced by the other scripts; POSIX sh, no GNU- or macOS-only flags.
 
+# Every git the scripts run reads only real repositories: a folder a teammate committed that looks like a bare
+# repository (HEAD, config, objects/, refs/) is never discovered as one (its config could run code), and no
+# repository's core.fsmonitor runs. Passed as command-line config (GIT_CONFIG_COUNT, git 2.31+), added after any
+# the caller set
+_n=${GIT_CONFIG_COUNT:-0}; case $_n in [0-9]|[1-9][0-9]) ;; *) _n=0 ;; esac   # a count git would refuse anyway: ours alone
+eval "GIT_CONFIG_KEY_$_n=safe.bareRepository GIT_CONFIG_VALUE_$_n=explicit GIT_CONFIG_KEY_$((_n + 1))=core.fsmonitor GIT_CONFIG_VALUE_$((_n + 1))="
+eval "export GIT_CONFIG_KEY_$_n GIT_CONFIG_VALUE_$_n GIT_CONFIG_KEY_$((_n + 1)) GIT_CONFIG_VALUE_$((_n + 1))"
+GIT_CONFIG_COUNT=$((_n + 2)); export GIT_CONFIG_COUNT
+# cos_gitenv_off -> drop those two settings again (the caller's own stay) before running something for the user: the
+# owner's check command, a dispatched session. They guard the plugin's own git calls, not the user's work
+cos_gitenv_off() { eval "unset GIT_CONFIG_KEY_$_n GIT_CONFIG_VALUE_$_n GIT_CONFIG_KEY_$((_n + 1)) GIT_CONFIG_VALUE_$((_n + 1))"
+  if [ "$_n" = 0 ]; then unset GIT_CONFIG_COUNT; else GIT_CONFIG_COUNT=$_n; fi; }
+
 # Print the workspace root (the nearest folder holding a .chief-of-staff marker) or fail.
 cos_root() {
   d=${1:-$PWD}
   case $d in /*) ;; *) return 1 ;; esac   # a relative path never reaches "/"
   while [ -n "$d" ] && [ "$d" != "/" ]; do
-    [ -f "$d/.chief-of-staff" ] && { printf '%s\n' "$d"; return 0; }
+    # exactly that name, inside the folder (find compares bytes; a name with a line break cannot pose as it): macOS
+    # also opens .chief-of-ſtaff or .chief-of-staﬀ as the marker, names git, join and pull do not read as one (cos_fold)
+    [ -f "$d/.chief-of-staff" ] && [ -n "$(find -H "$d" -mindepth 1 -maxdepth 1 -name .chief-of-staff 2>/dev/null)" ] && { printf '%s\n' "$d"; return 0; }
     d=${d%/*}   # no dirname: this runs in every hook call, and a fork per level is slow on WSL drives
   done
   return 1
 }
+# cos_anyshared DIR -> true when any workspace marker above DIR says shared: yes. The owner-OK guards use it, not the
+# root's marker alone: a marker planted inside a project (a hand pull) would otherwise read as an unshared workspace
+cos_anyshared() {
+  d=$1; case $d in /*) ;; *) return 1 ;; esac
+  while [ -n "$d" ] && [ "$d" != "/" ]; do grep -qx 'shared: yes' "$d/.chief-of-staff" 2>/dev/null && return 0; d=${d%/*}; done
+  return 1
+}
+
+# cos_fold -> stdin with each character macOS folds into plain letters in a file name written as those letters: APFS
+# compares names with full Unicode case folding, so .owner-oK (Kelvin sign), .mcp.jſon (long s) and .chief-of-staﬀ
+# (a ligature) open the protected files. These nine are every character whose folding is plain ASCII; raw or as a
+# JSON \u escape in lower case
+cos_fold() { LC_ALL=C sed "$(printf 's/\342\204\252/k/g; s/\305\277/s/g; s/\357\254\200/ff/g; s/\357\254\201/fi/g; s/\357\254\202/fl/g; s/\357\254\203/ffi/g; s/\357\254\204/ffl/g; s/\357\254[\205\206]/st/g; s/\\\\u212a/k/g; s/\\\\u017f/s/g; s/\\\\ufb00/ff/g; s/\\\\ufb01/fi/g; s/\\\\ufb02/fl/g; s/\\\\ufb03/ffi/g; s/\\\\ufb04/ffl/g; s/\\\\ufb0[56]/st/g')"; }
 
 # fm_get FILE KEY -> value of KEY in the YAML front matter (first --- block), empty if absent.
 # Tolerates CRLF line endings.
@@ -140,16 +168,10 @@ cos_ago() { if [ "$1" -lt 60 ]; then echo "$1 min"; elif [ "$1" -lt 1440 ]; then
 # The Stop hook stamps each new top-level line, so the oldest open question keeps its age when asked: is rewritten
 # or a later question is added (asked: alone, the old format, still counts)
 COS_ASKED='/^\(asked [0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]( [+-][0-2][0-9][0-5][0-9])?\) */'
-# cos_questions CARD -> the question lines under "## For the owner to decide", without the template's placeholder
-# and without their (asked ...) stamp
-cos_questions() {
-  awk '{ sub(/\r$/, "") } /^## / { on = ($0 ~ /^## For the owner to decide/); next }
-    on { sub(/^[-*] +/, ""); if (match($0, '"$COS_ASKED"')) $0 = substr($0, RLENGTH + 1); if ($0 != "" && $0 !~ /^\(/) print }' "$1" 2>/dev/null | tr -d '\000-\010\013-\037' | cut -c1-300 | head -n 10
-}
 # cos_board ROOT -> one line per board card in one pass (hooks run it every turn), fields split by \037:
 #   file member project status asked due questions unstamped stamps lines bytes long text qstamps
 # questions: open question lines; unstamped: top-level ones without (asked ...); stamps: their times, split by \036;
-# lines, bytes, long: the card's size and its lines over 300 characters; text: the questions as cos_questions prints them;
+# lines, bytes, long: the card's size and its lines over 300 characters; text: the question lines without the template's placeholder or their (asked ...) stamp;
 # qstamps: the (asked ...) time of each question in text, in the same order, empty when unstamped, split by \036
 cos_board() {
   for _c in "$1"/board/*.md; do [ -f "$_c" ] || continue
@@ -195,3 +217,16 @@ cos_shared() { grep -qx 'shared: yes' "$1/.chief-of-staff" 2>/dev/null; }
 cos_fast() { grep -qx 'pace: fast' "$1/.chief-of-staff" 2>/dev/null; }
 # cos_member ROOT -> this person's name in a shared workspace (git config cos.member, local to this computer)
 cos_member() { git -C "$1" config cos.member 2>/dev/null | tr -d '\000-\037' | cut -c1-60; }
+# cos_broken ROOT PROJECT -> the time (seconds) of the latest turn of PROJECT in the last 24 h that ended without the
+# specialists, the reviewer or the track gate, and that nothing fixed since; empty when none. Fixed: a later turn of
+# the same session complied, or a later turn of any session ran a specialist and the reviewer without a violation
+cos_broken() {
+  [ -f "$1/.protocol.log" ] || return 0
+  awk -v p="project=$2" -v c=$(($(date +%s) - 86400)) 'index($0, " " p " ") {
+      t = 0; id = ""; for (i = 1; i <= NF; i++) { if ($i ~ /^t=/) t = substr($i, 3) + 0; if ($i ~ /^turn=/) id = $i }
+      if (/violation=1/) { if (t >= c) bad[id] = t; next }
+      if (/specialists=0 reviewers=0/) next
+      delete bad[id]
+      if (/substantive=1/ && !/specialists=0/ && !/reviewers=0/) for (k in bad) delete bad[k] }
+    END { for (k in bad) if (bad[k] > m) m = bad[k]; if (m) print m }' "$1/.protocol.log"
+}

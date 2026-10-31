@@ -68,7 +68,7 @@ for s in "$root"/projects/*/STATE.md; do
   # The whole workspace is reachable (board, ROUTING.md); agent rules, settings, git internals and
   # the dispatcher's own files are denied by absolute paths ("//" + root). Permission rules, not a sandbox.
   before=$(git_fingerprint)
-  (cd "$root/projects/$p" && exec "$bin" -p "$prompt" \
+  (cos_gitenv_off; cd "$root/projects/$p" && exec "$bin" -p "$prompt" \
     --add-dir "$root" \
     --permission-mode default \
     --max-budget-usd "$budget" \

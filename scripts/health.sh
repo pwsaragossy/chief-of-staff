@@ -21,8 +21,29 @@
 #          a public_urls link closed to a logged-out visitor, production not serving the prod_ref commit,
 #          a delivery that points at a file outside the workspace
 # green  = none of the above
+#   health.sh text [dir]   the same, for a person: "slug: color - reason" per project, then each question waiting on the owner
 . "$(dirname "$0")/lib.sh"
 
+if [ "${1:-}" = text ]; then shift
+  r=$(cos_root "${1:-$PWD}") || { echo "health.sh: no chief-of-staff workspace at ${1:-$PWD}" >&2; exit 2; }
+  US=$(printf '\037'); me=; cos_shared "$r" && me=$(cos_member "$r")
+  # a verdict first, then one line per project, then this person's questions (a teammate's central asks theirs)
+  { sh "$0" "$@"; sh "$0" cards "$@"; } | me=$me awk -F "$US" '
+    function ago(m) { return m < 60 ? m " min" : m < 1440 ? int(m / 60) " h " m % 60 " min" : int(m / 1440) " d" }
+    $1 != "C" { P[++np] = $1 ": " $2 " - " $3; c[$2]++; next }
+    $4 != "waiting-owner" || (ENVIRON["me"] != "" && $5 != "" && $5 != ENVIRON["me"]) { next }
+    { n = split($11, q, "\036"); split($14, a, "\036")
+      if (!n) Q[++nq] = "- " $2 " (" $3 "): open the card"
+      for (i = 1; i <= n; i++) Q[++nq] = "- " $2 " (" $3 "): " q[i] " - asked " ago(a[i] != "" ? a[i] : $7) " ago" }
+    END { s = (c["red"] ? c["red"] " red" : "") (c["red"] && c["yellow"] ? ", " : "") (c["yellow"] ? c["yellow"] " yellow" : "")
+      if (!nq && s == "") print "All fine: nothing waits on you."
+      else print (nq ? nq " question" (nq > 1 ? "s wait" : " waits") " on you." : "Nothing waits on you.") (s != "" ? " Projects: " s "." : "")
+      if (!np) print "No projects yet."
+      for (i = 1; i <= np; i++) print P[i]
+      if (nq) print "Waits on you:"
+      for (i = 1; i <= nq; i++) print Q[i] }'
+  exit 0
+fi
 mode=projects; [ "${1:-}" = cards ] && { mode=cards; shift; }
 root=$(cos_root "${1:-$PWD}") || { echo "health.sh: no chief-of-staff workspace at ${1:-$PWD}" >&2; exit 2; }
 US=$(printf '\037'); RS=$(printf '\036')
@@ -77,12 +98,7 @@ for s in "$root"/projects/*/STATE.md; do
   sev=$(awk '/^## 1\./ { on = 1; next } on && NF { print tolower($1); exit }' "$s" | tr -cd 'a-z')
   [ "$sev" = red ] && red "STATE.md says red"
   # a violation counts unless a later line of the same session complied (the agent fixed it after the push)
-  [ -f "$root/.protocol.log" ] && awk -v p="project=$p" -v c=$((now - 86400)) '
-      index($0, " " p " ") {
-        t = 0; for (i = 1; i <= NF; i++) { if ($i ~ /^t=/) t = substr($i, 3) + 0; if ($i ~ /^turn=/) id = $i }
-        if (/violation=1/ && t >= c) bad[id] = 1
-        else if (/violation=0/ && !/specialists=0 reviewers=0/) delete bad[id] }
-      END { for (k in bad) f = 1; exit !f }' "$root/.protocol.log" && red "a turn ended without the specialists, the reviewer or the track gate"
+  [ -n "$(cos_broken "$root" "$p")" ] && red "a turn ended without the specialists, the reviewer or the track gate"
   [ -f "$root/.dispatch.log" ] && awk -v p="$p" 'index($0, "ALERT") && (index($0, " " p ";") || index($0, " " p ",")) { f = 1 } END { exit !f }' "$root/.dispatch.log" && red "dispatcher ALERT: read .dispatch.log, then delete the ALERT line to clear it"
 
   st=$(sh "$(dirname "$0")/track.sh" status "$d")

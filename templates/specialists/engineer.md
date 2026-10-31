@@ -76,6 +76,9 @@ Answer: <one line: recommended approach, with confidence>
 ## What would change the conclusion
 <load, cost, team or requirement changes that flip the choice>
 
+## Versions
+<one line per version, at most 4: v<n> <lens>: <what changed> - verdict: <the judge named in the brief> - evidence: <the command and its output, or the file>; a first version that passed is "v1 passed: <what the judge printed>">
+
 ## Never-skip checklist
 <each item from "Never skip": done / not applicable (why)>
 

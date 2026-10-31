@@ -4,8 +4,11 @@ set -u
 exec </dev/null   # the briefing reads its hook input from stdin: never a terminal or an open pipe here
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib.sh"
+unset GIT_CONFIG_COUNT   # the plugin's scripts set it for themselves (lib.sh); the tests run git on bare remotes
 fail=0
 check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1"; fail=1; fi; }
+# read-only by its mode bits: test -w is always true for root (containers, CI)
+ro() { [ -e "$1" ] && ! ls -ld "$1" | cut -c1-10 | grep -q w; }
 
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
@@ -116,6 +119,7 @@ check "prompt hook restates the protocol" 'h "$(ev UserPromptSubmit ",\"prompt\"
 check "prompt hook is silent outside a workspace" '[ -z "$(h "$(ev UserPromptSubmit)" /tmp)" ]'
 check "the next prompt of the session gets one line, not the whole protocol" 'o=$(h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P"); printf "%s" "$o" | grep -q "as stated at the start of this session" && ! printf "%s" "$o" | grep -q "the independent reviewer, as subagents"'
 check "after a compaction the next prompt gets the full protocol again" 'printf "{\"session_id\":\"s1\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh" >/dev/null; h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "the independent reviewer, as subagents"'
+check "a resumed session is not told to write a new arrival synthesis; a new one is" 'o=$(printf "{\"session_id\":\"s9\",\"source\":\"resume\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh"); ! printf "%s" "$o" | grep -q "arrival synthesis in STATE.md is written" && printf "%s" "$o" | grep -q "Resumed session: if STATE.md already holds your arrival synthesis, do not write it again" && printf "{\"session_id\":\"s9\",\"source\":\"startup\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh" | grep -q "arrival synthesis in STATE.md is written"'
 check "a compacted session gets its turn record, not a new arrival synthesis" 'o=$(printf "{\"session_id\":\"s1\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh"); printf "%s" "$o" | grep -q "Resumed after a compaction, same turn: .* 0 specialist" && ! printf "%s" "$o" | grep -q "arrival synthesis in STATE.md is written"'
 long() { awk -v n="$1" 'BEGIN { while (n-- > 0) printf "a" }'; }
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
@@ -158,11 +162,15 @@ for f in TRACK.md DELIVERY.md; do
   h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/$f\"}")" "$P" >/dev/null
   check "updating $f is not a deliverable" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
 done
-for f in sub/DELIVERY.md NOTTRACK.md; do
+for f in sub/DELIVERY.md NOTTRACK.md sub/DECISIONS.md DECISIONS.md; do
   h "$(ev UserPromptSubmit)" "$P" >/dev/null
   h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/$f\"}")" "$P" >/dev/null
   check "$f is a real deliverable, not a control file" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
 done
+# DECISIONS.md is a deliverable: a text-only rule could not tell an append from a split, a move or a deletion of a guard: line
+dl='- 2026-10-30 10:00 | Price at 19 | owner | replaces: -'; d0='- 2026-10-26 09:20 | Demo on mainnet, guard: testnet | pedro | replaces: -'
+dw() { h "$(ev UserPromptSubmit)" "$P" >/dev/null; h "$(ev PostToolUse ",\"tool_name\":\"$1\",\"tool_input\":{\"file_path\":\"$P/DECISIONS.md\"$2}")" "$P" >/dev/null; rc "$(ev Stop ",\"stop_hook_active\":false")" "$P"; }
+check "a memo, a revoke or a replacement written into DECISIONS.md is still a deliverable" '[ "$(dw Write ",\"content\":\"# Investor memo\\nfive pages\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"$d0\",\"new_string\":\"$d0\\n- 2026-10-30 10:00 | revoked: no longer needed | agent | replaces: 2026-10-26 09:20\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"$d0\",\"new_string\":\"$d0\\n- 2026-10-30 10:00 | Demo on testnet | agent | replaces: 2026-10-26 09:20\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"a\",\"new_string\":\"a\\\\\\\" x\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"$d0\\n$dl\",\"new_string\":\"$dl\"")" = 2 ] && [ "$(dw Write ",\"content\":\"$dl\"")" = 2 ]'
 check "every turn is logged for the adherence metric" 'grep -q "substantive=1 agents=2 specialists=1 reviewers=1 library=1 web=1 saved=1" "$W/.protocol.log"'
 mkdir -p "$W/specialists"; : > "$W/specialists/researcher.md"
 check "a subagent without a role card is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"do research\"}")" "$P")" = 2 ]'
@@ -177,7 +185,7 @@ RA=$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role c
 RB=$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: /tmp/evil/specialists/researcher.md Library: none found for x Ambition: answer many lookups fast, not one | judge: sh check.sh under 3 s\"}")
 # the events are built outside check: bash 3.2 (macOS /bin/sh) mangles \" three levels deep inside eval
 check "a role card named by its path is allowed, a path outside the workspace is not" '[ "$(rc "$RA" "$P")" = 0 ] && [ "$(rc "$RB" "$P")" = 2 ]'
-SP="$W/My Drive/ws"; mkdir -p "$SP/specialists" "$SP/projects/p"; : > "$SP/.chief-of-staff"; : > "$SP/specialists/researcher.md"
+SP="$(cd "$(mktemp -d)" && pwd -P)/My Drive/ws"; mkdir -p "$SP/specialists" "$SP/projects/p"; : > "$SP/.chief-of-staff"; : > "$SP/specialists/researcher.md"
 check "a role card path with spaces is read up to .md; the block message says the role name is enough" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: $SP/specialists/researcher.md Library: none found for x Ambition: answer many lookups fast, not one | judge: sh check.sh under 3 s\"}")" "$SP/projects/p")" = 0 ] && h "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"do it\"}")" "$SP/projects/p" 2>&1 | grep -q "the role name is enough"'
 rm -rf "$W/My Drive"
 check "cos_limit stops a slow command, with timeout(1) and without it" '( . "$here/lib.sh"; s=$(date +%s); o=$(cos_limit 1 sh -c "sleep 6; echo late"); r=$?; [ $r = 124 ] && [ -z "$o" ] && [ $(($(date +%s) - s)) -lt 4 ] && [ "$(cos_limit 2 echo fast)" = fast ] ) && mkdir -p "$W/limbin" && for t in sleep mktemp cat rm sh; do ln -sf "$(command -v $t)" "$W/limbin/$t"; done && ( PATH="$W/limbin"; . "$here/lib.sh"; o=$(cos_limit 1 sh -c "sleep 6; echo late"); [ $? = 124 ] && [ -z "$o" ] && [ "$(cos_limit 2 sh -c "echo fast")" = fast ] )'
@@ -187,6 +195,13 @@ printf '#!/bin/sh\nsleep 9\n' > "$SL/track.sh"; printf '#!/bin/sh\nsleep 9\n' > 
 check "a turn-end track check slower than its budget blocks in time and says what to run" 's=$(date +%s); o=$(printf "%s" "{\"session_id\":\"s7\",\"hook_event_name\":\"Stop\",\"stop_hook_active\":false}" | CLAUDE_PROJECT_DIR="$P" sh "$SL/protocol.sh" 2>&1); r=$?; [ $r = 2 ] && [ $(($(date +%s) - s)) -lt 5 ] && printf "%s" "$o" | grep -q "track.sh check did not finish in time"'
 check "a briefing whose board read runs out of time says so and ends in time" 's=$(date +%s); o=$(CLAUDE_PROJECT_DIR="$W/central" sh "$SL/briefing.sh"); [ $(($(date +%s) - s)) -lt 9 ] && printf "%s" "$o" | grep -q "board was not read in time"'
 rm -rf "$SL" "$CLAUDE_PLUGIN_DATA"/slow-*
+check "the Versions placeholder of a role card does not pass the hook; a real line does" '( for m in "## Versions <one line> - evidence: <the command and its output>" "## Versions v1 passed: <what the judge printed>"; do [ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: engineer ## Never-skip checklist $m\"")" "$P")" = 2 ] || exit 1; done; [ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: engineer ## Never-skip checklist ## Versions v1 passed: npm test printed 12 passing\"")" "$P")" = 0 ] )'
+check "the specialists skill briefs the reviewer with the lines the hook requires (no block when followed literally)" 'awk "/^4\. \*\*Review/,/^5\./" "$here/../skills/specialists/SKILL.md" | tr "\n" " " | grep -q "same .Library:. and .Ambition: <goal> | judge: <judge>. lines"'
+check "every specialist card's output format has the ## Versions section the SubagentStop hook requires" '( for f in "$here"/../templates/specialists/*.md; do case $f in */reviewer.md) continue ;; esac; awk "/^## Output format/,/^## What the reviewer/" "$f" | grep -q "^## Versions" && awk "/^## Output format/,/^## What the reviewer/" "$f" | grep -q "evidence: <" || { echo "no Versions in $f"; exit 1; }; done )'
+check "every helper lib.sh defines is used by another script (no dead code)" '( for f in $(sed -n "s/^\(cos_[a-z]*\)().*/\1/p" "$here/lib.sh"); do grep -lw "$f" "$here"/*.sh "$here"/*.py | grep -v "/lib.sh$\|/selftest.sh$" | grep -q . || grep -v "^#\|^$f()" "$here/lib.sh" | grep -qw "$f" || { echo "unused: $f"; exit 1; }; done )'
+check "central starts from its briefing instead of re-reading every STATE.md and card" '! grep -q "^1. Read .\.\./projects/\*/STATE.md" "$here/../templates/central/CLAUDE.md" && grep -q "^1. Start from the session briefing" "$here/../templates/central/CLAUDE.md"'
+check "README says which commands the plugin approves by itself, and that the user's own rules still win" 'grep -q "approves by itself" "$here/../README.md" && grep -q "your own deny and ask rules still" "$here/../README.md"'
+check "README lists every skill the plugin ships, and counts them right" '( l=$(grep "^Skills: " "$here/../README.md"); n=0; for d in "$here"/../skills/*/; do k=${d%/}; k=${k##*/}; n=$((n + 1)); printf "%s" "$l" | grep -q "\`$k\`" || { echo "README Skills line misses $k"; exit 1; }; done; h=$(grep -o "scripts/[a-z-]*\.sh" "$here/../hooks/hooks.json" | sort -u | wc -l | tr -d " "); grep -q "$n skills, $h hook scripts" "$here/../README.md" || { echo "README count is not $n skills, $h hook scripts"; exit 1; } )'
 check "the panel writes state text in colors with 4.5:1 in both modes, and the version is 0.5.1 everywhere" 'grep -q ".finish span{[^}]*color:var(--yellow-t)" "$here/panel.py" && grep -q "finish.reached span{color:var(--green-t)}" "$here/panel.py" && grep -q -- "--yellow-t:#8a5d00" "$here/panel.py" && grep -q "\"version\": \"0.5.1\"" "$here/../.claude-plugin/plugin.json" && grep -q "Version 0.5.1\." "$here/../README.md"'
 check "every script parses with this system.s sh (macOS /bin/sh is bash 3.2)" '( for f in "$here"/*.sh; do sh -n "$f" || exit 1; done )'
 check "the specialists skill names cards by path and never pastes them" 'grep -q "Do not paste the card" "$here/../skills/specialists/SKILL.md" && grep -q "never pasted" "$here/../templates/ROUTING.md"'
@@ -401,7 +416,7 @@ check "offload copies, verifies and pushes to a private repo" 'O "$X/disk/lib" -
 check "the inbox stays out of the library repo" 'grep -qx "inbox/" "$X/disk/lib/.gitignore" && ! git -C "$X/disk/lib" ls-files | grep -q "^inbox/"'
 check "the workspace now reads the moved library" '[ "$(L where)" = "$X/disk/lib" ] && L search rate services | grep -q "^1\. \[\[tax-2\]\]"'
 check "the old folder is kept, renamed and ignored by git" 'ls -d "$W"/knowledge.offloaded-* >/dev/null && grep -qx "knowledge.offloaded-\*/" "$W/.gitignore"'
-check "offload leaves the marker and the library id read-only" '! [ -w "$W/.chief-of-staff" ] && ! [ -w "$X/disk/lib/.library-id" ]'
+check "offload leaves the marker and the library id read-only" 'ro "$W/.chief-of-staff" && ro "$X/disk/lib/.library-id"'
 cp "$W/.chief-of-staff" "$W/marker.bak2"; chmod u+w "$W/.chief-of-staff"
 printf 'library: /Volumes/cos-selftest-no-disk/lib\n' > "$W/.chief-of-staff"
 check "an unplugged disk turns the library offline, not broken" 'L where | grep -q "Library offline"'
@@ -420,14 +435,15 @@ check "setup puts the only Obsidian vault first, then the workspace, then iCloud
 check "setup refuses a library folder that is not empty and creates nothing" 'mkdir -p "$Y/full"; : > "$Y/full/x"; U create "$Y/ws0" --library "$Y/full" | grep -q "not empty" && [ ! -e "$Y/ws0" ]'
 check "setup creates the workspace with the library inside the vault" 'U create "$Y/ws" --library "$Y/My Vault/Company library" | grep -q "^Library: $Y/My Vault/Company library" && [ "$(cd "$Y/ws/central" && CLAUDE_PROJECT_DIR="$Y/ws/central" sh "$here/library.sh" where)" = "$Y/My Vault/Company library" ]'
 check "the new workspace is committed, with no leftover library copy" '[ -z "$(git -C "$Y/ws" status --porcelain)" ] && ! ls -d "$Y/ws"/knowledge* >/dev/null 2>&1 && [ -d "$Y/My Vault/Company library/notes" ]'
-check "without --backup it says there is no backup yet" 'U create "$Y/ws2" | grep -q "^Backup: none yet"'
+check "without --backup it says there is no backup yet, in plain words, and who to ask" 'o=$(U create "$Y/ws2"); printf "%s\n" "$o" | grep -q "^Backup: none yet: the workspace is only on this computer. Ask central to back it up to a private GitHub repo when you want one.$" && ! printf "%s\n" "$o" | grep -q "git remote"'
 git init -q "$Y/Git Vault"; mkdir -p "$Y/Git Vault/.obsidian"
+check "a computer with one place for the library gets no Library question (the setup skill skips it)" '( H="$(mktemp -d)"; HOME="$H" sh "$here/setup.sh" detect | head -n 1 | grep -q "^Inside the workspace" && rm -rf "$H" && grep -q "only when \`detect\` printed two or more places" "$here/../skills/setup/SKILL.md" )'
 check "with two vaults it recommends the workspace and lists both" 'U detect | head -n 1 | grep -q "^Inside the workspace" && [ "$(U detect | grep -c "^Obsidian vault")" = 2 ]'
 check "a library inside a vault kept in git gets no repo of its own" 'U create "$Y/ws3" --library "$Y/Git Vault/Company library" >/dev/null && [ ! -d "$Y/Git Vault/Company library/.git" ]'
 printf '#!/bin/sh\necho "$*" >> "%s/gh.log"\n' "$Y" > "$Y/bin/gh"; chmod +x "$Y/bin/gh"
 check "backup creates private repos for the workspace and the library" 'U create "$Y/ws4" --library "$Y/lib4" --backup | grep -q "^Library backup: private GitHub repo ws4-library" && grep -q "^repo create ws4 --private --source $Y/ws4 " "$Y/gh.log" && grep -q "^repo create ws4-library --private --source $Y/lib4 " "$Y/gh.log"'
 printf '#!/bin/sh\nexit 1\n' > "$Y/bin/gh"
-check "backup without a signed-in gh is skipped, not failed" 'U create "$Y/ws5" --backup | grep -q "^Backup: skipped, GitHub CLI not signed in"'
+check "backup without a signed-in gh is skipped, not failed, and says what to do" 'U create "$Y/ws5" --backup | grep -q "^Backup: not done, the GitHub tool (gh) is not installed or not signed in on this computer. Install it and run gh auth login, then ask central to back it up.$"'
 check "offload refuses --remote for a library inside another repo" 'cd "$Y/ws3/central" && CLAUDE_PROJECT_DIR="$Y/ws3/central" sh "$here/library.sh" offload "$Y/Git Vault/lib2" --remote "$Y/r.git" 2>&1 | grep -q "inside the git repo"; r=$?; cd "$here"; [ $r = 0 ]'
 rm -rf "$Y"
 
@@ -444,6 +460,7 @@ check "joining an empty repo starts the team library and pushes it" 'K m1 centra
 check "the libraries folder stays out of the workspace repo" 'grep -qx "libraries/" "$V/m1/.gitignore"'
 check "setup can join a team library" 'sh "$here/setup.sh" create "$V/m3" --join "$V/t1.git" | grep -q "^Team library: Connected the team library .t1."'
 check "use only runs from a project folder" 'K m1 central use t1 | grep -q "from a project folder"'
+check "a Bash block on a protected name tells the agent to rephrase a command that only mentions it" '( cd "$V/m1/projects/a" && printf "%s" "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git commit -m \\\"docs: explain the .library file\\\"\"}")" | CLAUDE_PROJECT_DIR="$V/m1/projects/a" sh "$here/protocol.sh" 2>&1 >/dev/null | grep -q "only mentions one of these names" )'
 check "agents cannot write a project's .library" '[ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$V/m1/projects/a/.library\"}")" "$V/m1/projects/a")" = 2 ] && [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo t1 > .library\"}")" "$V/m1/projects/a")" = 2 ]'
 check "switching a project's library asks the owner" 'hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh library.sh use t1\"}")" "$V/m1/projects/a" | grep -q "\"permissionDecision\":\"ask\""'
 check "use, join and leave ask the owner in any quoting, tab or variable form" '( for c in "sh library.sh u'"\\''\\''"'se t1" "sh library.sh \\\"join\\\" x" "sh library.sh\\tleave t1" "sh library.sh --lib t1 use t1" "c=use; sh library.sh \$c t1" "echo use | xargs sh library.sh"; do hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$c\"}")" "$V/m1/projects/a" | grep -q "\"permissionDecision\":\"ask\"" || { echo "no ask: $c"; exit 1; }; done )'
@@ -454,8 +471,47 @@ check "the plugin's own folder name and 2>&1 are not a write to the marker" '[ "
 JB1=$(printf '{"command":"%s"}' 'echo t2 > projects/a/{.,x}library'); JB2=$(printf '{"command":"echo t2 > projects/a/$%s\\\\056library%s"}' "'" "'")
 check "brace expansion and \$'...' quoting cannot spell the protected names" '[ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$JB1")" "$V/m1")" = 2 ] && [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$JB2")" "$V/m1")" = 2 ] && [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo \${HOME}/x > out.txt\"}")" "$V/m1")" = 0 ]'
 check "a library search does not ask" '[ -z "$(hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$J")" "$V/m1/projects/a")" ]'
+# the plugin's own read-only commands (what the hooks already run by themselves) are approved without a prompt;
+# anything else, or anything more, keeps the normal permission prompt
+jesc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+al() { hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$(jesc "$1")\"}")" "$V/m1/projects/a" | grep -q '"permissionDecision":"allow"'; }
+check "the plugin's own read-only commands are approved without a permission prompt" '( for c in "sh \"$here/library.sh\" search pricing lawyers" "sh '"'"'$here/library.sh'"'"' search preço advogados" "sh \"$here/library.sh\" brief a" "sh \"$here/library.sh\" check \"$V/m1/knowledge/notes/x.md\"" "sh \"$here/track.sh\" check \"$V/m1/projects/a\"" "sh \"$here/track.sh\" brief \"$V/m1/projects/a\"" "sh \"$here/library.sh\" search git push"; do al "$c" || { echo "not allowed: $c"; exit 1; }; done )'
+check "anything more than one read-only call of the plugin's own script keeps the prompt" '( ln -s /tmp "$V/m1/projects/ext" 2>/dev/null; for c in "sh \"$here/track.sh\" check \"$V/m1/projects/ext\"" "sh \"$here/track.sh\" items projects/a" "sh \"$here/track.sh\" check ." "sh \"$here/library.sh\" check knowledge/notes/x.md" "sh \"$here/library.sh\" check \"$V/m1/projects/ext/x.md\"" "sh \"$here/library.sh\" search a/b" "sh \"$here/library.sh\" search x; echo hi" "sh \"$here/library.sh\" search \$(id)" "sh \"$here/library.sh\" search \`id\`" "sh \"$here/library.sh\" search x | sh" "sh \"$here/library.sh\" search x && true" "sh \"$here/library.sh\" search x > out.txt" "sh \"$here/library.sh\" search x 2>&1" "sh \"$here/library.sh\" new finding a Title" "sh \"$here/library.sh\" use t1" "sh \"$here/library.sh\" --lib t1 join u" "sh \"$here/track.sh\" verify \"$V/m1/projects/a\"" "sh \"$here/track.sh\" ok \"$V/m1/projects/a\" scope yes" "sh /tmp/library.sh search x" "sh \"$here/../scripts/library.sh\" search x" "bash \"$here/library.sh\" search x" "sh \"$here/library.sh\" search ~/x" "sh \"$here/library.sh\" search x*" "CLAUDE_PROJECT_DIR=/ sh \"$here/library.sh\" search x" "sh \"$here/library.sh\"search x" "sh \"$here/library.sh\" search a\\b" " sh \"$here/library.sh\" search x" "sh \"$here/library.sh\" search x # c" "sh \"$here/library.sh\" search {a,b}" "sh \"$here/library.sh\" --lib t1 search x" "sh \"$here/library.sh\" --lib off search x" "sh \"$here/track.sh\" check /tmp" "sh \"$here/track.sh\" items \"$V/m1/projects/../../x\"" "sh \"$here/library.sh\" check /etc/passwd"; do al "$c" && { echo "allowed: $c"; exit 1; }; done
+  hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh \\\"$here/library.sh\\\" search x\\nid\"}")" "$V/m1/projects/a" | grep -q allow && { echo "allowed a newline"; exit 1; }
+  hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"id\",\"x\":{\"command\":\"sh $here/library.sh search x\"}}")" "$V/m1/projects/a" | grep -q allow && { echo "allowed a second command key"; exit 1; }
+  [ "$(hk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/library.sh --lib off search x\"}")" "$V/m1/projects/a" | grep -c .)" -le 1 ] || { echo "two answers"; exit 1; }; rm -f "$V/m1/projects/ext"; exit 0 )'
+# a name the disk reads as a protected one: macOS folds the Kelvin sign to k and the long s to s, while git, grep and
+# the guards compare bytes (on a disk that does not fold, these files are simply other names)
+KS=$(printf '\342\204\252'); LS=$(printf '\305\277'); FF=$(printf '\357\254\200'); NL='
+'
+check "an owner OK named with a Kelvin K, committed by a teammate or written here, is not trusted" '( d=$(cd "$(mktemp -d)" && pwd -P); g() { git -c user.name=t -c user.email=t@t "$@"; }; g init -q --bare "$d/r.git"; g -C "$d/r.git" symbolic-ref HEAD refs/heads/main; g init -q "$d/a"; printf "shared: yes\n" > "$d/a/.chief-of-staff"
+  p="$d/a/projects/p"; mkdir -p "$p"; printf -- "---\nstage: 1\n---\n## Stage 1: A\n- [x] scope | S | card: product | needs: - | evidence: s.md | owner: ok\n- [ ] r | R | card: reviewer | needs: scope | evidence:\n" > "$p/TRACK.md"; echo s > "$p/s.md"
+  printf "scope\t2026-01-01 10:00\tyes\n" > "$p/.owner-o$KS"; g -C "$d/a" add -A && g -C "$d/a" commit -qm x && g -C "$d/a" push -q "$d/r.git" HEAD:main 2>/dev/null && g clone -q "$d/r.git" "$d/b" 2>/dev/null
+  sh "$here/setup.sh" create "$d/ws" >/dev/null 2>&1; q="$d/ws/projects/q"; mkdir -p "$q"; cp "$p/TRACK.md" "$p/s.md" "$p/.owner-o$KS" "$q/"; : > "$q/x$NL.owner-ok"; r=0; o="$d/ws/projects/.owner-ok"; mkdir -p "$o"; cp "$p/TRACK.md" "$p/s.md" "$p/.owner-o$KS" "$o/"
+  for x in "$d/b/projects/p" "$q" "$o"; do sh "$here/track.sh" check "$x" | grep -q "scope closes only with the owner" || { echo "trusted in $x"; r=1; }; done; rm -rf "$d"; exit $r )'
+check "the guard blocks a write to a protected name spelled with a Kelvin K or a long s" '( for t in "Write\",\"tool_input\":{\"file_path\":\"$V/m1/projects/a/.owner-o$KS\"}" "Bash\",\"tool_input\":{\"command\":\"chmod u+w projects/a/.owner-o$KS\"}" "Bash\",\"tool_input\":{\"command\":\"chmod u+w projects/a/.owner-o\\u212a\"}" "Bash\",\"tool_input\":{\"command\":\"echo x >> projects/a/.owner-item$LS\"}"; do [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"$t")" "$V/m1/projects/a")" = 2 ] || { echo "not blocked: $t"; exit 1; }; done )'
+check "a marker named with a long s or a ligature, beside a name with a line break, does not move the workspace root" '( d=$(cd "$(mktemp -d)" && pwd -P); sh "$here/setup.sh" create "$d/ws" >/dev/null 2>&1; r=
+  for m in ".chief-of-${LS}taff" ".chief-of-sta$FF" ".chief-of-staff/.chief-of-${LS}taff"; do f="$d/ws/projects/p$r/$m"; p=${f%/*}; mkdir -p "$p"; printf "chief-of-staff workspace v0.1\n" > "$f"; : > "$p/x$NL.chief-of-staff"
+    o=$(. "$here/lib.sh"; cos_root "$p"); [ "$o" = "$d/ws" ] || { echo "root: $o"; rm -rf "$d"; exit 1; }; r=x$r; done; rm -rf "$d" )'
+check "an owner OK a teammate committed beside a fake repository layout is still not trusted" '( d=$(mktemp -d); g() { git -c user.name=t -c user.email=t@t "$@"; }; g init -q --bare "$d/r.git"; g init -q "$d/a"; printf "shared: yes\n" > "$d/a/.chief-of-staff"
+  p="$d/a/projects/p"; mkdir -p "$p/objects/info" "$p/refs/heads"; printf "ref: refs/heads/k\n" > "$p/HEAD"; printf "[core]\n\tbare = false\n" > "$p/config"; : > "$p/objects/info/k"; : > "$p/refs/heads/k"
+  printf -- "---\nstage: 1\n---\n## Stage 1: A\n- [ ] r | R | card: reviewer | needs: - | evidence:\n" > "$p/TRACK.md"; printf "scope\t2026-01-01 10:00\tyes\n" > "$p/.owner-ok"
+  g -C "$d/a" add -A && g -C "$d/a" commit -qm x && g -C "$d/a" push -q "$d/r.git" HEAD:main 2>/dev/null && g clone -q -b main "$d/r.git" "$d/b" 2>/dev/null
+  sh "$here/track.sh" check "$d/b/projects/p" >/dev/null; r=0; [ -e "$d/b/projects/p/.owner-ok.from-team" ] && [ ! -e "$d/b/projects/p/.owner-ok" ] || r=1; rm -rf "$d"; exit $r )'
+check "a folder whose name differs from the workspace only in letter case is outside it (on a case-sensitive disk)" '( d=$(cd "$(mktemp -d)" && pwd -P); sh "$here/setup.sh" create "$d/Ws" >/dev/null; mkdir -p "$d/Ws/projects/a"; mkdir -p "$d/ws/projects/v" 2>/dev/null; r=0
+  if [ ! -e "$d/ws/.chief-of-staff" ]; then printf "{\"session_id\":\"c1\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/track.sh check $d/ws/projects/v\"}}" | CLAUDE_PROJECT_DIR="$d/Ws/projects/a" sh "$here/protocol.sh" | grep -q allow && r=1; fi; rm -rf "$d"; exit $r )'
+check "in a shared workspace the advice for a deleted note restores it when run as written" '( d=$(cd "$(mktemp -d)" && pwd -P); git init -q --bare "$d/r.git"; sh "$here/setup.sh" create "$d/ws" --share "$d/r.git" --member Ana >/dev/null 2>&1; k="$d/ws/knowledge/notes"
+  printf -- "---\nid: n1\ntitle: \"Fixture\"\ntype: finding\nstatus: active\norigin: central\nprovenance: agent\nconfidence: low\nsources: []\ncreated: 2026-01-01\nupdated: 2026-01-01\nreview_by: 2099-01-01\n---\nBody.\n\nCompared: none similar\n" > "$k/n1.md"; git -C "$d/ws" add -A; git -C "$d/ws" -c user.name=t -c user.email=t@t commit -qm n1; git -C "$d/ws" push -q 2>/dev/null
+  e() { printf "{\"session_id\":\"dl1\",\"hook_event_name\":\"%s\"%s}" "$1" "${2:-}" | CLAUDE_PROJECT_DIR="$d/ws/central" sh "$here/protocol.sh" 2>&1; }
+  e UserPromptSubmit ",\"prompt\":\"x\"" >/dev/null; sed "s/n1/n2/" "$k/n1.md" > "$k/n2.md"; rm "$k/n1.md"; c=$(e Stop ",\"stop_hook_active\":false" | sed -n "s/.*restore the file (\(git -C .* checkout -- [^)]*\)).*/\1/p" | head -n 1)
+  [ -n "$c" ] && eval "$c" >/dev/null 2>&1; r=1; [ -f "$k/n1.md" ] && r=0; sleep 1; rm -rf "$d" 2>/dev/null; [ $r = 0 ] || echo "advice: $c"; exit $r )'
+check "a fake repository inside a shared knowledge/ does not make the turn skip its notes" '( d=$(cd "$(mktemp -d)" && pwd -P); git init -q --bare "$d/r.git"; sh "$here/setup.sh" create "$d/ws" --share "$d/r.git" --member Ana >/dev/null 2>&1; k="$d/ws/knowledge"; mkdir -p "$k/objects" "$k/refs"; printf "ref: refs/heads/main\n" > "$k/HEAD"; printf "[core]\n\tbare = false\n" > "$k/config"
+  e() { printf "{\"session_id\":\"fk1\",\"hook_event_name\":\"%s\"%s}" "$1" "${2:-}" | CLAUDE_PROJECT_DIR="$d/ws/central" sh "$here/protocol.sh" 2>&1; }
+  e UserPromptSubmit ",\"prompt\":\"x\"" >/dev/null; printf -- "---\nid: bad\n---\nno\n" > "$k/notes/bad.md"; o=$(e Stop ",\"stop_hook_active\":false"); sleep 1; rm -rf "$d" 2>/dev/null; printf "%s" "$o" | grep -q "notes/bad.md: " && printf "%s" "$o" | grep -q "Remove or move these first: HEAD config" )'
+check "a malformed GIT_CONFIG_COUNT from the caller does not break the hooks" '( for n in 08 99999999999999999999 x ""; do GIT_CONFIG_COUNT=$n sh -c ". \"$here/lib.sh\"; git config --get safe.bareRepository" | grep -qx explicit || { echo "count $n"; exit 1; }; done )'
+check "the plugin's git never treats a folder a teammate committed as a repository of its own (its config could run code)" '( d=$(mktemp -d); mkdir -p "$d/x/objects" "$d/x/refs"; printf "ref: refs/heads/main\n" > "$d/x/HEAD"; printf "[core]\n\tbare = false\n" > "$d/x/config"; o=$(sh -c ". \"$here/lib.sh\"; git -C \"$d/x\" rev-parse --git-dir 2>/dev/null"); rm -rf "$d"; [ -z "$o" ] )'
 K m1 projects/a use t1 >/dev/null
-check "use leaves .library read-only" '[ ! -w "$V/m1/projects/a/.library" ]'
+check "use leaves .library read-only" 'ro "$V/m1/projects/a/.library"'
 check "a personal session cannot write into a team library, not even through .. or another letter case" 'W() { rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$1\"}")" "$2"; }; r=$(W "$V/m1/libraries/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/knowledge/../libraries/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/LIBRARIES/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/knowledge/nope/../../libraries/t1/notes/leak.md" "$V/m1/central")$(W "$V/m1/libraries/t1/notes/ok.md" "$V/m1/projects/a")$(W "$V/m1/knowledge/notes/ok.md" "$V/m1/central"); [ "$r" = 222200 ] || { echo "got $r"; false; }'
 check "a team project writes and searches its team's library" '[ "$(K m1 projects/a where)" = "$V/m1/libraries/t1" ] && [ "$(K m1 central where)" = "$V/m1/knowledge" ]'
 check "agents cannot write inside a library's git data" '[ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$V/m1/libraries/t1/.git/cos-foreign\"}")" "$V/m1/projects/a")" = 2 ]'
@@ -703,10 +759,11 @@ fm_set "$G/STATE.md" updated "$(fut 0)"; touch -t 202601010000 "$G/STATE.md"
 check "a fresh updated: is not stale, whatever the file date" '! H gamma | grep -q "no handoff"'
 cp "$W/gs.bak" "$G/STATE.md"
 printf 'abc1234 deployed\n' > "$W/version.txt"
-fm_set "$G/TRACK.md" public_urls "file://$W/version.txt"; fm_set "$G/TRACK.md" prod_ref "file://$W/version.txt abc1234def"
+U=file://$(printf '%s' "$W" | sed 's/ /%20/g')   # a URL holds no raw space (TMPDIR may)
+fm_set "$G/TRACK.md" public_urls "$U/version.txt"; fm_set "$G/TRACK.md" prod_ref "$U/version.txt abc1234def"
 check "a public link that opens and production on the expected commit raise nothing" '! H gamma | grep -Eq "public link|production"'
-fm_set "$G/TRACK.md" public_urls "file://$W/missing.txt"; fm_set "$G/TRACK.md" prod_ref "file://$W/version.txt fff9999"
-check "a link closed to a logged-out visitor is yellow" 'H gamma | grep -q "^yellow: a public link does not open for a logged-out visitor: file://$W/missing.txt"'
+fm_set "$G/TRACK.md" public_urls "$U/missing.txt"; fm_set "$G/TRACK.md" prod_ref "$U/version.txt fff9999"
+check "a link closed to a logged-out visitor is yellow" 'H gamma | grep -q "^yellow: a public link does not open for a logged-out visitor: $U/missing.txt"'
 fm_set "$G/TRACK.md" public_urls ""
 check "production on another commit is yellow" 'H gamma | grep -q "^yellow: production does not serve the expected commit fff9999"'
 fm_set "$G/TRACK.md" prod_ref ""
@@ -724,6 +781,19 @@ fm_set "$G/TRACK.md" deadline "$(fut 14400)"
 check "a deadline under 6 h is yellow" 'H gamma | grep -Eq "^yellow: deadline in (3 h 59|4 h 0) min"'
 check "health gives the panel the deadline as a number" 'sh "$here/health.sh" "$W" | awk -F "$(printf "\037")" "\$1 == \"gamma\" { print \$12 }" | grep -q "^[0-9][0-9]*$"'
 check "health gives every reason, red ones first, each tagged with its color" 'sh "$here/health.sh" "$W" | awk -F "$(printf "\037")" "\$1 == \"gamma\" { print \$17 }" | tr "\036" "\n" | awk "!/^(red|yellow) / { exit 1 } /^yellow / { y = 1 } /^red / && y { exit 1 } END { exit NR < 1 }"'
+check "health.sh text answers in plain lines: a verdict first, each project's color and reason, then only this person's questions with their own age" '( d=$(mktemp -d); mkdir -p "$d/board" "$d/projects/p"; printf "shared: yes\n" > "$d/.chief-of-staff"; git -C "$d" init -q; git -C "$d" config cos.member Bo
+cp "$here/../templates/project/STATE.md" "$d/projects/p/STATE.md"; fm_set "$d/projects/p/STATE.md" updated "$(date "+%F %H:%M")"; z=$(date +%z); o=$(date -d "-150 min" "+%F %H:%M" 2>/dev/null || date -v-150M "+%F %H:%M")
+printf -- "---\nstatus: waiting-owner\nproject: p\nmember: Bo\n---\n## For the owner to decide\n- (asked %s %s) Price at 9 or 19? Recommend 19\n- (asked %s %s) Name it Lex?\n" "$o" "$z" "$(date "+%F %H:%M")" "$z" > "$d/board/Card.md"
+printf -- "---\nstatus: waiting-owner\nproject: p\nmember: Ana\n---\n## For the owner to decide\n- Ana only\n" > "$d/board/Other.md"
+printf -- "---\nstatus: waiting-owner\nproject: p\nmember: Bo\n---\nno questions section\n" > "$d/board/Bare.md"
+t=$(sh "$here/health.sh" text "$d"); rm -rf "$d"; printf "%s\n" "$t"
+printf "%s" "$t" | tr -d "\n" | LC_ALL=C grep -q "[[:cntrl:]]" && exit 1
+[ "$(printf "%s\n" "$t" | head -n 1)" = "3 questions wait on you. Projects: 1 red." ] &&
+printf "%s\n" "$t" | grep -Eq "^p: red - a question has waited on the owner for 2 h 3[01] min" &&
+printf "%s\n" "$t" | grep -qx "Waits on you:" && printf "%s\n" "$t" | grep -Eqx -- "- Card \(p\): Price at 9 or 19\? Recommend 19 - asked 2 h 3[01] min ago" &&
+printf "%s\n" "$t" | grep -Eqx -- "- Card \(p\): Name it Lex\? - asked [01] min ago" && printf "%s\n" "$t" | grep -qx -- "- Bare (p): open the card" && ! printf "%s\n" "$t" | grep -q "Ana only" )'
+check "health.sh text says all is fine in its first line" '( d=$(mktemp -d); mkdir -p "$d/projects/p"; touch "$d/.chief-of-staff"; cp "$here/../templates/project/STATE.md" "$d/projects/p/STATE.md"; fm_set "$d/projects/p/STATE.md" updated "$(date "+%F %H:%M")"
+t=$(sh "$here/health.sh" text "$d"); rm -rf "$d"; [ "$(printf "%s\n" "$t" | head -n 1)" = "All fine: nothing waits on you." ] && printf "%s\n" "$t" | grep -qx "p: green - on track" )'
 check "health gives each question to the owner its own age, empty when unstamped" '( d=$(mktemp -d); mkdir -p "$d/board"; touch "$d/.chief-of-staff"; z=$(date +%z); o=$(date -d "-90 min" "+%F %H:%M" 2>/dev/null || date -v-90M "+%F %H:%M")
 printf -- "---\nstatus: waiting-owner\nproject: p\n---\n## For the owner to decide\n- (asked %s %s) old one\n- (asked %s %s) new one\n- no stamp\n" "$o" "$z" "$(date "+%F %H:%M")" "$z" > "$d/board/c.md"
 a=$(sh "$here/health.sh" cards "$d" | awk -F "$(printf "\037")" "{ print \$14 }" | tr "\036" ,); rm -rf "$d"; case $a in 9[0-2],[01],|8[89],[01],) exit 0 ;; *) echo "ages: $a"; exit 1 ;; esac )'
@@ -737,12 +807,12 @@ echo "Scope: login and export. Owner OK: yes" > "$W/t3/scope.md"
 check "an owner item cannot close on a line the agent wrote" 'T check "$W/t3" | grep -q "^scope closes only with the owner.s OK"'
 check "an owner item cannot be marked not applicable" 'sed "s/^- \[x\] scope /- [-] scope /; s/| evidence: scope.md/| why: skipped/" "$W/t3/TRACK.md" > "$W/t3b"; mkdir -p "$W/t4"; mv "$W/t3b" "$W/t4/TRACK.md"; T check "$W/t4" | grep -q "^scope waits on the owner.s OK and cannot be marked not applicable"'
 check "removing the owner mark after opening does not skip the owner" 'cp "$W/t3/TRACK.md" "$W/t5.md"; mkdir -p "$W/t5"; mv "$W/t5.md" "$W/t5/TRACK.md"; cp "$W/t3/scope.md" "$W/t5/"; T baseline "$W/t5" && sed -i.bak "s/ | owner: ok//" "$W/t5/TRACK.md" && T check "$W/t5" | grep -q "^scope needed the owner.s OK when the project opened"'
-check "nor does deleting the item, and the list of owner items is protected" 'sed -i.bak "/^- \[x\] scope /d; s/needs: scope/needs: -/" "$W/t5/TRACK.md" && T check "$W/t5" | grep -q "^scope needed the owner.s OK" && [ ! -w "$W/t5/.owner-items" ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/t5/.owner-items\"}")" "$P")" = 2 ]'
+check "nor does deleting the item, and the list of owner items is protected" 'sed -i.bak "/^- \[x\] scope /d; s/needs: scope/needs: -/" "$W/t5/TRACK.md" && T check "$W/t5" | grep -q "^scope needed the owner.s OK" && ro "$W/t5/.owner-items" && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/t5/.owner-items\"}")" "$P")" = 2 ]'
 check "baseline never rewrites the owner list, and a missing list fails closed" 'fm_set "$W/t5/TRACK.md" baseline ""; ! T baseline "$W/t5" 2>/dev/null && grep -qx scope "$W/t5/.owner-items" && T baseline "$W/t5" 2>&1 | grep -q "already" ; fm_set "$W/t5/TRACK.md" baseline 2; chmod u+w "$W/t5/.owner-items"; mv "$W/t5/.owner-items" "$W/t5/oi"; T check "$W/t5" | grep -q "list of owner items is missing"'
 check "the owner list cannot be removed by a glob spelling" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -f t5/.own*\"}")" "$P")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -f t5/*er-items\"}")" "$P")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"mv t5/.owner-i* /tmp/x\"}")" "$P")" = 2 ]'
 check "a project session cannot record the owner OK" '! CLAUDE_PROJECT_DIR="$W/t3" T ok "$W/t3" scope yes 2>/dev/null && [ ! -e "$W/t3/.owner-ok" ]'
 check "the OK is only for items marked owner: ok" '! CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" review-1 yes 2>/dev/null'
-check "central records the owner OK and the item closes" 'CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" scope "yes, freeze it" >/dev/null && ! T check "$W/t3" | grep -q "owner.s OK" && [ ! -w "$W/t3/.owner-ok" ]'
+check "central records the owner OK and the item closes" 'CLAUDE_PROJECT_DIR="$W/central" T ok "$W/t3" scope "yes, freeze it" >/dev/null && ! T check "$W/t3" | grep -q "owner.s OK" && ro "$W/t3/.owner-ok"'
 check "recording the owner OK asks the owner" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/track.sh ok $W/t3 scope yes\"}")" "$W/central" | grep -q "permissionDecision\":\"ask"'
 # target and check: a hard number and an outside judge that runs (v0.3)
 TC="$W/projects/tc"; mkdir -p "$TC"; C="$W/central"
@@ -793,7 +863,7 @@ check "tc: check none with a reason needs no delivery OK" 'mkdir -p "$W/tc2"; se
 check "tc: every track template carries target and check" 'for f in "$here"/../templates/tracks/*.md; do grep -q "^target:" "$f" && grep -q "^check:" "$f" || echo "$f"; done > "$W/tc.miss"; [ ! -s "$W/tc.miss" ]'
 check "tc: the brief shows the target and the last result" 'T brief "$TC" | grep -q "Target: under 2 s for the full run"'
 rm -rf "$TC" "$W/tc0" "$W/tc2" "$W/tc3" "$W/tc4" "$W/tc5"
-check "checking the track of a project named booking does not ask" '[ -z "$(h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/track.sh check $W/projects/booking\"}")" "$P")" ]'
+check "checking the track of a project named booking does not ask (it is allowed)" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh \\\"$here/track.sh\\\" check \\\"$W/projects/booking\\\"\"}")" "$P" | grep -q "\"permissionDecision\":\"allow\""'
 check "agents cannot write the owner OK file" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/t3/.owner-ok\"}")" "$P")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"chmod u+w $W/t3/.owner-ok\"}")" "$P")" = 2 ]'
 check "the hackathon track asks the owner at scope and submit only" '[ "$(grep -c "| owner: ok |" "$here/../templates/tracks/hackathon.md")" = 2 ] && grep -q "^- \[ \] scope .*owner: ok" "$here/../templates/tracks/hackathon.md" && grep -q "^- \[ \] submit .*owner: ok" "$here/../templates/tracks/hackathon.md"'
 touch -t 202001010000 "$G/STATE.md"
@@ -807,6 +877,7 @@ fm_set "$G/TRACK.md" stage 2
 check "health is red after a violation" 'H gamma | grep -q "^red: a turn ended without"'
 gcard "$(fut 0)"
 
+check "the panel puts what waits on the owner first, above the projects and their track maps" 'python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; h = panel.PAGE if hasattr(panel, \"PAGE\") else open(sys.argv[1] + \"/panel.py\").read(); i = h.index(\"<h2>Waits on you</h2><div id=\\\"cards\\\"\"); assert i < h.index(\"<div id=\\\"projects\\\"\")" "$here"'
 check "panel keeps every question of a card (rows split on newlines only, not on \\x1e)" 'python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; assert panel.rows(\"C\\x1fq1\\x1eq2\\x1eq3\\nX\\n\") == [\"C\\x1fq1\\x1eq2\\x1eq3\", \"X\"]" "$here" && ! grep -n "sh(.*splitlines" "$here/panel.py"'
 check "panel shows the latest progress line of each open card, newest first" '( d=$(mktemp -d); mkdir -p "$d/board"; touch "$d/.chief-of-staff"
 printf -- "---\nstatus: in-progress\nproject: p\nupdated: 2026-10-25\n---\n## Sunday\n- 09:00: planned, not progress\n- 11:16 UTC (agent-a): step 0 pass\n- 11:30 UTC (agent-a): contract and 16 tests\n" > "$d/board/a.md"
@@ -871,6 +942,12 @@ printf '2026-01-01 00:00:00 t=%s turn=z1 project=delta substantive=1 agents=1 sp
 check "an unresolved violation makes the project red" 'H delta | grep -q "^red: a turn ended"'
 printf '2026-01-01 00:00:01 t=%s turn=z1 project=delta substantive=0 agents=1 specialists=0 reviewers=1 pushed=false violation=0\n' "$(date +%s)" >> "$W/.protocol.log"
 check "a violation fixed later in the same session clears" '! H delta | grep -q "^red"'
+printf '2026-01-01 00:00:02 t=%s turn=z2 project=delta substantive=1 agents=1 specialists=1 reviewers=0 pushed=true violation=1\n' "$(date +%s)" >> "$W/.protocol.log"
+check "the project's next session is told about a turn that skipped the review, and what to do" 'H delta | grep -q "^red: a turn ended" && b "$W/projects/delta" | grep -q "^A turn at [0-2][0-9]:[0-5][0-9] ended without the specialists, the reviewer or the track gate: run the specialists skill on that turn.s work before building on it"'
+printf '2026-01-01 00:00:03 t=%s turn=z3 project=delta substantive=1 agents=0 specialists=0 reviewers=0 pushed=false violation=0\n' "$(date +%s)" >> "$W/.protocol.log"
+check "a later turn without specialists does not clear it" 'H delta | grep -q "^red: a turn ended"'
+printf '2026-01-01 00:00:04 t=%s turn=z3 project=delta substantive=1 agents=2 specialists=1 reviewers=1 pushed=false violation=0\n' "$(date +%s)" >> "$W/.protocol.log"
+check "a later reviewed turn of any session clears it, in the panel and the briefing" '! H delta | grep -q "^red" && ! b "$W/projects/delta" | grep -q "^A turn at"'
 
 # delivery line: the planned end of the original request
 D="$W/projects/eps"; mkdir -p "$D/o"; printf x > "$D/o/a"; printf x > "$D/o/r"
@@ -917,12 +994,30 @@ check "a dot-dot slug is not a control file" '[ "$(wr "$W/projects/../TRACK.md")
 check "the real TRACK.md is still a control file" '[ "$(wr "$W/projects/alpha/TRACK.md")" = 0 ]'
 
 # shared workspace: one board for the whole team. Ana and Bia, each with their own copy, one team repo
-SW="$W/sw"; mkdir -p "$SW"; git init -q --bare "$SW/team.git"; git init -q --bare "$SW/plain.git"
+SW=$(cd "$(mktemp -d)" && pwd -P); git init -q --bare "$SW/team.git"; git init -q --bare "$SW/plain.git"
 git clone -q "$SW/plain.git" "$SW/plainc" 2>/dev/null; printf x > "$SW/plainc/README"; git -C "$SW/plainc" add -A; git -C "$SW/plainc" -c user.name=a -c user.email=a@b commit -qm x; git -C "$SW/plainc" push -q origin HEAD 2>/dev/null
 check "a shared workspace needs the member name" '! sh "$here/setup.sh" create "$SW/a" --share "$SW/team.git" 2>/dev/null && [ ! -e "$SW/a" ]'
 check "a shared workspace is created and pushed to the team repo" 'sh "$here/setup.sh" create "$SW/a" --share "$SW/team.git" --member Ana | grep -q "^Shared: pushed" && grep -qx "shared: yes" "$SW/a/.chief-of-staff" && git -C "$SW/team.git" ls-tree -r --name-only HEAD | grep -qx board/.gitkeep'
 check "a repo that is not a shared workspace cannot be joined, and leaves nothing" '! sh "$here/setup.sh" join "$SW/x" "$SW/plain.git" --member Bia 2>/dev/null && [ ! -e "$SW/x" ] && ! ls "$SW" | grep -q cos-join'
-check "a teammate joins with their own name" 'sh "$here/setup.sh" join "$SW/b" "$SW/team.git" --member Bia | grep -q "you are Bia" && [ "$(git -C "$SW/b" config cos.member)" = Bia ] && [ ! -w "$SW/b/.chief-of-staff" ]'
+check "a teammate joins with their own name" 'sh "$here/setup.sh" join "$SW/b" "$SW/team.git" --member Bia | grep -q "you are Bia" && [ "$(git -C "$SW/b" config cos.member)" = Bia ] && ro "$SW/b/.chief-of-staff"'
+check "join refuses a team repo with a marker inside a folder, settings or a committed owner OK, and creates nothing" '( for f in "projects/p/.chief-of-staff" "projects/p/.claude/settings.json" "projects/p/.owner-ok" "projects/p/.chief-of-${LS}taff" "projects/p/.chief-of-sta$FF" "projects/p/.mcp.j${LS}on" "projects/p/.owner-o$KS"; do d=$(mktemp -d); g() { git -c user.name=t -c user.email=t@t "$@"; }; g init -q --bare "$d/r.git"; g init -q "$d/a"; printf "shared: yes\n" > "$d/a/.chief-of-staff"; mkdir -p "$d/a/${f%/*}"; : > "$d/a/$f"; g -C "$d/a" add -A; g -C "$d/a" commit -qm x; g -C "$d/a" push -q "$d/r.git" HEAD:main 2>/dev/null; g --git-dir="$d/r.git" symbolic-ref HEAD refs/heads/main
+  o=$(sh "$here/setup.sh" join "$d/b" "$d/r.git" --member Bo 2>&1); r=0; printf "%s" "$o" | grep -q "holds files that" && [ ! -e "$d/b" ] || { echo "$f: $o"; r=1; }; rm -rf "$d"; [ $r = 0 ] || exit 1; done )'
+check "a stray marker above a workspace never takes it, and a workspace of its own inside another keeps its own (nearest marker, as on main)" '( d=$(cd "$(mktemp -d)" && pwd -P); mkdir -p "$d/.git"; : > "$d/.chief-of-staff"; sh "$here/setup.sh" create "$d/ws" >/dev/null 2>&1 || exit 1; sh "$here/setup.sh" create "$d/ws/projects/inner" >/dev/null 2>&1 || exit 1
+  a=$(cos_root "$d/ws/central"); b=$(cos_root "$d/ws/projects/inner/central"); rm -rf "$d"; [ "$a" = "$d/ws" ] && [ "$b" = "$d/ws/projects/inner" ] || { echo "$a | $b"; exit 1; } )'
+check "a marker planted in a shared project does not make a forged owner OK trusted" '( d=$(cd "$(mktemp -d)" && pwd -P); g() { git -c user.name=t -c user.email=t@t "$@"; }; g init -q --bare "$d/r.git"; g init -q "$d/a"; printf "shared: yes\n" > "$d/a/.chief-of-staff"; p="$d/a/projects/p"; mkdir -p "$p"; : > "$p/.chief-of-staff"
+  printf -- "---\nstage: 1\n---\n## Stage 1: A\n- [x] scope | Scope | card: product | needs: - | evidence: s.md | owner: ok\n- [ ] r | R | card: reviewer | needs: scope | evidence:\n" > "$p/TRACK.md"; echo s > "$p/s.md"; printf "scope\t2026-01-01 10:00\tyes\n" > "$p/.owner-ok"
+  g -C "$d/a" add -A; g -C "$d/a" commit -qm x; g -C "$d/a" push -q "$d/r.git" HEAD:main 2>/dev/null; g clone -q -b main "$d/r.git" "$d/b" 2>/dev/null
+  o=$(sh "$here/track.sh" check "$d/b/projects/p"); rm -rf "$d"; printf "%s" "$o" | grep -q "^scope closes only with the owner.s OK" )'
+check "the plugin's git settings do not reach what it starts for the user (the owner's check, a dispatched session), and a caller's own settings stay" '( o=$(env -i PATH="$PATH" HOME="$HOME" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=x.y GIT_CONFIG_VALUE_0=z sh -c ". \"$here/lib.sh\"; cos_gitenv_off; git config --get safe.bareRepository; git config --get x.y"); [ "$o" = z ] || { echo "got: $o"; exit 1; }; o=$(env -i PATH="$PATH" HOME="$HOME" sh -c ". \"$here/lib.sh\"; cos_gitenv_off; env | grep -c =safe.bareRepository"); [ "$o" = 0 ] || exit 1; grep -q "cos_gitenv_off" "$here/dispatcher.sh" && [ "$(grep -c "cos_gitenv_off" "$here/track.sh")" -ge 2 ] )'
+check "a relative project path and an accented folder name do not hide a forged owner OK or a refused file" '( d=$(cd "$(mktemp -d)" && pwd -P); g() { git -c user.name=t -c user.email=t@t "$@"; }; g init -q --bare "$d/r.git"; g init -q "$d/a"; printf "shared: yes\n" > "$d/a/.chief-of-staff"; p="$d/a/projects/p"; mkdir -p "$p" "$d/a/projects/café"
+  printf -- "---\nstage: 1\n---\n## Stage 1: A\n- [x] scope | Scope | card: product | needs: - | evidence: s.md | owner: ok\n- [ ] r | R | card: reviewer | needs: scope | evidence:\n" > "$p/TRACK.md"; echo s > "$p/s.md"; printf "scope\t2026-01-01 10:00\tyes\n" > "$p/.owner-ok"; : > "$d/a/projects/café/.gitattributes"
+  g -C "$d/a" add -A; g -C "$d/a" commit -qm x; g -C "$d/a" push -q "$d/r.git" HEAD:main 2>/dev/null; g --git-dir="$d/r.git" symbolic-ref HEAD refs/heads/main; g clone -q "$d/r.git" "$d/b" 2>/dev/null
+  o=$(cd "$d/b/projects" && sh "$here/track.sh" check ./p); j=$(sh "$here/setup.sh" join "$d/c" "$d/r.git" --member Bo 2>&1); rm -rf "$d"
+  printf "%s" "$o" | grep -q "^scope closes only with the owner.s OK" || { echo "relative: $o"; exit 1; }; printf "%s" "$j" | grep -q "holds files that" || { echo "join: $j"; exit 1; } )'
+check "join keeps only the safe lines of the team marker and says what it ignored" '( d=$(cd "$(mktemp -d)" && pwd -P); g() { git -c user.name=t -c user.email=t@t "$@"; }; g init -q --bare "$d/r.git"; g init -q "$d/a"; printf "chief-of-staff workspace v0.1\r\nshared: yes\r\npace: fast\r\nteam: x /tmp\r\n" > "$d/a/.chief-of-staff"; g -C "$d/a" add -A; g -C "$d/a" commit -qm x; g -C "$d/a" push -q "$d/r.git" HEAD:main 2>/dev/null; g --git-dir="$d/r.git" symbolic-ref HEAD refs/heads/main
+  o=$(sh "$here/setup.sh" join "$d/b" "$d/r.git" --member Bo 2>&1); git -C "$d/b" checkout -- . 2>/dev/null; m=$(cat "$d/b/.chief-of-staff" 2>/dev/null); rm -rf "$d"
+  [ "$m" = "$(printf "chief-of-staff workspace v0.1\nshared: yes")" ] && printf "%s" "$o" | grep -q "Ignored from the team.s marker: pace: fast" || { echo "$o / $m"; exit 1; } )'
+check "a teammate's briefing calls the shared library the team's, never personal" 'o=$(CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/briefing.sh"); printf "%s\n" "$o" | grep -q "^Library of this session: the team.s (shared workspace)" && ! printf "%s\n" "$o" | grep -q "personal"'
 check "a shared workspace takes no other library" 'CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/library.sh" join "$SW/plain.git" 2>&1 | grep -q "shared with the team"'
 turn() { hk "$(ev UserPromptSubmit)" "$1" >/dev/null 2>&1; hk "$(ev Stop ",\"stop_hook_active\":false")" "$1" 2>&1; }
 inteam() { git -C "$SW/team.git" ls-tree -r --name-only HEAD | grep -qxF "$1"; }
@@ -969,6 +1064,9 @@ git -C "$SW/evil" add -A && git -C "$SW/evil" -c user.name=e -c user.email=e@e c
 check "a teammate.s change to settings is never pulled" 'sh "$here/sync.sh" pull "$SW/b"; [ ! -e "$SW/b/.CLAUDE/settings.json" ] && grep -q "pull refused" "$SW/b/.git/cos-sync"'
 check "and a push does not take it in either" 'echo x >> "$SW/b/projects/pb/STATE.md"; ! sh "$here/sync.sh" push "$SW/b" pb "$SW/b" projects/pb/STATE.md && [ ! -e "$SW/b/.CLAUDE/settings.json" ] && grep -q "pull refused" "$SW/b/.git/cos-sync"'
 git -C "$SW/evil" rm -rq .CLAUDE && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm undo && git -C "$SW/evil" push -q 2>/dev/null
+printf '{}\n' > "$SW/evil/.mcp.j${LS}on"; git -C "$SW/evil" add -A && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm mcp && git -C "$SW/evil" push -q 2>/dev/null
+check "a teammate.s .mcp.json spelled with a long s (macOS opens it as .mcp.json) is not pulled either" 'sh "$here/sync.sh" pull "$SW/b"; [ ! -e "$SW/b/.mcp.json" ] && grep -q "pull refused" "$SW/b/.git/cos-sync"'
+git -C "$SW/evil" rm -q ".mcp.j${LS}on" && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm undo && git -C "$SW/evil" push -q 2>/dev/null
 mkdir -p "$PJ/repo" && git -C "$PJ/repo" init -q && echo x > "$PJ/repo/a.txt"; dd if=/dev/zero of="$PJ/demo.mp4" bs=1048576 count=21 2>/dev/null; echo "plan" > "$PJ/plan.md"
 printf 'scope\tyes\n' > "$PJ/.owner-ok"; printf 'scope\n' > "$PJ/.owner-items"
 check "the owner OK and the owner list stay on the member.s computer" 'turn "$PJ" >/dev/null; sleep 1; ! inteam projects/pa/.owner-ok && ! inteam projects/pa/.owner-items'
@@ -976,7 +1074,8 @@ rm -f "$PJ/.owner-ok" "$PJ/.owner-items"
 git -C "$SW/evil" pull -q 2>/dev/null; printf 'scope\tforged\n' > "$SW/evil/projects/pa/.owner-ok"; git -C "$SW/evil" add -f projects/pa/.owner-ok && git -C "$SW/evil" -c user.name=e -c user.email=e@e commit -qm forge && git -C "$SW/evil" push -q 2>/dev/null
 check "a teammate cannot send an owner OK" 'sh "$here/sync.sh" pull "$SW/b"; [ ! -e "$SW/b/projects/pa/.owner-ok" ] && grep -q "pull refused" "$SW/b/.git/cos-sync"'
 # a clone brings whatever the team repo holds: an owner file in it is not this computer's owner
-sh "$here/setup.sh" join "$SW/c" "$SW/team.git" --member Ana >/dev/null 2>&1; CP="$SW/c/projects/pa"
+check "join refuses the team repo that carries the forged OK" '! sh "$here/setup.sh" join "$SW/c" "$SW/team.git" --member Ana >/dev/null 2>&1 && [ ! -e "$SW/c" ]'
+git clone -q "$SW/team.git" "$SW/c" 2>/dev/null; git -C "$SW/c" config cos.member Ana; CP="$SW/c/projects/pa"   # a clone by hand still gets it
 printf -- '---\nstage: 2\ntarget: under 1 s\ncheck: touch pwned\n---\n' > "$CP/TRACK.md"
 mkdir -p "$W/scr"; cp "$CP/TRACK.md" "$W/scr/"; printf -- '---\nstatus: in-progress\n---\n' > "$W/scr/STATE.md"; CLAUDE_PROJECT_DIR="$C" T ok "$W/scr" check yes >/dev/null; chmod u+w "$CP/.owner-ok" 2>/dev/null; cat "$W/scr/.owner-ok" >> "$CP/.owner-ok"
 check "tc: an owner OK that came with the team repo is not trusted" 'git -C "$SW/c" ls-files --error-unmatch projects/pa/.owner-ok >/dev/null 2>&1 && ! T verify "$CP" >/dev/null 2>&1 && [ ! -e "$CP/pwned" ] && T check "$CP" | grep -q ".owner-ok came from the team repo"'

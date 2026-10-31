@@ -78,6 +78,9 @@ Answer: <one line: conclusion, jurisdiction, confidence>
 <facts or rule changes that flip it>
 ## Needs a licensed human
 <item, why, jurisdiction, deadline>
+## Versions
+<one line per version, at most 4: v<n> <lens>: <what changed> - verdict: <the judge named in the brief> - evidence: <the command and its output, or the file>; a first version that passed is "v1 passed: <what the judge printed>">
+
 ## Never-skip checklist
 <each item from this card: done / not applicable (why)>
 ## Not checked

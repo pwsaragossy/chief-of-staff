@@ -16,7 +16,8 @@
 # No TRACK.md: silent, exit 0 (old projects keep working).
 . "$(dirname "$0")/lib.sh"
 
-cmd=$1; dir=$2; t="$dir/TRACK.md"
+cmd=$1; dir=$2; [ -d "$dir" ] && dir=$(cd "$dir" && pwd)   # absolute: the guards find the workspace from it
+t="$dir/TRACK.md"
 if [ ! -f "$t" ]; then # a project made from the template names TRACK.md in its CLAUDE.md: deleting the file must not open the gate
   [ "$cmd" = check ] && grep -qs 'TRACK.md' "$dir/CLAUDE.md" 2>/dev/null && { echo "TRACK.md is missing, but this project's CLAUDE.md requires it: restore it (git) instead of deleting it"; exit 1; }
   exit 0
@@ -62,13 +63,24 @@ TB=$(printf '\t')
 # hand commit), not from this computer's owner (the plugin never commits them: protocol.sh push skip). It is
 # moved aside at once, so untracking it later does not make its content trusted.
 OKF="$dir/.owner-ok"; OIF="$dir/.owner-items"; forged=
-if cos_shared "$(cos_root "$dir")" 2>/dev/null; then
-  for _f in $(git -C "$dir" ls-files -- ':(icase).owner-ok' ':(icase).owner-items' 2>/dev/null); do
+# git reads the workspace's own repository, named outright: a folder of the project laid out like a repository
+# (a teammate can commit one) is never taken for it. If git cannot answer, nothing of the owner's is trusted
+wroot=$(cos_root "$dir"); wg() { git --git-dir="$wroot/.git" --work-tree="$wroot" -C "$dir" "$@"; }
+if cos_anyshared "$dir"; then
+  _l=$(wg ls-files -- ':(icase).owner-ok' ':(icase).owner-items' 2>/dev/null) || { OKF=/nonexistent/.owner-ok; OIF=/nonexistent/.owner-items; }
+  for _f in $_l; do
     forged="$forged $_f"; [ -e "$dir/$_f" ] && { [ -L "$dir/$_f" ] || chmod u+w "$dir/$_f"; mv -f "$dir/$_f" "$dir/$_f.from-team"; } 2>/dev/null
   done
   case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) OKF=/nonexistent/.owner-ok ;; esac
   case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-items*) OIF=/nonexistent/.owner-items ;; esac
 fi
+# a file the disk only reads as an owner file (macOS: .owner-oK with a Kelvin sign, .owner-itemſ with a long s) is not
+# the owner's: git and the guards never see it under that name. Moved aside the same way, in any workspace
+# (find compares bytes, and a name with a line break cannot pose as the real one); one that stays is not read
+folded=; for _b in .owner-ok .owner-items; do [ -e "$dir/$_b" ] && [ -z "$(find -H "$dir" -mindepth 1 -maxdepth 1 -name "$_b" 2>/dev/null)" ] || continue
+  for _x in "$dir"/.[!.]*; do [ "$_x" -ef "$dir/$_b" ] && { [ -L "$_x" ] || chmod u+w "$_x"; mv -f "$_x" "$_x.from-team"; folded="$folded ${_x##*/}"; }; done 2>/dev/null
+  [ -e "$dir/$_b" ] && case $_b in .owner-ok) OKF=/nonexistent/.owner-ok ;; *) OIF=/nonexistent/.owner-items ;; esac
+done
 has_tc=; awk 'NR == 1 && /^---/ { f = 1; next } f && /^---/ { exit } f && /^target:/ { h = 1 } END { exit !h }' "$t" && has_tc=1
 grep -qx 'target:' "$OIF" 2>/dev/null && has_tc=1
 grep -q '^check	' "$OKF" 2>/dev/null && has_tc=1
@@ -94,21 +106,21 @@ frozen() { awk -F '\t' '$1 == "check" { for (i = 4; i <= NF; i++) if ($i ~ /^fre
 # this computer did not make (sync.sh lists its own in cos-own): a pull, by sync.sh or by hand. The approval keeps
 # the commit shared with the team repo then (head=), which a push never rewrites; local commits after it are
 # folded by sync.sh push, and the folded one is listed as this computer's own
-teamsent() { cos_shared "$(cos_root "$dir")" 2>/dev/null || return 1
-  _g=$(git -C "$dir" rev-parse --absolute-git-dir 2>/dev/null) || return 1; _p=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null)
+teamsent() { cos_anyshared "$dir" || return 1
+  _g=$(wg rev-parse --absolute-git-dir 2>/dev/null) || { echo "its history (git cannot read this project)"; return 0; }; _p=$(wg rev-parse --show-prefix 2>/dev/null)
   _h=$(awk -F '\t' '$1 == "check" { h = ""; for (i = 4; i <= NF; i++) if ($i ~ /^head=/) h = substr($i, 6) } END { print h }' "$OKF" 2>/dev/null)
-  [ -n "$_h" ] && git -C "$dir" merge-base --is-ancestor "$_h" HEAD 2>/dev/null || { echo "the history since the approval (its commit is gone)"; return 0; }
-  for _c in $(git -C "$dir" rev-list "$_h..HEAD" -- ":(top,icase)$_p" 2>/dev/null); do
+  [ -n "$_h" ] && wg merge-base --is-ancestor "$_h" HEAD 2>/dev/null || { echo "the history since the approval (its commit is gone)"; return 0; }
+  for _c in $(wg rev-list "$_h..HEAD" -- ":(top,icase)$_p" 2>/dev/null); do
     grep -qx "$_c" "$_g/cos-own" 2>/dev/null && continue
-    git -C "$dir" diff-tree --no-commit-id --name-only -r "$_c" -- ":(top,icase)$_p" | head -n 1; return 0
+    wg diff-tree --no-commit-id --name-only -r "$_c" -- ":(top,icase)$_p" | head -n 1; return 0
   done; return 1; }
 # runcheck: rc (0 met, 1 not met, 124 timed out, other could not run) and val (the last output line)
 runcheck() {
   _o=$(mktemp); _lim=${COS_CHECK_TIMEOUT:-120}; case $_lim in ''|*[!0-9]*) _lim=120 ;; esac
   # the check runs in its own process group, so the timeout stops what it started too (a pipe, a server).
   # setsid where it exists (Linux: dash refuses set -m without a tty, from a hook), set -m otherwise (macOS)
-  if command -v setsid > /dev/null 2>&1; then ( cd "$dir" && exec setsid sh -c "$chk" ) > "$_o" 2>&1 < /dev/null & _p=$!
-  else set -m; ( cd "$dir" && exec sh -c "$chk" ) > "$_o" 2>&1 < /dev/null & _p=$!; set +m; fi
+  if command -v setsid > /dev/null 2>&1; then ( cos_gitenv_off; cd "$dir" && exec setsid sh -c "$chk" ) > "$_o" 2>&1 < /dev/null & _p=$!
+  else set -m; ( cos_gitenv_off; cd "$dir" && exec sh -c "$chk" ) > "$_o" 2>&1 < /dev/null & _p=$!; set +m; fi
   ( trap 'kill $_s 2>/dev/null; exit 0' TERM; sleep "$_lim" & _s=$!; wait $_s; { kill -TERM -"$_p" || kill "$_p"; } 2>/dev/null && : > "$_o.to" ) > /dev/null 2>&1 & _k=$!
   { wait "$_p"; rc=$?; kill "$_k"; wait "$_k"; } 2>/dev/null   # waiting on the stopped timer keeps the shell's "Terminated" notice quiet
   _to=; [ -f "$_o.to" ] && _to=1
@@ -183,6 +195,7 @@ check() {
   # an item that needed the owner's OK at opening still needs it: removing the mark does not skip the owner
   # (.owner-items, read-only and written once by baseline: TRACK.md itself is the agent's to edit)
   # a project opened with a baseline always has the list: without it the owner gate would be off (fail closed)
+  for _f in $folded; do echo "$_f is not named exactly like the owner's file, though this disk reads it as one, so this computer does not trust it; it was moved aside to $_f.from-team: have the owner give their OKs again"; done
   for _f in $forged; do echo "$_f came from the team repo (git tracks it), so this computer does not trust it; it was moved aside to $_f.from-team: remove it from git (git rm --cached $_f) and have the owner give their OKs again"; done
   [ -n "$(fm_get "$t" baseline)" ] && [ ! -r "$OIF" ] &&
     echo "the list of owner items is missing (.owner-items, written when the project opened): restore it from git or ask the owner"
@@ -285,7 +298,7 @@ case $cmd in
     case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) echo "track.sh ok: .owner-ok came from the team repo (git tracks it): remove it from git first (git rm --cached)" >&2; exit 1 ;; esac
     mine || { echo "track.sh ok: this project is $(fm_get "$dir/STATE.md" member)'s; only their central records its OK" >&2; exit 1; }
     w=$(printf '%s' "$*" | tr -d '\000-\037' | cut -c1-300); x=
-    if [ "$id" = check ]; then x="${TB}freeze=$(tcsum)$({ git -C "$dir" merge-base HEAD '@{u}' || git -C "$dir" rev-parse -q --verify HEAD; } 2>/dev/null | head -n 1 | sed "s/^/$TB""head=/")"; _fl=$(tcfiles)
+    if [ "$id" = check ]; then x="${TB}freeze=$(tcsum)$({ wg merge-base HEAD '@{u}' || wg rev-parse -q --verify HEAD; } 2>/dev/null | head -n 1 | sed "s/^/$TB""head=/")"; _fl=$(tcfiles)
       echo "the owner approves the target '$tgt' and the command '$chk'${_fl:+, frozen with its files: $_fl}"
     elif [ -n "$runnable" ] && { [ "$id" = delivery ] || [ "$(printf '%s\n' "$rows" | awk -F "$US" -v i="$id" '$1 == "I" && $4 == i { print $2 }')" -ge "$del" ]; }; then
       # the delivery OK: the frozen check runs now, in front of the owner; a failing one needs the owner's waiver

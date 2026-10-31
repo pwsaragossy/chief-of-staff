@@ -42,22 +42,28 @@ SENT='
   { l = $0; sub(/^[[:space:]>*+-]+/, "", l); n = split(l, a, /[.!?;:][[:space:]]+/); for (k = 1; k <= n; k++) out(a[k]) }'
 sentences() { LC_ALL=C awk -v want="${want:-}" "$SENT" "$@"; }
 # (the library may be a folder of a bigger repo, the shared workspace: paths come back relative to the library)
+lg() { if [ -e "$_lq/.git" ]; then git -C "$_lq" "$@"; else git --git-dir="$root/.git" --work-tree="$root" -C "$_lq" "$@"; fi; }   # git on library $_lq
 libchanges() {
-  _pre=$(git -C "$1" rev-parse --show-prefix 2>/dev/null)
+  # git reads the library's own repository, or the shared workspace's by name: a folder there laid out like a
+  # repository is never taken for it. A git that cannot answer returns 1 (nothing is pushed; the turn says so)
+  _lq=$1
+  _pre=$(lg rev-parse --show-prefix 2>/dev/null) || return 1
   # -z: git never quotes a name (a space, an accent) there; a name with a line break is cut, and caught as bad
-  { git -C "$1" status --porcelain -z -uall --no-renames -- . 2>/dev/null | tr '\0' '\n' | grep -Ev '^(D.|.D) ' | cut -c4-
-    if git -C "$1" rev-parse -q --verify '@{u}' >/dev/null; then git -C "$1" diff -z --name-only --diff-filter=d '@{u}...HEAD' -- . | tr '\0' '\n'
-    else git -C "$1" diff -z --name-only --diff-filter=d "$(git -C "$1" rev-list --max-parents=0 HEAD 2>/dev/null | tail -n 1)" HEAD -- . 2>/dev/null | tr '\0' '\n'; fi; } |
+  lg status --porcelain -z -uall --no-renames -- . > "$st/libst" 2>/dev/null || return 1
+  { tr '\0' '\n' < "$st/libst" | grep -Ev '^(D.|.D) ' | cut -c4-
+    if lg rev-parse -q --verify '@{u}' >/dev/null 2>&1; then lg diff -z --name-only --diff-filter=d '@{u}...HEAD' -- . 2>/dev/null | tr '\0' '\n'
+    else lg diff -z --name-only --diff-filter=d "$(lg rev-list --max-parents=0 HEAD 2>/dev/null | tail -n 1)" HEAD -- . 2>/dev/null | tr '\0' '\n'; fi; } |
     while IFS= read -r _f; do case $_f in "$_pre"*) printf '%s\n' "${_f#"$_pre"}" ;; esac; done | sort -u
 }
 shared=; cos_shared "$root" && shared=1
 # a key or token in a file that would go to the team (same list as the panel's import check, plus Stellar secret seeds)
 SECRETS='sk_live_[0-9A-Za-z]{20}|rk_live_[0-9A-Za-z]{20}|_authToken=[^ ]{20}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40}|sk-[A-Za-z0-9_-]{32}|xox[baprs]-[A-Za-z0-9-]{10}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10}[.]eyJ[A-Za-z0-9_-]{10}[.]|(^|[^A-Z0-9])S[A-Z2-7]{55}([^A-Z0-9]|$)'
 # a path with .., symlinks and letter case resolved (macOS ignores case); "" when a part that does not exist yet holds ..
-real() { d=$1 r=; k=0
+real() { realp "$1" | tr 'A-Z' 'a-z'; }
+realp() { d=$1 r=; k=0
   while [ -L "$d" ] && [ $k -lt 20 ]; do t=$(readlink "$d"); case $t in /*) d=$t ;; *) d=${d%/*}/$t ;; esac; k=$((k+1)); done   # a symlinked file
   while [ ! -d "$d" ]; do r="/${d##*/}$r"; d=${d%/*}; [ -n "$d" ] || d=/; done
-  case $r in */..|*/../*|*/.|*/./*) return 0 ;; esac; printf '%s%s' "$(cd "$d" && pwd -P)" "$r" | tr 'A-Z' 'a-z'; }
+  case $r in */..|*/../*|*/.|*/./*) return 0 ;; esac; printf '%s%s' "$(cd "$d" && pwd -P)" "$r"; }
 case $rel in projects/?*) project=${rel#projects/}; project=${project%%/*} ;; *) project= ;; esac
 
 # Flat JSON field (hook input is compact JSON); good enough for ids, names and booleans.
@@ -200,7 +206,8 @@ $p"; fi ;;
         echo "Blocked by chief-of-staff: search the library first, then search the web only for what it lacks. Run: sh \"$(dirname "$0")/library.sh\" search <terms>" >&2
         exit 2 ;;
       Write|Edit|MultiEdit|Bash)   # the marker says where the library lives: only the owner edits it
-        lc=$(printf '%s' "$in" | tr 'A-Z' 'a-z')   # macOS file names ignore case: .CHIEF-OF-STAFF is the marker
+        # macOS file names ignore case: .CHIEF-OF-STAFF is the marker, and so is .owner-oK with a Kelvin sign (cos_fold)
+        lc=$(printf '%s' "$in" | tr 'A-Z' 'a-z' | cos_fold)
         case $(jget tool_name) in
           Bash)
             # ponytail: a word list, not a shell parser; the files are also read-only on disk (offload, setup).
@@ -280,6 +287,35 @@ $p"; fi ;;
                 grep -Eq '[^a-z0-9_.-](tee|mv|cp|rm|perl[0-9.]*|python[0-9.]*|ln|dd|install|rsync|touch|truncate|chmod|chflags|chown|chgrp|xattr|unlink|shred|tar|unzip|gunzip|patch|ditto|sponge|node|deno|bun|ruby|php|lua|swift|osascript|git|ed|ex)([^a-z0-9_.-]|$)' && blk=1
             fi
             if [ -z "$blk" ]; then
+              # the plugin's own read-only commands, the ones the hooks already run by themselves, skip the permission
+              # prompt (not the user's decision): one call of library.sh or track.sh at this plugin's own path, a
+              # read-only subcommand, no shell syntax, and paths only inside the workspace. Anything else goes on to
+              # the checks below and keeps the normal prompt; Claude Code's deny and ask rules still apply over this
+              ro=; [ "$(printf '%s' "$in" | grep -o '"command" *:' | wc -l | tr -d ' ')" = 1 ] &&
+                ro=$(printf '%s' "$in" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | head -n 1)
+              case $ro in *\\[!\"]*|*\\) ro= ;; esac   # a JSON escape other than \" (\n, \t, \\, \u): no
+              ro=$(printf '%s' "$ro" | sed 's/\\"/"/g'); H=$(cd "$(dirname "$0")" && pwd); r=
+              case $H in *[\"\'\$\`\\]*) ro= ;; esac
+              for s in library track; do for q in '"' "'" ''; do
+                [ -z "$q" ] && case $H in *[!A-Za-z0-9_./-]*) continue ;; esac
+                case $ro in "sh $q$H/$s.sh$q "*) r="$s ${ro#"sh $q$H/$s.sh$q "}" ;; esac; done; done
+              if [ -n "$r" ] && ! printf '%s' "$r" | LC_ALL=C grep -q '[][$`\;&|<>(){}*?!#~^[:cntrl:]]' &&
+                printf '%s\n' "$r" | grep -Eqx 'library (search|similar|check|gate|doctor|backlinks|brief|where|libs)( .*)?|track (check|brief|status|items) .+'; then
+                # each argument as the shell reads it (quotes join words); an unbalanced quote: no
+                out=1; ws=$(printf '%s\n' "$r" | awk '{ q = ""; w = ""; for (i = 1; i <= length($0); i++) { c = substr($0, i, 1)
+                    if (q == "" && (c == "\"" || c == "\047")) { q = c; continue } if (c == q) { q = ""; continue }
+                    if (q == "" && c == " ") { if (w != "") print w; w = ""; continue } w = w c }
+                  if (q != "") exit 1; if (w != "") print w }') || out=
+                # a path is absolute and, symlinks resolved, inside the workspace (a relative one is read from a folder
+                # the hook does not know); track.sh, library.sh check and gate take only paths, the rest only words
+                rr=$(cd "$root" && pwd -P); k=0; pa=   # compared as written: on Linux Ws and ws are two folders
+                while IFS= read -r w; do k=$((k + 1)); [ $k -le 2 ] && { [ $k = 2 ] && case $r in track*|"library check"*|"library gate"*) pa=1 ;; esac; continue; }
+                  case $w in */*|.*) [ -n "$pa" ] || out= ;; *) [ -z "$pa" ] || out= ;; esac
+                  [ -n "$pa" ] && case $w in /*) case $(realp "$w") in "$rr"/*) ;; *) out= ;; esac ;; *) out= ;; esac; done <<WS
+$ws
+WS
+                [ -n "$out" ] && { echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"chief-of-staff: its own read-only command"}}'; exit 0; }
+              fi
               # ponytail: a word match, not a shell parser. Quotes, backslashes and tabs are dropped first, so u''se or
               # "join" count, and a script name anywhere in a word counts (a renamed copy, my-library.sh, too)
               nq=$(printf '%s' "$cq" | tr -d "\"'\\\\")
@@ -356,7 +392,7 @@ $p"; fi ;;
              fi
              case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.library|*/.chief-of-staff/*|*/.owner-ok|*/.owner-items) ;; *) exit 0 ;; esac ;;
         esac
-        echo "Blocked by chief-of-staff: .chief-of-staff (where the libraries live), .library-id, a project's .library (which library it shares with) and .owner-ok (the owner's OKs) are changed only through library.sh offload, join, leave or use and track.sh ok, which the owner confirms." >&2
+        echo "Blocked by chief-of-staff: .chief-of-staff (where the libraries live), .library-id, a project's .library (which library it shares with) .owner-ok (the owner's OKs) and .owner-items are changed only through library.sh offload, join, leave or use and track.sh ok, which the owner confirms.$([ "$(jget tool_name)" = Bash ] && printf ' If the command only mentions one of these names (a commit message, an echo), rephrase it without the name.')" >&2
         exit 2 ;;
     esac
     ;;
@@ -370,7 +406,8 @@ $p"; fi ;;
     case $in in *"Role: reviewer"*) exit 0 ;; esac
     case $in in *"## Versions"*)
       # each verdict shows what the judge printed or wrote, so no version (failed or passed) is made up
-      printf '%s' "${in#*'## Versions'}" | grep -Eq '(evidence|passed): *[^ "\\]' && exit 0
+      # a <placeholder> copied from the role card's output format is no evidence
+      printf '%s' "${in#*'## Versions'}" | grep -Eq '(evidence|passed): *[^ "\\<]' && exit 0
       echo "Your '## Versions' lines need the judge's evidence: end each with 'evidence: <the command and its output, or the file that shows it>'. A first version that passed is fine as 'v1 passed: <what the judge printed>'; never invent a failed version." >&2
       exit 2 ;; esac
     echo "Your brief carries an Ambition line: add a '## Versions' section, one line per version (the lens, what changed, the verdict of the judge named in your brief, and its evidence: the command output or the file). A first version that passed is written 'v1 passed: <what the judge printed>'; then say why that judge measures the goal behind the goal." >&2
@@ -435,7 +472,7 @@ $p"; fi ;;
         if [ -n "$team" ]; then
           # what would leave this computer: every path git sees changed here or committed and not pushed
           # (a teammate's pulled note is neither), so the push set is exactly the gated set
-          ch=$(libchanges "$q")
+          ch=$(libchanges "$q") || { ch=; gap "git cannot read the library '$n' at $q (a folder there may only look like a git repository), so none of its notes were checked or sent to the team this turn. Run git -C \"$root\" status, remove what does not belong in $q, then end the turn again."; }
         else
           # ctime, not mtime: mv, cp -p or touch -t keep or set an old mtime, never an old ctime
           ch=$(find "$q/notes" -name '*.md' -type f -cnewer "$st/start" 2>/dev/null | while IFS= read -r f; do printf '%s\n' "${f#"$q/"}"; done)
@@ -466,8 +503,9 @@ Restore only those files in $q (git checkout -- <file>, or delete it if it is ne
         done <<CH
 $ch
 CH
-        [ -n "$team" ] && dl=$(git -C "$q" status --porcelain --no-renames -- notes 2>/dev/null | grep -E '^(D.|.D) ' | cut -c4- | tr '\n' ' ') &&
-          [ -n "$dl" ] && gap "Deleting a note does not reach the team library '$n': retire it instead (library.sh retire), then restore the file (git -C \"$q\" checkout -- $dl)."
+        # git names the files from the top of its repository (the shared workspace's, for its knowledge/): so does the advice
+        [ -n "$team" ] && _lq=$q && dl=$(lg status --porcelain --no-renames -- notes 2>/dev/null | grep -E '^(D.|.D) ' | cut -c4- | tr '\n' ' ') &&
+          [ -n "$dl" ] && gap "Deleting a note does not reach the team library '$n': retire it instead (library.sh retire), then restore the file (git -C \"$(lg rev-parse --show-toplevel 2>/dev/null)\" checkout -- $dl)."
         [ -n "$team" ] && [ -n "$bad" ] && gap "Only notes (notes/<id>.md) go to the team library '$n'. Remove or move these first:$bad"
         [ -n "$team" ] && [ -f "$q/.git/cos-foreign" ] && { printf '%s\n' "$ch" | grep -xF -f - "$q/.git/cos-foreign" > "$q/.git/cos-foreign.new"; mv -f "$q/.git/cos-foreign.new" "$q/.git/cos-foreign"; }
         [ $# -gt 0 ] || continue

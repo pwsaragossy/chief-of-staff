@@ -149,13 +149,15 @@ Nothing to migrate by hand; existing workspaces keep working:
 3. To work on a project, open Claude Code in `projects/<slug>`. The briefing shows the next action.
 4. Close every session with `/chief-of-staff:handoff`.
 
-Skills: `setup`, `new-project`, `handoff`, `specialists`, `knowledge`, `panel`.
+Skills: `setup`, `new-project`, `ambition`, `handoff`, `specialists`, `knowledge`, `panel`.
 
 ## Panel
 
 `/chief-of-staff:panel` starts `scripts/panel.py` (needs `python3`, standard library only) and opens
 a link like `http://127.0.0.1:<port>/?t=<token>`. It listens on this computer only and refuses any
-request without the token. Colors come from `scripts/health.sh`, which also works as text:
+request without the token. Colors come from `scripts/health.sh`; `health.sh text <workspace>` prints them
+without the panel: a verdict first ("All fine" or how many questions wait on you), one line per project,
+then your questions with their age:
 
 - **red**: a track gate problem, STATE.md says red, a turn in the last 24 h ended without the
   specialists, the reviewer or the track gate, a dispatcher alert, a question waiting on the owner
@@ -198,6 +200,12 @@ Every hook does nothing outside a workspace, so the plugin does not affect your 
 - `SessionStart` prints a factual briefing (at most 2000 characters): cards waiting on the owner,
   the project's status and next action, the library's counts and the project's latest notes.
 - `PreToolUse` on `AskUserQuestion` blocks button questions in any session that is not `central/`.
+- `PreToolUse` on `Bash` approves by itself the plugin's own read-only commands, the ones the hooks already
+  run on their own: one call of `library.sh` (`search`, `similar`, `check`, `gate`, `doctor`, `backlinks`,
+  `brief`, `where`, `libs`) or `track.sh` (`check`, `brief`, `status`, `items`) at the plugin's own path, with no
+  shell syntax and paths only inside the workspace. Anything else asks as usual; your own deny and ask rules still
+  apply over it, and plan mode is not bypassed. Every git command the scripts run refuses a folder that only looks
+  like a repository (a teammate could commit one) and ignores `core.fsmonitor`.
 - `scripts/protocol.sh` (UserPromptSubmit, PreToolUse, PostToolUse, SubagentStop, Stop) states
   the protocol in full at the first prompt of a session and after a compaction or restart (one line on
   the other prompts) and enforces it: a subagent brief must name an existing role card by its path
@@ -256,7 +264,7 @@ What we reference or reuse as an idea:
   versioned in git, with no extra model call per response. The two can coexist; if you run both,
   every session start gets two briefings.
 - **Minimal profile.** ECC's `minimal` install profile (`manifests/install-profiles.json`) leaves out
-  its hook runtime. This package follows the same idea by default: 5 skills, 2 shell hooks that do
+  its hook runtime. This package follows the same idea by default: 7 skills, 3 hook scripts that do
   nothing outside a workspace, and the dispatcher off.
 - **Security scan.** ECC's AgentShield (`npx ecc-agentshield scan`, separate MIT package) scans
   `CLAUDE.md`, settings, MCP servers, hooks and agents for risky configuration. We do not bundle it.
@@ -359,6 +367,11 @@ What is ours, with no equivalent found in ECC:
   moved to `.env`, the rest is listed in the next briefing; a change to
   settings coming from the team is refused at pull. A file name with a line break stops the push
   until it is renamed.
+- The workspace root is the nearest folder with a `.chief-of-staff` marker. A marker that arrives inside a project
+  (a hand `git pull`, or an agent building the name in a variable) makes that project look like a workspace of its
+  own, and its track gate and guarded-push ask stop. `sync.sh pull` and `setup.sh join` refuse such a commit, and a
+  forged owner OK stays untrusted (the guards read every marker above), but nothing else catches it: keep project
+  repositories without a marker, and look at `git status` after a pull by hand.
 - An offloaded library: no automatic sync; Windows paths are not supported; in iCloud, keep the
   folder downloaded on the computer (placeholder files are not seen).
 

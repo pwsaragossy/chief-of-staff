@@ -29,7 +29,7 @@ g() { git -C "$q" -c core.symlinks=false "$@"; }   # a symlink a teammate pushed
 incoming_bad() {
   # fail closed: with no common history git cannot list what changed, and an empty list would pass
   g merge-base HEAD '@{u}' >/dev/null 2>&1 || { echo "changes that cannot be listed"; return; }
-  g diff -z --name-only HEAD...'@{u}' 2>/dev/null | tr '\0' '\n' | grep -Ei '(^|/)(\.claude/|\.mcp\.json$|\.gitattributes$|\.gitignore$|\.chief-of-staff$|\.owner-ok$|\.owner-items$)' | head -n 3 | tr '\n' ' '
+  g diff -z --name-only HEAD...'@{u}' 2>/dev/null | tr '\0' '\n' | (. "$(dirname "$0")/lib.sh"; cos_fold) | grep -Ei '(^|/)(\.claude/|\.mcp\.json$|\.gitattributes$|\.gitignore$|\.chief-of-staff$|\.owner-ok$|\.owner-items$)' | head -n 3 | tr '\n' ' '
 }
 # the commits made on this computer (cos-own in .git): track.sh treats any other commit to a project as a teammate's
 own_commit() { [ -n "$own" ] && g rev-parse HEAD >> "$(g rev-parse --absolute-git-dir)/cos-own"; }

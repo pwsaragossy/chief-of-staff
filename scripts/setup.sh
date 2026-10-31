@@ -68,11 +68,21 @@ ignore() { # what never leaves this computer: logs, locks, raw imports, secrets 
 if [ "$cmd" = join ]; then
   tmp="$W.cos-join-$$"   # cloned aside, so a wrong link leaves nothing where the workspace goes
   git clone -q -c core.symlinks=false "$url" "$tmp" 2>&1 | head -n 3 >&2
-  if [ ! -f "$tmp/.chief-of-staff" ] || ! grep -qx 'shared: yes' "$tmp/.chief-of-staff"; then
+  if [ ! -f "$tmp/.chief-of-staff" ] || ! tr -d '\r' < "$tmp/.chief-of-staff" | grep -qx 'shared: yes'; then
     rm -rf "$tmp"; die "$url is not a shared chief-of-staff workspace (no 'shared: yes' marker, or no access); nothing was created"
   fi
+  # what sync.sh pull refuses, refused at join too: settings and hooks that run code here, a marker inside a folder
+  # (it would split the workspace and switch its gates off) and an owner's OK, which never comes from the team
+  bad=$(git -C "$tmp" ls-files -z 2>/dev/null | tr '\0' '\n' | (. "$here/lib.sh"; cos_fold) | grep -Ei '(^|/)(\.claude/|\.mcp\.json$|\.gitattributes$|\.owner-ok$|\.owner-items$)|/\.chief-of-staff$|/\.gitignore$' | head -n 3 | tr '\n' ' ')
+  if [ -n "$bad" ]; then rm -rf "$tmp"; die "$url holds files that would run code or stand in for the owner here ($bad): ask the teammate who added them to remove them; nothing was created"; fi
+  # the marker keeps only what makes it a shared workspace: pace, library and team lines are this computer's to set
+  # (sync.sh pull refuses any later change to it), so the team repo cannot set them for the joiner
+  ign=$(sed -n '2,$p' "$tmp/.chief-of-staff" | tr -d '\r' | grep -vx 'shared: yes' | tr -d '\000-\037' | cut -c1-80 | head -n 3 | tr '\n' ';' | sed 's/;$//; s/;/; /g')
+  printf 'chief-of-staff workspace v0.1\nshared: yes\n' > "$tmp/.chief-of-staff"
   { [ ! -d "$W" ] || rmdir "$W"; } && mv "$tmp" "$W" || { rm -rf "$tmp"; die "cannot create $W"; }
   chmod 444 "$W/.chief-of-staff"
+  git -C "$W" update-index --skip-worktree .chief-of-staff   # a checkout never brings the team's lines back
+  [ -n "$ign" ] && echo "Ignored from the team's marker: $ign (set on this computer only, by its owner)"
   git -C "$W" config core.symlinks false
   git -C "$W" config cos.member "$member"
   git -C "$W" config user.name >/dev/null || git -C "$W" config user.name "$member"
@@ -122,22 +132,22 @@ if [ -n "$share" ]; then
   exit 0
 fi
 
-[ -n "$backup" ] || { echo "Backup: none yet. Add a private git remote to $W and push."; exit 0; }
+[ -n "$backup" ] || { echo "Backup: none yet: the workspace is only on this computer. Ask central to back it up to a private GitHub repo when you want one."; exit 0; }
 if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
-  echo "Backup: skipped, GitHub CLI not signed in (gh auth login). Add a private git remote to $W and push."; exit 0
+  echo "Backup: not done, the GitHub tool (gh) is not installed or not signed in on this computer. Install it and run gh auth login, then ask central to back it up."; exit 0
 fi
 name=$(basename "$W")
 if gh repo create "$name" --private --source "$W" --remote origin --push >/dev/null 2>&1; then
   echo "Backup: private GitHub repo $name, pushed."
 else
-  echo "Backup: could not create the private GitHub repo $name (does it exist already?). Add a private git remote to $W and push."
+  echo "Backup: not done, the private GitHub repo $name could not be created (one with that name may exist). Ask central to back it up under another name."
 fi
 # the library outside the workspace is its own git repo (not in a synced cloud folder: the provider keeps the versions)
 if [ -n "$libdest" ] && [ -d "$libdest/.git" ]; then
   if gh repo create "$name-library" --private --source "$libdest" --remote origin --push >/dev/null 2>&1; then
     echo "Library backup: private GitHub repo $name-library, pushed."
   else
-    echo "Library backup: could not create the private GitHub repo $name-library. Add a private git remote to $libdest and push."
+    echo "Library backup: not done, the private GitHub repo $name-library could not be created. Ask central to back up $libdest under another name."
   fi
 fi
 exit 0

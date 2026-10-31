@@ -24,8 +24,9 @@ everything else.
    - **Workspace** — "Where should the workspace live?" Options: `~/chief-of-staff`, and
      `~/Documents/chief-of-staff`. Description: the central conversation, the board and one folder per
      project.
-   - **Library** — "Where should the company library (its second brain) live?" Options: the first lines
-     of `detect`, at most 4, in its order (it puts an Obsidian vault first only when there is exactly
+   - **Library** — only when `detect` printed two or more places (with one, the library goes inside the
+     workspace: say so in step 4, do not ask): "Where should the company library (its second brain)
+     live?" Options: the first lines of `detect`, at most 4, in its order (it puts an Obsidian vault first only when there is exactly
      one; with several, which vault belongs to this company is the owner's pick). Label = the label, description = the folder and the why.
    - **Backup** — only when `gh-ok` was printed: "Back up to private GitHub repositories?" Options:
      "Yes, private repos (Recommended)" (description: creates private repos on your GitHub account and

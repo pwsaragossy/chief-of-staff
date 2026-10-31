@@ -2,3 +2,4 @@
 .metodo/
 .claude/
 __pycache__/
+selftest.log
