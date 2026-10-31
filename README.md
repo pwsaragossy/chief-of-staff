@@ -201,6 +201,12 @@ Every hook does nothing outside a workspace, so the plugin does not affect your 
 - `SessionStart` prints a factual briefing (at most 2000 characters): cards waiting on the owner,
   the project's status and next action, the library's counts and the project's latest notes.
 - `PreToolUse` on `AskUserQuestion` blocks button questions in any session that is not `central/`.
+- `PreToolUse` on `Bash` approves by itself the plugin's own read-only commands, the ones the hooks already
+  run on their own: one call of `library.sh` (`search`, `similar`, `check`, `gate`, `doctor`, `backlinks`,
+  `brief`, `where`, `libs`) or `track.sh` (`check`, `brief`, `status`, `items`) at the plugin's own path, with no
+  shell syntax and paths only inside the workspace. Anything else asks as usual; your own deny and ask rules still
+  apply over it, and plan mode is not bypassed. Every git command the scripts run refuses a folder that only looks
+  like a repository (a teammate could commit one) and ignores `core.fsmonitor`.
 - `scripts/protocol.sh` (UserPromptSubmit, PreToolUse, PostToolUse, SubagentStop, Stop) states
   the protocol in full at the first prompt of a session and after a compaction or restart (one line on
   the other prompts) and enforces it: a subagent brief must name an existing role card by its path
