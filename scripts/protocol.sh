@@ -206,9 +206,8 @@ $p"; fi ;;
         echo "Blocked by chief-of-staff: search the library first, then search the web only for what it lacks. Run: sh \"$(dirname "$0")/library.sh\" search <terms>" >&2
         exit 2 ;;
       Write|Edit|MultiEdit|Bash)   # the marker says where the library lives: only the owner edits it
-        # macOS file names ignore case: .CHIEF-OF-STAFF is the marker, and so are .owner-oK with a Kelvin sign and
-        # .owner-itemſ with a long s (raw, or as a JSON \u escape), which the byte compares below would not see
-        lc=$(printf '%s' "$in" | tr 'A-Z' 'a-z' | LC_ALL=C sed "s/$(printf '\342\204\252')/k/g; s/$(printf '\305\277')/s/g; s/\\\\u212a/k/g; s/\\\\u017f/s/g")
+        # macOS file names ignore case: .CHIEF-OF-STAFF is the marker, and so is .owner-oK with a Kelvin sign (cos_fold)
+        lc=$(printf '%s' "$in" | tr 'A-Z' 'a-z' | cos_fold)
         case $(jget tool_name) in
           Bash)
             # ponytail: a word list, not a shell parser; the files are also read-only on disk (offload, setup).

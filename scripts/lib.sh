@@ -18,9 +18,9 @@ cos_root() {
   d=${1:-$PWD}
   case $d in /*) ;; *) return 1 ;; esac   # a relative path never reaches "/"
   while [ -n "$d" ] && [ "$d" != "/" ]; do
-    # exactly that name: macOS also opens .chief-of-ſtaff (a long s) as the marker, a name git, join and pull do not
-    # see as one, so a teammate's commit could move the root
-    [ -f "$d/.chief-of-staff" ] && ls -a "$d" | grep -qxF .chief-of-staff && { printf '%s\n' "$d"; return 0; }
+    # exactly that name (find compares bytes; a name with a line break cannot pose as it): macOS also opens
+    # .chief-of-ſtaff or .chief-of-staﬀ as the marker, names git, join and pull do not read as one (cos_fold)
+    [ -f "$d/.chief-of-staff" ] && [ -n "$(find -H "$d" -maxdepth 1 -name .chief-of-staff 2>/dev/null)" ] && { printf '%s\n' "$d"; return 0; }
     d=${d%/*}   # no dirname: this runs in every hook call, and a fork per level is slow on WSL drives
   done
   return 1
@@ -32,6 +32,12 @@ cos_anyshared() {
   while [ -n "$d" ] && [ "$d" != "/" ]; do grep -qx 'shared: yes' "$d/.chief-of-staff" 2>/dev/null && return 0; d=${d%/*}; done
   return 1
 }
+
+# cos_fold -> stdin with each character macOS folds into plain letters in a file name written as those letters: APFS
+# compares names with full Unicode case folding, so .owner-oK (Kelvin sign), .mcp.jſon (long s) and .chief-of-staﬀ
+# (a ligature) open the protected files. These nine are every character whose folding is plain ASCII; raw or as a
+# JSON \u escape in lower case
+cos_fold() { LC_ALL=C sed "$(printf 's/\342\204\252/k/g; s/\305\277/s/g; s/\357\254\200/ff/g; s/\357\254\201/fi/g; s/\357\254\202/fl/g; s/\357\254\203/ffi/g; s/\357\254\204/ffl/g; s/\357\254[\205\206]/st/g; s/\\\\u212a/k/g; s/\\\\u017f/s/g; s/\\\\ufb00/ff/g; s/\\\\ufb01/fi/g; s/\\\\ufb02/fl/g; s/\\\\ufb03/ffi/g; s/\\\\ufb04/ffl/g; s/\\\\ufb0[56]/st/g')"; }
 
 # fm_get FILE KEY -> value of KEY in the YAML front matter (first --- block), empty if absent.
 # Tolerates CRLF line endings.
