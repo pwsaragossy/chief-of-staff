@@ -392,3 +392,5 @@ claude plugin validate .
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+Contributors: Pedro Wakigawa Saragossy, Leo Schlanger ([@leo-schlanger](https://github.com/leo-schlanger)).
