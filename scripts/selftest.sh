@@ -832,11 +832,14 @@ printf -- "---\nstatus: done\nproject: p\n---\n## Tasks\n- Leo: old task\n" > "$
 python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; g = {x[\"who\"]: [i[\"task\"] for i in x[\"items\"]] for x in panel.tasks(sys.argv[2])}; assert g == {\"Leo\": [\"deploy by 13:00\"], \"Vhendala\": [\"video cut\"], \"Unassigned\": [\"check the page\"]}, g" "$here" "$d"; r=$?; rm -rf "$d"; exit $r )'
 check "panel lists a project.s files with last author, age and versions, and the files kept off the team repo" '( d=$(mktemp -d); g() { git -C "$d" -c user.email=t@t "$@" >/dev/null 2>&1; }; touch "$d/.chief-of-staff"; git init -q "$d"
 mkdir -p "$d/projects/p/src"; printf s > "$d/projects/p/STATE.md"; printf v1 > "$d/projects/p/deck.pdf"; printf x > "$d/projects/p/src/a.js"; printf "<b>x</b>" > "$d/projects/p/<b>.md"
-g -c user.name=Ana add -A; g -c user.name=Ana commit -m one; printf v2 > "$d/projects/p/deck.pdf"; g -c user.name=Leo add -A; g -c user.name=Leo commit -m two; printf new > "$d/projects/p/notes.md"
+g -c user.name=Ana add -A; g -c user.name=Ana commit -m one; printf v2 > "$d/projects/p/deck.pdf"; g -c user.name=Leo add -A; g -c user.name=Leo commit -m two
+g checkout -q -b evil; printf v9 > "$d/projects/p/src/a.js"; printf q > "$d/projects/p/q\"uote.md"; g -c user.name=EVIL add -A; g -c user.name=EVIL commit -m evil; g checkout -q -; rm -f "$d/projects/p/q\"uote.md"
+printf q > "$d/projects/p/q\"uote.md"; g -c user.name=Ana add -A; g -c user.name=Ana commit -m quote; printf new > "$d/projects/p/notes.md"
 printf "projects/p/demo.mov is over 20 MB, too big for the team repo: share it by a link\n" > "$d/.git/cos-held"
 python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel
 f = {x[\"path\"]: x for x in panel.files(sys.argv[2], sys.argv[2], \"p\")}
-assert set(f) == {\"deck.pdf\", \"src/a.js\", \"<b>.md\", \"notes.md\"}, f
+assert set(f) == {\"deck.pdf\", \"src/a.js\", \"<b>.md\", \"notes.md\", \"q\\\"uote.md\"}, f
+assert f[\"src/a.js\"][\"who\"] == \"Ana\" and f[\"q\\\"uote.md\"][\"versions\"] == 1, f
 assert f[\"deck.pdf\"][\"who\"] == \"Leo\" and f[\"deck.pdf\"][\"versions\"] == 2 and f[\"deck.pdf\"][\"age\"] >= 0, f[\"deck.pdf\"]
 assert f[\"src/a.js\"][\"versions\"] == 1 and f[\"notes.md\"][\"versions\"] == 0 and f[\"notes.md\"][\"who\"] == \"\", f
 assert panel.held(sys.argv[2]) == [\"projects/p/demo.mov is over 20 MB, too big for the team repo: share it by a link\"]
@@ -938,7 +941,9 @@ check "a teammate joins with their own name" 'sh "$here/setup.sh" join "$SW/b" "
 check "every workspace starts with an Inbox card that no member claims" '[ -f "$SW/a/board/Inbox.md" ] && grep -qx "member: team" "$SW/a/board/Inbox.md" && grep -q "^## Tasks" "$SW/a/board/Inbox.md" && [ -f "$SW/b/board/Inbox.md" ]'
 printf -- '---\nstatus: in-progress\nproject: pa\nmember: Ana\n---\n# Pa work\n\n## Tasks\n- (one line per task)\n- Unassigned: fix the login timeout (from Ana, 2026-10-31)\n- Ana: deploy the demo\n' > "$SW/b/board/Pa work.md"
 check "a member.s central lists the unassigned tasks anyone may take, not the assigned ones" 'o=$(b "$SW/b/central"); printf "%s" "$o" | grep -q "^Up for grabs (anyone may take" && printf "%s" "$o" | grep -q "fix the login timeout (from Ana, 2026-10-31) · Pa work" && ! printf "%s" "$o" | grep -q "deploy the demo"'
-rm -f "$SW/b/board/Pa work.md"
+printf -- '---\nstatus: done\nproject: pa\n---\n## Tasks\n- Unassigned: an old closed task\n' > "$SW/b/board/Old.md"
+check "up for grabs skips the template line and closed cards" 'o=$(b "$SW/b/central"); ! printf "%s" "$o" | grep -q "one line per new task" && ! printf "%s" "$o" | grep -q "an old closed task"'
+rm -f "$SW/b/board/Pa work.md" "$SW/b/board/Old.md"
 check "a shared workspace takes no other library" 'CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/library.sh" join "$SW/plain.git" 2>&1 | grep -q "shared with the team"'
 turn() { hk "$(ev UserPromptSubmit)" "$1" >/dev/null 2>&1; hk "$(ev Stop ",\"stop_hook_active\":false")" "$1" 2>&1; }
 inteam() { git -C "$SW/team.git" ls-tree -r --name-only HEAD | grep -qxF "$1"; }

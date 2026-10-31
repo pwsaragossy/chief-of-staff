@@ -77,8 +77,6 @@ if [ "$cmd" = join ]; then
   git -C "$W" config cos.member "$member"
   git -C "$W" config user.name >/dev/null || git -C "$W" config user.name "$member"
   git -C "$W" config user.email >/dev/null || git -C "$W" config user.email "chief-of-staff@localhost"
-  # a workspace made before the Inbox existed gets one; the next turn end shares it
-  [ -f "$W/board/Inbox.md" ] || { mkdir -p "$W/board" && sed "s/{{DATE}}/$(date +%F)/g" "$here/../templates/board/Inbox.md" > "$W/board/Inbox.md"; }
   echo "Workspace: $W (shared, you are $member)"
   echo "Library: $W/knowledge (the team's)"
   exit 0

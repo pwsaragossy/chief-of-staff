@@ -71,8 +71,8 @@ grabs() { # open cards' "Unassigned: <task>" lines under ## Tasks: work any memb
   for c in "$root"/board/*.md; do [ -f "$c" ] || continue
     case $(fm "$c" status) in done|closed|cancelled|dropped) continue ;; esac
     n=$(basename "$c" .md); LC_ALL=C awk -v n="$n" '{ sub(/\r$/, "") } /^## / { on = (tolower($0) == "## tasks"); next }
-      on && tolower($0) ~ /^[-*] +unassigned *:/ { t = $0; sub(/^[-*] +[^:]*: */, "", t); gsub(/[\001-\037`]/, "", t); if (t != "") print "- " substr(t, 1, 160) " · " n }' "$c"
-  done | awk 'NR <= 5 { print } END { if (NR > 5) print "- and " NR - 5 " more on the panel" }'
+      on && tolower($0) ~ /^[-*] +unassigned *:/ { t = $0; sub(/^[-*] +[^:]*: */, "", t); gsub(/[\001-\037`]/, "", t); if (t != "") print "- " substr(t, 1, 100) " · " substr(n, 1, 40) }' "$c"
+  done | awk 'NR <= 3 { print } END { if (NR > 3) print "- and " NR - 3 " more on the panel" }'
 }
 syncline() {
   cos_shared "$root" && out "Shared workspace: last sync $(head -n 1 "$root/.git/cos-sync" 2>/dev/null | tr -d '\000-\037' | cut -c1-120 | grep . || echo never)."
@@ -111,7 +111,6 @@ reverify() {
       w=$(waiting ""); [ -n "$cardslow" ] && w="- the board was not read in time (slow disk): read board/ before asking anything"; out "${w:-- none}"
       cos_shared "$root" && if [ -n "$me" ]; then out "Shared workspace: you are '$me'. Cards of other members are on the panel; their own central asks them."
         else out "Shared workspace, but this computer has no member name: set it with git -C \"$root\" config cos.member <name>. Until then every card is listed here."; fi
-      gb=$(grabs); [ -n "$gb" ] && { out "Up for grabs (anyone may take one: write your name in place of Unassigned):"; out "$gb"; }
       dd=$(due7); [ -n "$dd" ] && { out "Due in the next 7 days:"; out "$dd"; }
       bigcards ""
       out "Projects:"
@@ -121,6 +120,8 @@ reverify() {
         m=$(fm "$s" member)
         out "- $p${m:+ ($m)}: status $(fm "$s" status), updated $(fm "$s" updated), next: $(fm "$s" next)"
       done
+      # after the projects: a teammate's long lines must not push the project list past the briefing's cap
+      gb=$(grabs); [ -n "$gb" ] && { out "Up for grabs (anyone may take one: write your name in place of Unassigned):"; out "$gb"; }
       n=$(ls "$(cos_lib "$root")"/inbox 2>/dev/null | wc -l | tr -d ' ')
       out "Knowledge inbox: $n item(s) waiting to be processed."
       cos_limit 2 sh "$(dirname "$0")/library.sh" brief | tr -d '\000-\011\013-\037'

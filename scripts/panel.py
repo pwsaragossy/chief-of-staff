@@ -243,36 +243,40 @@ SKIPDIRS = {".git", "node_modules", "__pycache__", ".venv"}
 
 def files(root, view, slug, cap=200):
     """The project's own files (control files and dotfiles left out), newest first, each with who changed it
-    last, how long ago (seconds) and how many versions git holds. One git call per project; a file git never
-    saw has versions 0, no author and its modification time."""
+    last, how long ago (seconds) and how many versions git holds. History comes from this computer's branch and
+    the team's (HEAD and its upstream), never from other refs a teammate could push. A file git never saw has
+    versions 0, no author and its modification time."""
     pdir = os.path.join(view, "projects", slug)
+    if os.path.islink(pdir) or not os.path.isdir(pdir):   # a linked project folder points outside the workspace
+        return []
     found = []
     for top, dirs, names in os.walk(pdir):
         dirs[:] = sorted(d for d in dirs if d not in SKIPDIRS and not d.startswith(".") and not os.path.islink(os.path.join(top, d)))
         for n in names:
             full = os.path.join(top, n)
             rel = os.path.relpath(full, pdir).replace(os.sep, "/")
-            if n.startswith(".") or os.path.islink(full) or rel in CONTROL:
-                continue
-            found.append(rel)
-            if len(found) >= 2000:
-                break
-    seen = {}
+            if not n.startswith(".") and not os.path.islink(full) and rel not in CONTROL:
+                found.append(rel)
+        if len(found) >= 2000:   # a huge tree is not walked to the end on every refresh
+            break
+    refs = ["HEAD"]
     try:
-        out = subprocess.run(["git", "-C", root, "-c", "core.quotePath=false", "log", "--all", "-n", "500", "--name-only",
-                              "--format=\x1e%an\x1f%ct", "--", "projects/" + slug], capture_output=True, text=True, timeout=10).stdout
+        if subprocess.run(["git", "-C", root, "rev-parse", "-q", "--verify", "@{u}"], capture_output=True, timeout=5).returncode == 0:
+            refs.append("@{u}")
+        out = subprocess.run(["git", "-C", root, "log", "-z", "--name-only", "--format=\x1e%an\x1f%ct", *refs,
+                              "--", ":(literal)projects/" + slug], capture_output=True, timeout=10).stdout.decode("utf-8", "replace")
     except (subprocess.TimeoutExpired, OSError):
         out = ""
-    for block in out.split("\x1e"):
-        head, _, body = block.partition("\n")
+    seen, pre = {}, "projects/" + slug + "/"
+    for block in out.split("\x1e")[1:]:   # "<author>\x1f<time>\0\n<path>\0<path>\0..." per commit
+        head, _, body = block.partition("\0")
         who, _, ts = head.partition("\x1f")
-        for line in body.split("\n"):
-            rel = line.strip()[len("projects/" + slug + "/"):] if line.strip().startswith("projects/" + slug + "/") else ""
-            if not rel:
+        for path in body.lstrip("\n").split("\0"):
+            if not path.startswith(pre):
                 continue
-            v = seen.setdefault(rel, {"who": who[:60], "t": int(ts) if ts.isdigit() else 0, "versions": 0})
+            v = seen.setdefault(path[len(pre):], {"who": who[:60], "t": int(ts) if ts.isdigit() else 0, "versions": 0})
             v["versions"] += 1
-    now = time.time()
+    now = int(time.time())
     got = []
     for rel in found:
         v = seen.get(rel)
@@ -282,9 +286,9 @@ def files(root, view, slug, cap=200):
             try:
                 t = int(os.path.getmtime(os.path.join(pdir, rel)))
             except OSError:
-                t = int(now)
-        got.append({"path": re.sub(r"[\x00-\x1f]", "", rel)[:200], "who": v["who"] if v else "", "versions": v["versions"] if v else 0,
-                    "age": max(0, int(now) - t)})
+                t = now
+        got.append({"path": re.sub(r"[\x00-\x1f]", " ", rel)[:200], "who": re.sub(r"[\x00-\x1f]", "", v["who"]) if v else "",
+                    "versions": v["versions"] if v else 0, "age": max(0, now - t)})
     got.sort(key=lambda x: x["age"])
     return got[:cap]
 

@@ -23,7 +23,8 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
 - **Commit each finished step** with only the files you touched; do not wait for the end.
 - **A new task never stays in the chat.** A task that comes up mid-work and is not this job (a bug you
   found, a teammate's request, a missing piece) becomes one line under `## Tasks` in `../../board/Inbox.md`:
-  `Unassigned: <task> (from <who>, <date>)`. Then carry on with this job.
+  `Unassigned: <task> (from <who>, <date>)` (an older workspace without it: create it as a card with
+  `member: team` and a `## Tasks` section). Then carry on with this job.
 - **Any member may take a task.** In a shared workspace, whoever has time takes an `Unassigned` line (on the
   Inbox or on any card) by writing their name in its place, and does it in the project's session; nobody
   has to assign it. Inside a task the technical choices are the taker's own:
