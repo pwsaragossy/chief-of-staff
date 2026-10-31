@@ -107,8 +107,7 @@ claude plugin marketplace add pwsaragossy/chief-of-staff
 claude plugin install chief-of-staff@chief-of-staff
 ```
 
-The repository is private: each person needs read access to it on GitHub, and Claude Code clones
-with their own git credentials (`gh auth login`, then `gh auth setup-git`). Inside Claude Code,
+The repository is public, so installing needs no GitHub account or access. Inside Claude Code,
 `/plugin marketplace add pwsaragossy/chief-of-staff` and `/plugin install chief-of-staff@chief-of-staff`
 do the same. Update later with `claude plugin marketplace update chief-of-staff`.
 
