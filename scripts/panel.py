@@ -15,12 +15,15 @@ US = "\x1f"
 
 
 def find_root(path):
-    d = os.path.abspath(path)
+    """The workspace root as lib.sh cos_root finds it: the nearest marker with a .git, else the nearest marker."""
+    d, first = os.path.abspath(path), None
     while d != os.path.dirname(d):
         if os.path.isfile(os.path.join(d, ".chief-of-staff")):
-            return d
+            if os.path.exists(os.path.join(d, ".git")):
+                return d
+            first = first or d
         d = os.path.dirname(d)
-    return None
+    return first
 
 
 def front_matter(path):

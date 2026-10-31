@@ -42,10 +42,11 @@ SENT='
   { l = $0; sub(/^[[:space:]>*+-]+/, "", l); n = split(l, a, /[.!?;:][[:space:]]+/); for (k = 1; k <= n; k++) out(a[k]) }'
 sentences() { LC_ALL=C awk -v want="${want:-}" "$SENT" "$@"; }
 # (the library may be a folder of a bigger repo, the shared workspace: paths come back relative to the library)
+lg() { if [ -e "$_lq/.git" ]; then git -C "$_lq" "$@"; else git --git-dir="$root/.git" --work-tree="$root" -C "$_lq" "$@"; fi; }   # git on library $_lq
 libchanges() {
   # git reads the library's own repository, or the shared workspace's by name: a folder there laid out like a
   # repository is never taken for it. A git that cannot answer returns 1 (nothing is pushed; the turn says so)
-  _lq=$1; lg() { if [ -e "$_lq/.git" ]; then git -C "$_lq" "$@"; else git --git-dir="$root/.git" --work-tree="$root" -C "$_lq" "$@"; fi; }
+  _lq=$1
   _pre=$(lg rev-parse --show-prefix 2>/dev/null) || return 1
   # -z: git never quotes a name (a space, an accent) there; a name with a line break is cut, and caught as bad
   lg status --porcelain -z -uall --no-renames -- . > "$st/libst" 2>/dev/null || return 1
@@ -501,8 +502,9 @@ Restore only those files in $q (git checkout -- <file>, or delete it if it is ne
         done <<CH
 $ch
 CH
-        [ -n "$team" ] && dl=$(git -C "$q" status --porcelain --no-renames -- notes 2>/dev/null | grep -E '^(D.|.D) ' | cut -c4- | tr '\n' ' ') &&
-          [ -n "$dl" ] && gap "Deleting a note does not reach the team library '$n': retire it instead (library.sh retire), then restore the file (git -C \"$q\" checkout -- $dl)."
+        # git names the files from the top of its repository (the shared workspace's, for its knowledge/): so does the advice
+        [ -n "$team" ] && _lq=$q && dl=$(lg status --porcelain --no-renames -- notes 2>/dev/null | grep -E '^(D.|.D) ' | cut -c4- | tr '\n' ' ') &&
+          [ -n "$dl" ] && gap "Deleting a note does not reach the team library '$n': retire it instead (library.sh retire), then restore the file (git -C \"$(lg rev-parse --show-toplevel 2>/dev/null)\" checkout -- $dl)."
         [ -n "$team" ] && [ -n "$bad" ] && gap "Only notes (notes/<id>.md) go to the team library '$n'. Remove or move these first:$bad"
         [ -n "$team" ] && [ -f "$q/.git/cos-foreign" ] && { printf '%s\n' "$ch" | grep -xF -f - "$q/.git/cos-foreign" > "$q/.git/cos-foreign.new"; mv -f "$q/.git/cos-foreign.new" "$q/.git/cos-foreign"; }
         [ $# -gt 0 ] || continue

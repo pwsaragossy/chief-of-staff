@@ -9,13 +9,17 @@ eval "GIT_CONFIG_KEY_$_n=safe.bareRepository GIT_CONFIG_VALUE_$_n=explicit GIT_C
 eval "export GIT_CONFIG_KEY_$_n GIT_CONFIG_VALUE_$_n GIT_CONFIG_KEY_$((_n + 1)) GIT_CONFIG_VALUE_$((_n + 1))"
 GIT_CONFIG_COUNT=$((_n + 2)); export GIT_CONFIG_COUNT
 
-# Print the workspace root (the outermost folder holding a .chief-of-staff marker) or fail. The outermost: a marker
-# a teammate commits inside a project must not make that project a workspace of its own, outside the shared rules
+# Print the workspace root or fail: the nearest folder holding a .chief-of-staff marker and a .git, else (a workspace
+# without git) the nearest marker. A teammate can commit a marker inside a project but never a .git, and a stray
+# marker above the workspace is farther than its own: neither moves the root, so neither switches its gates off
 cos_root() {
   d=${1:-$PWD}; _w=
   case $d in /*) ;; *) return 1 ;; esac   # a relative path never reaches "/"
   while [ -n "$d" ] && [ "$d" != "/" ]; do
-    [ -f "$d/.chief-of-staff" ] && _w=$d
+    if [ -f "$d/.chief-of-staff" ]; then
+      [ -e "$d/.git" ] && { printf '%s\n' "$d"; return 0; }
+      [ -n "$_w" ] || _w=$d
+    fi
     d=${d%/*}   # no dirname: this runs in every hook call, and a fork per level is slow on WSL drives
   done
   [ -n "$_w" ] && printf '%s\n' "$_w"

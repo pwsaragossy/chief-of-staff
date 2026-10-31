@@ -55,7 +55,9 @@
     (OK do dono forjado passava a ser aceito) e que links simbólicos escapavam do workspace: ambos corrigidos.
     A 3ª revisão achou um buraco antigo (do main): um colega podia commitar um marcador `.chief-of-staff` dentro
     de um projeto e desligar os gates daquele projeto; e o `setup.sh join` aceitava isso. Corrigido: vale o
-    marcador mais externo, e o join recusa repositórios com arquivos que rodam código ou forjam o OK do dono.
+    raiz verdadeira do workspace (a pasta com marcador e .git), e o join recusa repositórios com arquivos que
+    rodam código ou forjam o OK do dono. (A 4ª revisão mostrou que "o marcador mais externo" abria outro buraco;
+    a regra final é "o marcador mais próximo que tem .git".)
 
 **Efeito para o usuário:** menos bloqueios sem motivo (handoff, revisor, especialista: até 4 por ciclo de
 trabalho), menos perguntas no setup, o painel e o texto respondem "está tudo bem?" e "o que espera por mim?"
@@ -402,6 +404,20 @@ de bloqueio e numa checagem mais rígida (placeholder de "## Versions" não pass
   first; the fake knowledge/ case ends the turn with rc 0 on v3 and rc 2 now (both versions run). The `tc:` tests
   that joined a team repo carrying a forged OK now clone it by hand (join refuses it, as checked). selftest 497/497
   under dash, bash --posix and a spaced TMPDIR. A fourth review runs on v4.
+- Fourth adversarial review of v4 — fix needed: the outermost-marker rule opened a parent-marker hole v3 did not
+  have: a stray `.chief-of-staff` above the workspace (an agent in auto mode can write one with python; another user
+  can in a shared /tmp) became the root, so the forged-OK guard and the Stop track gate went silent and the
+  auto-allow widened to the parent; it also broke a workspace kept inside another (allowed before v4). Also: join
+  took the team marker's `pace: fast`, `library:` and `team:` lines unchecked; panel.py used the nearest marker; the
+  advice for a deleted team note in a shared workspace named paths git could not match (on main).
+- Changed (v5): the root is the nearest marker whose folder holds a `.git`, else (a workspace without git) the
+  nearest marker. A teammate can commit a marker but never a `.git` (git refuses the path), and a stray marker above
+  is farther than the workspace's own: neither moves the root. setup.sh create again allows a workspace inside
+  another. join rewrites the marker to its first line and `shared: yes` and prints what it ignored. panel.py's
+  find_root follows the same rule. The deleted-note advice names the repository's top folder.
+- Proof: checks for nested + stray + inner-workspace roots, the join marker, and the deleted-note advice (run as
+  written) failed first and pass; selftest 499/499 under dash, bash --posix and a spaced TMPDIR. A fifth review
+  runs on v5.
 
 ## Ideas (no evidence of friction yet; not built)
 - Fewer permission prompts for the plugin's own read-only commands. In default permission mode every
