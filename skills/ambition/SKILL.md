@@ -44,6 +44,10 @@ Based on Felix Rieseberg, "How to be more ambitious" (altitude, depth, range, an
    that grows the scope beyond the request is one of those questions, never work done.
 7. **Execute.** Once a version is viable, produce the assets (the prompt, the plan, the copy, the
    code) instead of handing tasks back to the owner.
+8. **Ambition raises the goal and the judge, never the amount of code.** It decides what to build and
+   what proves it worked. The code that meets it is the smallest that passes the judge: reuse what the
+   project has, and add no abstraction, option or feature the judge does not measure. In code, a
+   version improves by passing a harder judge, not by growing.
 
 ## Output
 - First line: the conclusion, including "this does not work as asked".
