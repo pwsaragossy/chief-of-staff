@@ -61,6 +61,16 @@ if [ -n "$share" ] || [ "$cmd" = join ]; then
   [ -z "$libdest$join$backup" ] || die "a shared workspace keeps its library inside and is backed up by the team repo: drop --library, --join and --backup"
 fi
 export GIT_TERMINAL_PROMPT=0
+# A team repo anyone can read would publish the board, the projects and the library. It is public when a reader
+# with no credentials can list it (this computer's saved logins are left out). ponytail: an unreachable remote
+# (offline, a local path) passes, so setup works offline; the first push fails there anyway
+public() { case $1 in https://*|http://*) u=$1 ;; git@*:*) h=${1#git@}; u="https://${h%%:*}/${h#*:}" ;;
+    ssh://git@*) h=${1#ssh://git@}; u="https://${h%%/*}/${h#*/}" ;; *) return 1 ;; esac
+  GIT_ASKPASS=true git -c credential.helper= ls-remote -q "$u" >/dev/null 2>&1; }
+r=${share:-$url}
+if [ -n "$r" ] && public "$r"; then
+  die "$r is public: anyone could read the team's board, projects and library. Make it private (on GitHub: Settings, General, Change visibility), then run this again. Nothing was created."
+fi
 ignore() { # what never leaves this computer: logs, locks, raw imports, secrets and build output
   printf '.dispatch.lock/\n.dispatch.log\n.dispatch-*.out\n.protocol.log\n' > "$W/.gitignore"
   [ -n "$share" ] && printf 'knowledge/inbox/*\n!knowledge/inbox/.gitkeep\n.env\n.env.*\n*.pem\n*.key\n*.p12\nnode_modules/\n.DS_Store\n' >> "$W/.gitignore"
