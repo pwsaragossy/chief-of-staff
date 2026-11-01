@@ -87,6 +87,16 @@ case $(jget hook_event_name) in
   UserPromptSubmit)
     rm -f "$st"/*
     : > "$st/start"   # notes modified after this are the turn's notes (whatever tool or path wrote them)
+    # A subagent run in the background reports back as a new prompt, so the turn that applies its report would
+    # count no specialist. Such a turn is credited with the background specialists started in the last 3 hours,
+    # even when the owner wrote in between; the owner's own prompt gets no credit. A notice from another plugin
+    # (a security review, a finished shell command) is not a subagent's report.
+    # ponytail: the hand-back is known by its text and the window by age; an owner who types the marker gets the credit
+    case $in in *'[Subagent hand-back]'*|*'<task-notification>'*[Aa]gent*)
+      if [ -f "$st.bg" ]; then
+        awk -v now="$(date +%s)" 'now - $1 < 10800' "$st.bg" > "$st.bg.new"; mv "$st.bg.new" "$st.bg"
+        while read -r _t m; do mark "$m"; done < "$st.bg"
+      fi ;; esac
     # The full text once per session: at its first prompt and after a compaction or a new start (the briefing
     # leaves $st.full); every other prompt gets one line. The text stays in context, and repeating 1-2 KB on
     # every prompt crowded out the work itself
@@ -134,6 +144,8 @@ case $(jget hook_event_name) in
       Agent)
         role=$(roleof)
         case $role in ''|utility) ;; reviewer) mark reviewer ;; *) mark specialist ;; esac
+        case $role in ''|utility) ;; *) case $in in *'"run_in_background":true'*|*'"run_in_background": true'*|*'Async agent launched'*)
+          [ "$role" = reviewer ] && m=reviewer || m=specialist; echo "$(date +%s) $m" >> "$st.bg" ;; esac ;; esac
         mark agent ;;
       WebSearch|WebFetch) mark web ;;
       Write|Edit|MultiEdit)

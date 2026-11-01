@@ -143,6 +143,27 @@ check "specialists plus a saved note end freely" '[ "$(rc "$(ev Stop ",\"stop_ho
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/pitch.md\"}")" "$P"
 check "a deliverable without specialists cannot end" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
+# a specialist and reviewer run in the background: their report comes back as a new prompt (a hand-back), and the
+# turn that applies it is credited with them, even when the owner wrote in between; the owner's own prompt is not,
+# nor is a hand-back after foreground work only, nor a notice from another plugin
+bga() { h "$(printf '{"session_id":"s1","hook_event_name":"PostToolUse","tool_name":"Agent","tool_input":{"prompt":"Role card: %s ...","run_in_background":true},"tool_response":"Async agent launched successfully."}' "$1")" "$P"; }
+hb='"prompt":"Another Claude session sent a message: <agent-message from=\"a1\"> [Subagent hand-back] The reviewer approved."'
+dv() { h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/pitch.md\"}")" "$P"; }
+stop() { rc "$(ev Stop ",\"stop_hook_active\":false")" "$P"; }
+h "$(ev UserPromptSubmit)" "$P" >/dev/null; h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher ...\"}")" "$P"; h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: reviewer ...\"}")" "$P"
+h "$(ev UserPromptSubmit ",$hb")" "$P" >/dev/null; dv
+check "a hand-back after foreground specialists only carries no credit" '[ "$(stop)" = 2 ]'
+h "$(ev UserPromptSubmit)" "$P" >/dev/null; dv; bga researcher; bga reviewer
+check "background specialists count in the turn that starts them" '[ "$(stop)" = 0 ]'
+h "$(ev UserPromptSubmit ",\"prompt\":\"status?\"")" "$P" >/dev/null; dv
+check "the owner's own prompt gets no credit for background work" '[ "$(stop)" = 2 ]'
+h "$(ev UserPromptSubmit ",$hb")" "$P" >/dev/null; dv
+check "the turn that applies a background report is credited, even after the owner wrote in between" '[ "$(stop)" = 0 ]'
+h "$(ev UserPromptSubmit ",$hb")" "$P" >/dev/null; dv
+check "a second report in a row is credited too" '[ "$(stop)" = 0 ]'
+h "$(ev UserPromptSubmit ",\"prompt\":\"<task-notification><summary>Commit security review found issues</summary></task-notification>\"")" "$P" >/dev/null; dv
+check "another plugin's notice (a security review) is not a subagent's report" '[ "$(stop)" = 2 ]'
+check "background credit older than 3 hours expires" '( f="$CLAUDE_PLUGIN_DATA/turns/s1.bg"; printf "%s specialist\n%s reviewer\n" $(( $(date +%s) - 11000 )) $(( $(date +%s) - 11000 )) > "$f"; h "$(ev UserPromptSubmit ",$hb")" "$P" >/dev/null; dv; [ "$(stop)" = 2 ] && [ ! -s "$f" ] )'
 # hackathon pace: one specialist is enough for internal work, nothing is still not enough
 chmod u+w "$W/.chief-of-staff"; cp "$W/.chief-of-staff" "$W/marker.bak"; echo "pace: fast" >> "$W/.chief-of-staff"; ( . "$here/lib.sh"; cos_cfgsave "$W" )
 check "hackathon pace: the prompt says the reviewer is for what goes outside" 'h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "reviewer runs only on what goes outside"'
