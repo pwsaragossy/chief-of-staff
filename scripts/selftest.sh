@@ -474,6 +474,10 @@ check "with two vaults it recommends the workspace and lists both" 'U detect | h
 check "a library inside a vault kept in git gets no repo of its own" 'U create "$Y/ws3" --library "$Y/Git Vault/Company library" >/dev/null && [ ! -d "$Y/Git Vault/Company library/.git" ]'
 printf '#!/bin/sh\necho "$*" >> "%s/gh.log"\n' "$Y" > "$Y/bin/gh"; chmod +x "$Y/bin/gh"
 check "backup creates private repos for the workspace and the library" 'U create "$Y/ws4" --library "$Y/lib4" --backup | grep -q "^Library backup: private GitHub repo ws4-library" && grep -q "^repo create ws4 --private --source $Y/ws4 " "$Y/gh.log" && grep -q "^repo create ws4-library --private --source $Y/lib4 " "$Y/gh.log"'
+mkdir -p "$Y/gitbin"; printf '#!/bin/sh\ncase "$*" in *ls-remote*public.example*) exit 0 ;; *ls-remote*private.example*) exit 128 ;; esac\nexec "%s" "$@"\n' "$(command -v git)" > "$Y/gitbin/git"; chmod +x "$Y/gitbin/git"
+UG() { HOME="$Y" PATH="$Y/gitbin:$Y/bin:$PATH" sh "$here/setup.sh" "$@" 2>&1; }
+check "a team repo anyone can read is refused before anything is created, by https or ssh link" 'UG create "$Y/wsP" --share https://public.example/o/t.git --member Ana | grep -q "is public: anyone could read" && [ ! -e "$Y/wsP" ] && UG join "$Y/wsJ" git@public.example:o/t.git --member Bia | grep -q "is public" && [ ! -e "$Y/wsJ" ] && ! ls -d "$Y"/wsJ.cos-join-* 2>/dev/null'
+check "a private team repo is not refused" 'o=$(UG create "$Y/wsQ" --share https://private.example/o/t.git --member Ana); ! printf "%s" "$o" | grep -q "is public" && [ -f "$Y/wsQ/.chief-of-staff" ]'
 printf '#!/bin/sh\nexit 1\n' > "$Y/bin/gh"
 check "backup without a signed-in gh is skipped, not failed, and says what to do" 'U create "$Y/ws5" --backup | grep -q "^Backup: not done, the GitHub tool (gh) is not installed or not signed in on this computer. Install it and run gh auth login, then ask central to back it up.$"'
 check "offload refuses --remote for a library inside another repo" 'cd "$Y/ws3/central" && CLAUDE_PROJECT_DIR="$Y/ws3/central" sh "$here/library.sh" offload "$Y/Git Vault/lib2" --remote "$Y/r.git" 2>&1 | grep -q "inside the git repo"; r=$?; cd "$here"; [ $r = 0 ]'
