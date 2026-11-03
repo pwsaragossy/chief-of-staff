@@ -12,11 +12,12 @@ For answering a question that a decision depends on. Pick it when the answer mus
 
 ## Stage 1: Question and decision
 Gate: the question is answerable, the decision it unlocks is named, and the standard for a sufficient answer is set before searching.
+- [ ] blind-spots | Opening checklist from the specialists of every area the project crosses, the owner did not name included: what a senior in each area checks at the start that the owner did not mention, each with why it matters here, the cost of skipping it and the stage it lands in; accepted items are on this map, declined ones are in DECISIONS.md | card: reviewer | needs: - | evidence:
 - [ ] question | Research question stated so that evidence could prove it wrong, with scope, time window and geography | card: researcher | needs: - | evidence:
 - [ ] decision | The decision this research unlocks, who decides, by when, and which answers would change it | card: product | needs: - | evidence:
 - [ ] answer-standard | Standard for a sufficient answer: required evidence types, minimum number of independent sources, acceptable confidence | card: researcher | needs: question, decision | evidence:
 - [ ] prior-work | Library and workspace searched for existing findings, with results listed or none found | card: researcher | needs: question | evidence:
-- [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: question, decision, answer-standard, prior-work | evidence:
+- [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: blind-spots, question, decision, answer-standard, prior-work | evidence:
 ## Stage 2: Sources
 Gate: sources are chosen to disagree with each other if the hypothesis is wrong, and each is graded.
 - [ ] source-plan | Source plan covering at least 3 independent source types (for example primary data, official documents, expert or user interviews), with the reason for each | card: researcher | needs: answer-standard | evidence:

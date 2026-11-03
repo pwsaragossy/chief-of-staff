@@ -16,12 +16,13 @@ For a 24-48 hour build event judged by a panel. Pick it when the deadline is hou
 
 ## Stage 1: Rules and plan
 Gate: rules, criteria, submission requirements and deadline are written down, and one idea is chosen against the criteria.
+- [ ] blind-spots | Opening checklist from the specialists of every area the project crosses, the owner did not name included: what a senior in each area checks at the start that the owner did not mention, each with why it matters here, the cost of skipping it and the stage it lands in; accepted items are on this map, declined ones are in DECISIONS.md | card: reviewer | needs: - | evidence:
 - [ ] rules | Rules and eligibility read in full: allowed tools and code, team size, IP terms, prize conditions, disqualifiers | card: researcher | needs: - | evidence:
 - [ ] criteria | Judging criteria extracted with weights, each mapped to one planned moment in the demo | card: product | needs: rules | evidence:
 - [ ] submission-reqs | Submission package requirements listed: form fields, video length, repo, deck, links, file formats, platform | card: researcher | needs: rules | evidence:
 - [ ] deadline | Deadline written as `deadline: YYYY-MM-DD HH:MM` in this file's front matter, in local time, or with the offset when teammates are in other time zones (`2026-10-25 18:00 -0300`); the panel counts down to it, and a backward timeline with at least 2 hours of buffer before it (default, adjust to the case) | card: product | needs: submission-reqs | evidence:
 - [ ] idea | One-sentence idea, user and problem, scored against the criteria | card: product | needs: criteria | evidence:
-- [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: rules, criteria, submission-reqs, deadline, idea | evidence:
+- [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: blind-spots, rules, criteria, submission-reqs, deadline, idea | evidence:
 ## Stage 2: Scope and build
 Gate: scope is frozen, the thinnest end-to-end path runs, and nothing in the build breaks the rules.
 - [ ] scope | Scope freeze: at most 3 must-have features for the demo, everything else listed as cut, time-boxed with a clock time | card: product | needs: idea, deadline | owner: ok | evidence:

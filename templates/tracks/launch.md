@@ -14,12 +14,13 @@ For taking an offer, product or feature to market. Pick it when there is somethi
 
 ## Stage 1: Goal and positioning
 Gate: the goal is a number with a date, the first segment is chosen, and the economics can support the plan.
+- [ ] blind-spots | Opening checklist from the specialists of every area the project crosses, the owner did not name included: what a senior in each area checks at the start that the owner did not mention, each with why it matters here, the cost of skipping it and the stage it lands in; accepted items are on this map, declined ones are in DECISIONS.md | card: reviewer | needs: - | evidence:
 - [ ] goal | Launch goal as a number with a date and the funnel it implies (reach, click, lead, trial, paid) | card: marketing | needs: - | evidence:
 - [ ] segment | One first segment with trigger event, pain, buying role and explicit exclusions, with at least 3 primary sources | card: researcher | needs: - | evidence:
 - [ ] positioning | Positioning statement naming the real alternative, including doing nothing | card: marketing | needs: goal, segment | evidence:
 - [ ] unit-economics | Price, gross margin, allowed acquisition cost and payback period, with a low case and a base case | card: finance | needs: goal | evidence:
 - [ ] jurisdictions | Countries of seller and target buyers listed, with the advertising, endorsement, privacy and consent rules that apply to each | card: legal | needs: segment | evidence:
-- [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: goal, segment, positioning, unit-economics, jurisdictions | evidence:
+- [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: blind-spots, goal, segment, positioning, unit-economics, jurisdictions | evidence:
 ## Stage 2: Channels and measurement
 Gate: one or two channels are chosen with budget caps and stop rules, and tracking is defined before spend.
 - [ ] messaging | Messaging hierarchy: one core promise, 3 supporting claims each with proof or flagged no proof yet, objection answers | card: marketing | needs: positioning | evidence:

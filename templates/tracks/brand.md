@@ -12,12 +12,13 @@ For creating a brand from design to logo to visual identity, strategy first. Pic
 
 ## Stage 1: Strategy
 Gate: positioning, audience and personality are written and evidenced; no naming or mark work starts before this.
+- [ ] blind-spots | Opening checklist from the specialists of every area the project crosses, the owner did not name included: what a senior in each area checks at the start that the owner did not mention, each with why it matters here, the cost of skipping it and the stage it lands in; accepted items are on this map, declined ones are in DECISIONS.md | card: reviewer | needs: - | evidence:
 - [ ] positioning | Positioning statement: target, frame of reference, point of difference, reason to believe | card: marketing | needs: - | evidence:
 - [ ] audience | Audience profile with at least 3 primary sources | card: researcher | needs: - | evidence:
 - [ ] visual-audit | Competitive visual audit of at least 5 rivals with dated captures: marks, colours, type, conventions and clichés | card: designer | needs: - | evidence:
 - [ ] personality | 3 to 5 personality traits, each with the opposite it is not, and the single feeling the brand must create | card: marketing | needs: positioning, audience | evidence:
 - [ ] brief | Creative brief: purpose, audience, personality, mandatories, formats required, constraints, deadline | card: designer | needs: positioning, personality, visual-audit | evidence:
-- [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: positioning, audience, visual-audit, personality, brief | evidence:
+- [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: blind-spots, positioning, audience, visual-audit, personality, brief | evidence:
 ## Stage 2: Naming
 Gate: one name is chosen, cleared in the target markets, and its handles and domain are available or consciously replaced.
 - [ ] name-candidates | At least 20 name candidates in 3 or more distinct approaches, each shortlisted against the brief | card: marketing | needs: brief | evidence:

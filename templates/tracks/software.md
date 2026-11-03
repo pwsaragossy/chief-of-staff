@@ -14,12 +14,13 @@ For building a product or a significant feature that real users will run. Pick i
 
 ## Stage 1: Problem and requirements
 Gate: the problem is evidenced, scope in and out is written, and success has a number, a date and a kill criterion.
+- [ ] blind-spots | Opening checklist from the specialists of every area the project crosses, the owner did not name included: what a senior in each area checks at the start that the owner did not mention, each with why it matters here, the cost of skipping it and the stage it lands in; accepted items are on this map, declined ones are in DECISIONS.md | card: reviewer | needs: - | evidence:
 - [ ] problem | Problem statement for a named user in behavioral terms, with at least one behavioral evidence item and the current alternative with its cost | card: product | needs: - | evidence:
 - [ ] user-evidence | At least 5 primary-source observations or interviews about past behavior, with dates and counts | card: researcher | needs: - | evidence:
 - [ ] requirements | Requirements with acceptance criteria, scope in and scope out, one-page spec | card: product | needs: problem, user-evidence | evidence:
 - [ ] success-metric | Success metric with baseline, target, date and kill criterion | card: product | needs: problem | evidence:
 - [ ] data-classes | Data the product will handle classified (personal, financial, health, none) with the jurisdictions of users and provider | card: legal | needs: requirements | evidence:
-- [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: problem, user-evidence, requirements, success-metric, data-classes | evidence:
+- [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: blind-spots, problem, user-evidence, requirements, success-metric, data-classes | evidence:
 ## Stage 2: Design and architecture
 Gate: flows, states, architecture and threats are documented before code that depends on them is written.
 - [ ] flows | Core user flow diagram with entry, primary action, success, error and exit paths | card: designer | needs: requirements | evidence:

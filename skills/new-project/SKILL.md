@@ -55,6 +55,20 @@ the owner to pick, in the same round of buttons if possible.
    success answer already has a number, write it as `target:` in TRACK.md (stage 1 cannot pass without
    target, check and the owner's approval of both). If an item truly cannot apply, mark it
    `[-]` with `why:` instead of deleting it, so the reviewer sees it.
+   Before the baseline, close the `blind-spots` item, so the owner sees what they do not know of each
+   area while the plan is still cheap to change:
+   - Pick from `ROUTING.md` every role card whose area the project touches, the ones the owner never
+     mentioned included (law, money and security are the usual gaps); usually three to five.
+   - Brief each as a specialist (`specialists` skill): "What does a senior in your area check at the
+     opening of a project like this that the owner's answers do not cover? At most five items, each
+     with what, why it matters for this project, the cost of skipping it, and the stage it lands in."
+   - The reviewer merges the lists, drops duplicates and anything not tied to this project, and writes
+     `../projects/<slug>/OPENING.md`.
+   - An item that the law, security or the owner's money makes mandatory goes straight onto TRACK.md.
+     Ask the owner about the rest in one round of buttons (several choices allowed, the ones you
+     recommend first): accepted ones go onto TRACK.md as items with their card, declined ones as one
+     line each in DECISIONS.md (`declined at opening: <item>`), so nobody proposes them again.
+   - Mark `blind-spots` `[x]` with `evidence: OPENING.md`.
    For a team project, from its folder: `CLAUDE_PROJECT_DIR=<absolute path of ../projects/<slug>> sh
    "${CLAUDE_PLUGIN_ROOT}/scripts/library.sh" use <team>` (the owner confirms; never write `.library` by hand).
 3. Create the card `../board/<Project name>.md` from `${CLAUDE_PLUGIN_ROOT}/templates/board/card.md`,
