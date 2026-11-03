@@ -7,6 +7,15 @@ description: Close a session so the next one starts where this one stopped (I-PA
 
 The next session is a stranger with no memory of this one. Everything it needs is in files.
 
+Run it at the end of a session, and whenever the turn-end hook says the conversation must rotate (its
+context passed `rotate_tokens:` in `.chief-of-staff`, 140000 by default, or Claude Code compacted it). After
+a rotation, end the answer saying the work continues in a new session in this folder.
+
+**In central**, the steps below are replaced by one: rewrite `central/STATE.md` (`STATE-<member>.md` in a
+shared workspace; copy `${CLAUDE_PLUGIN_ROOT}/templates/central/STATE.md` when it is missing) as a snapshot
+of now: the work in flight and who has it, what was promised to the owner, the next action, and what was
+not verified. Set `updated:` and `next:`, and commit it. Project facts stay in each project's STATE.md.
+
 1. **Update `STATE.md` as a snapshot of now**, not a diary (history lives in git):
    - front matter: `updated` (now, `YYYY-MM-DD HH:MM`: the panel times the handoff from it, not from
      the file date a git pull resets), `next` (the next action in one line), `status`;

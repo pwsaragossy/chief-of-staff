@@ -112,6 +112,8 @@ mkdir -p "$W/central" "$W/board" "$W/projects" "$W/knowledge/inbox" "$W/knowledg
   die "cannot create $W"
 for d in board projects knowledge/inbox knowledge/notes; do : > "$W/$d/.gitkeep"; done
 cp "$T/central/CLAUDE.md" "$W/central/CLAUDE.md"
+# central's own state (a shared workspace: each member's central writes STATE-<member>.md at its first rotation)
+[ -n "$share" ] || sed "s/{{DATE}}/$(date '+%F %H:%M')/" "$T/central/STATE.md" > "$W/central/STATE.md"
 sed "s/{{DATE}}/$(date +%F)/g" "$T/board/Inbox.md" > "$W/board/Inbox.md"
 cp "$T/ROUTING.md" "$W/ROUTING.md"
 cp "$T"/specialists/*.md "$W/specialists/"

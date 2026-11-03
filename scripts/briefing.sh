@@ -19,6 +19,8 @@ src=$(printf '%s' "$in" | sed -n 's/.*"source" *: *"\([a-z]*\)".*/\1/p' | head -
 data=${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}
 # the next prompt gets the full protocol again: a new start or a compaction dropped it from the context
 [ -n "$sid" ] && mkdir -p "$data/turns" && : > "$data/turns/$sid.full"
+# a compaction lost detail: the turn end asks for the handoff (protocol.sh, rotation)
+[ -n "$sid" ] && [ "$src" = compact ] && : > "$data/turns/$sid.compacted"
 
 US=$(printf '\037'); RS=$(printf '\036')
 TAB=$(printf '\t'); here=$(cd "$(dirname "$0")" && pwd)
@@ -113,13 +115,21 @@ reverify() {
         else out "Shared workspace, but this computer has no member name: set it with git -C \"$root\" config cos.member <name>. Until then every card is listed here."; fi
       dd=$(due7); [ -n "$dd" ] && { out "Due in the next 7 days:"; out "$dd"; }
       bigcards ""
+      # central's own state, rewritten at each rotation: what the last central left in flight
+      cst="$root/central/STATE${me:+-$(printf %s "$me" | tr -c A-Za-z0-9_- -)}.md"
+      if [ -f "$cst" ]; then out "Central's own state ($(basename "$cst")): updated $(fm "$cst" updated), next: $(fm "$cst" next)"
+      else out "Central's own state: none yet ($(basename "$cst") is written at the first rotation)."; fi
       out "Projects:"
+      # open projects first and in full; finished or paused ones as one count, so a long list is not cut off the end
+      quiet=0
       for s in "$root"/projects/*/STATE.md; do
         [ -f "$s" ] || continue
         p=$(basename "$(dirname "$s")")
+        case $(fm "$s" status) in done|delivered|closed|cancelled|dropped|paused) quiet=$((quiet + 1)); continue ;; esac
         m=$(fm "$s" member)
         out "- $p${m:+ ($m)}: status $(fm "$s" status), updated $(fm "$s" updated), next: $(fm "$s" next)"
       done
+      [ "$quiet" -gt 0 ] && out "- and $quiet delivered or paused (on the panel)"
       # after the projects: a teammate's long lines must not push the project list past the briefing's cap
       gb=$(grabs); [ -n "$gb" ] && { out "Up for grabs (anyone may take one: write your name in place of Unassigned):"; out "$gb"; }
       n=$(ls "$(cos_lib "$root")"/inbox 2>/dev/null | wc -l | tr -d ' ')

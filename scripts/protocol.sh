@@ -602,6 +602,25 @@ Fix each note (format: $lib/templates/note.md). When a new note is better than a
     [ -n "$gaps" ] && reason="${reason:+$reason }Track gate (projects/$project/TRACK.md) not met:
 $gaps
 Close each item with its proof file (evidence: path relative to the project folder), mark it [-] with why: when it does not apply, or move stage: back. A stage passes only when every item is closed."
+    # Rotation: a conversation past rotate_tokens of context (the last usage the transcript records), or one Claude
+    # Code compacted, has lost or is about to lose detail. Due from then until STATE.md (central's own, or the
+    # project's) is written again; after that, due again only 40k tokens later. Subagents start clean: not here.
+    # in a shared workspace each member's central keeps its own file (the folder is shared, the conversation is not)
+    sf=; case $rel in central|central/*) sf=$root/central/STATE${me:+-$(printf %s "$me" | tr -c A-Za-z0-9_- -)}.md ;; *) [ -n "$project" ] && sf=$root/projects/$project/STATE.md ;; esac
+    if [ -n "$sf" ]; then
+      tp=$(jget transcript_path); tok=0
+      [ -f "$tp" ] && tok=$(tail -c 400000 "$tp" | grep '"type":"assistant"' | grep -v '"isSidechain":true' | grep -o '"usage":{[^}]*}' | tail -n 1 | LC_ALL=C awk -F '[:,}]' '{ for (i = 1; i < NF; i++) if ($i ~ /"(input_tokens|cache_creation_input_tokens|cache_read_input_tokens)"$/) n += $(i + 1) } END { print n + 0 }')
+      lim=$(sed -n 's/^rotate_tokens: *\([0-9][0-9]*\)$/\1/p' "$root/.chief-of-staff" 2>/dev/null | head -n 1); lim=${lim:-140000}
+      last=$(cat "$st.rotated" 2>/dev/null | tr -cd 0-9); [ -n "$last" ] && [ "$tok" -lt "$last" ] && last=   # compacted since: count afresh
+      [ ! -f "$st.rotate" ] && { [ -f "$st.compacted" ] || { [ "$tok" -ge "$lim" ] && { [ -z "$last" ] || [ "$tok" -ge $((last + 40000)) ]; }; }; } &&
+        { : > "$st.rotate"; [ -f "$st/start" ] && touch -r "$st/start" "$st.rotate"; }   # due from the turn's start: a handoff written in this turn counts
+      if [ -f "$st.rotate" ] && [ -f "$sf" ] && [ "$sf" -nt "$st.rotate" ]; then
+        echo "$tok" > "$st.rotated"; rm -f "$st.rotate" "$st.compacted"
+      elif [ -f "$st.rotate" ]; then
+        rel_sf=${sf#"$root/"}; [ -f "$sf" ] || [ -n "$project" ] || rel_sf="$rel_sf (missing: copy it from ${CLAUDE_PLUGIN_ROOT:-the plugin}/templates/central/STATE.md first)"
+        reason="${reason:+$reason }Rotation: this conversation is long ($tok tokens of context, limit $lim) or was compacted, so its detail is being lost. Run the handoff skill now: write $rel_sf as the snapshot of now (what is in flight, what was promised, the sessions started, the next action). Then end the answer saying the work continues in a new session in this folder; a project session writes that on its card for central, and the dispatcher starts it when dispatch: ready."
+      fi
+    fi
     pushed=$(jget stop_hook_active)
     violation=0; [ "$pushed" = true ] && [ -n "$reason" ] && violation=1
     [ -n "$lslow" ] && reason="${reason:+$reason }Not checked this turn (slow disk):

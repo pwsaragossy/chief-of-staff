@@ -121,6 +121,7 @@ check "the next prompt of the session gets one line, not the whole protocol" 'o=
 check "after a compaction the next prompt gets the full protocol again" 'printf "{\"session_id\":\"s1\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh" >/dev/null; h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "the independent reviewer, as subagents"'
 check "a resumed session is not told to write a new arrival synthesis; a new one is" 'o=$(printf "{\"session_id\":\"s9\",\"source\":\"resume\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh"); ! printf "%s" "$o" | grep -q "arrival synthesis in STATE.md is written" && printf "%s" "$o" | grep -q "Resumed session: if STATE.md already holds your arrival synthesis, do not write it again" && printf "{\"session_id\":\"s9\",\"source\":\"startup\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh" | grep -q "arrival synthesis in STATE.md is written"'
 check "a compacted session gets its turn record, not a new arrival synthesis" 'o=$(printf "{\"session_id\":\"s1\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh"); printf "%s" "$o" | grep -q "Resumed after a compaction, same turn: .* 0 specialist" && ! printf "%s" "$o" | grep -q "arrival synthesis in STATE.md is written"'
+rm -f "$CLAUDE_PLUGIN_DATA/turns/s1.compacted"   # those compactions would make every later s1 turn rotate (tested below)
 long() { awk -v n="$1" 'BEGIN { while (n-- > 0) printf "a" }'; }
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
 check "a 3,000-character status answer is not substantive, a 7,000-character one is" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false,\"last_assistant_message\":\"$(long 3000)\"")" "$P")" = 0 ] && [ "$(rc "$(ev Stop ",\"stop_hook_active\":false,\"last_assistant_message\":\"$(long 7000)\"")" "$P")" = 2 ]'
@@ -1206,5 +1207,28 @@ EOF"; do quiet "$c" || { echo "not quiet: $c"; exit 1; }; done ) && for c in "sh
 check "quoted globs, built braces, git -c and find -delete still block" '( for c in "echo x > \".ow\"*" "rg --pre \"sh -c chmod\" \".ow*\" x" "find . -name \".ow*\" -delete" "echo t2 > .{k..m}ibrary" "echo t > {-../}library" "git -c x;rm log .owner-ok" "git -c core.pager=tee log .owner-ok" "rm .owner-\"ok\"" "python3 -c \"import glob,os; [os.chmod(f,420) for f in glob.glob('"'"'.*'"'"')]\""; do [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$(JQ "$c")")" "$W/central")" = 2 ] || { echo "not blocked: $c"; exit 1; }; done )'
 check "a script called with a list of words (python subprocess) still asks, and blocks in a project" '( for c in "python3 -c \"import subprocess; subprocess.run(['"'"'sh'"'"','"'"'/x/library.sh'"'"','"'"'use'"'"','"'"'t1'"'"'])\"" "python3 -c \"import subprocess; subprocess.run(['"'"'sh'"'"','"'"'/x/track.sh'"'"','"'"'ok'"'"','"'"'p'"'"'])\"" "grep --filter=\"*:node -e spawn(sh,[/x/library.sh,use])\" y z" "grep x \$(python3 -c \"subprocess.run(['"'"'sh'"'"','"'"'/x/library.sh'"'"','"'"'use'"'"'])\")"; do asks "$c" || { echo "no ask: $c"; exit 1; }; done ) && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$(JQ "python3 -c \"import subprocess; subprocess.run(['"'"'sh'"'"','"'"'/x/track.sh'"'"','"'"'ok'"'"','"'"'p'"'"'])\"")")" "$OP")" = 2 ]'
 check "a broken pattern in the guard fails closed" 'grep -q "\[ \$? != 1 \]" "$here/protocol.sh"'
+
+# rotation: a long or compacted conversation writes its state before the turn ends
+RP="$W/projects/rot"; mkdir -p "$RP"; sed -e "s/{{PROJECT_NAME}}/rot/" -e "s/{{DATE}}/2026-01-01/" -e "s/{{NEXT_ACTION}}/x/" "$here/../templates/project/STATE.md" > "$RP/STATE.md"
+RT="$W/rot.jsonl"; tok() { printf '{"type":"assistant","message":{"usage":{"input_tokens":2,"cache_creation_input_tokens":1000,"cache_read_input_tokens":%s,"output_tokens":5}}}\n' "$1" >> "$RT"; }
+rs() { printf '{"session_id":"%s","hook_event_name":"Stop","stop_hook_active":false,"transcript_path":"%s"}' "$1" "$RT" | CLAUDE_PROJECT_DIR="$2" sh "$here/protocol.sh" 2>&1; }
+rsc() { rs "$@" >/dev/null; printf '{"session_id":"%s","hook_event_name":"Stop","stop_hook_active":false,"transcript_path":"%s"}' "$1" "$RT" | CLAUDE_PROJECT_DIR="$2" sh "$here/protocol.sh" >/dev/null 2>&1; echo $?; }
+tok 50000
+check "rotation: a short conversation ends freely" '[ "$(rsc r1 "$RP")" = 0 ]'
+tok 150000
+check "rotation: past 140k tokens the turn cannot end until STATE.md is written" 'rs r1 "$RP" | grep -q "Rotation: this conversation is long (151002 tokens" && [ "$(rsc r1 "$RP")" = 2 ]'
+check "rotation: once STATE.md is newer, the turn ends, and the same size does not ask again" 'sleep 1; touch "$RP/STATE.md"; [ "$(rsc r1 "$RP")" = 0 ] && [ "$(rsc r1 "$RP")" = 0 ]'
+tok 195000
+check "rotation: 40k tokens later it is due again" '[ "$(rsc r1 "$RP")" = 2 ]'
+check "rotation: a subagent.s usage is not the conversation.s size" 'printf "{\"type\":\"user\",\"toolUseResult\":{\"usage\":{\"input_tokens\":1,\"cache_read_input_tokens\":10}}}\n" >> "$RT"; rs r1 "$RP" | grep -q "(196002 tokens"'
+check "rotation: a handoff written earlier in the same turn counts" '( printf "{\"session_id\":\"r5\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"x\"}" | CLAUDE_PROJECT_DIR="$RP" sh "$here/protocol.sh" >/dev/null 2>&1; sleep 1; touch "$RP/STATE.md"; sleep 1; [ "$(rsc r5 "$RP")" = 0 ] )'
+RW="$W/rotws"; mkdir -p "$RW/central" "$RW/board" "$RW/projects/q" "$RW/knowledge/notes"; : > "$RW/.chief-of-staff"; cp "$RP/STATE.md" "$RW/projects/q/STATE.md"
+check "rotation: rotate_tokens in the marker sets the limit" ': > "$RT"; tok 60000; [ "$(rsc r2 "$RW/projects/q")" = 0 ] && printf "rotate_tokens: 50000\n" > "$RW/.chief-of-staff" && [ "$(rsc r2 "$RW/projects/q")" = 2 ]'
+check "rotation: a compaction makes it due at any size" ': > "$RT"; tok 10000; printf "{\"session_id\":\"r3\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$RP" sh "$here/briefing.sh" >/dev/null; rs r3 "$RP" | grep -q "or was compacted" && sleep 1 && touch "$RP/STATE.md" && [ "$(rsc r3 "$RP")" = 0 ] && [ ! -e "$CLAUDE_PLUGIN_DATA/turns/r3.compacted" ]'
+check "rotation: central without its STATE.md is told to copy the template" ': > "$RT"; tok 150000; rm -f "$W/central/STATE.md"; rs r4 "$W/central" | grep -q "central/STATE.md (missing: copy it from .*templates/central/STATE.md"'
+check "rotation: central rotates by writing its own STATE.md, which the briefing shows" 'sed "s/{{DATE}}/2026-01-02 10:00/" "$here/../templates/central/STATE.md" > "$W/central/STATE.md"; sleep 1; touch "$W/central/STATE.md"; [ "$(rsc r4 "$W/central")" = 0 ] && CLAUDE_PROJECT_DIR="$W/central" sh "$here/briefing.sh" | grep -q "Central.s own state (STATE.md): updated 2026-01-02 10:00"'
+check "the central briefing lists open projects and counts delivered ones instead of cutting the list" 'mkdir -p "$RW/projects/done1"; cp "$RP/STATE.md" "$RW/projects/done1/STATE.md"; fm_set "$RW/projects/done1/STATE.md" status delivered; o=$(CLAUDE_PROJECT_DIR="$RW/central" sh "$here/briefing.sh"); printf "%s" "$o" | grep -q "and 1 delivered or paused" && printf "%s" "$o" | grep -q "^- q: status" && ! printf "%s" "$o" | grep -q "^- done1:"'
+check "setup gives a personal workspace central.s STATE.md" 'grep -q "templates/central/STATE.md\|\$T/central/STATE.md" "$here/setup.sh"'
+rm -rf "$RP" "$RT" "$RW"
 
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }
