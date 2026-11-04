@@ -5,6 +5,11 @@ works for one owner, or for a team. Version 0.7.0.
 
 What it gives you:
 
+- **Projects, locally.** A Projects pane beside the chat (central opens it; anywhere else
+  `/chief-of-staff:projects [workspace folder]`) works like the app's Projects tab on this computer: each
+  project with its status and next action, its goal, instructions (`CLAUDE.md`), memory (`STATE.md`, the
+  decisions in force) and its chats. New chat writes the request in the prompt box; the owner sends it and
+  the session opens a local chat in the project's folder, filed in a sidebar group named after the project.
 - **One door to the owner.** Only the `central` session asks you for decisions. Project sessions
   write them on a card in `board/` and keep working; central asks them all at once. The one
   exception: any session may confirm the origin of an order before an irreversible step.
