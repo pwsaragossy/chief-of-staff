@@ -93,6 +93,7 @@ export const register: Register = on => {
     let arg = e.args.trim()
     if (arg.startsWith('~')) arg = ((await $.env.get('HOME')) ?? '') + arg.slice(1)
     if (arg) {
+      if (!arg.startsWith('/')) return { text: `Give the workspace folder as a full path, like ~/chief-of-staff.` }
       const r = await findRoot($, arg)
       if (!r) return { text: `No chief-of-staff workspace at ${arg}.` }
       await $.store.set('root', r)
