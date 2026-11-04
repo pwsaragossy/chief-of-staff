@@ -103,7 +103,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Link, Markdown } = $.ui.resolve(e)
+    const { Box, Text, Button, Markdown } = $.ui.resolve(e)
     const r = await root($)
     if (!r) return (
       <Box flexDirection="column"><Text bold>No workspace</Text>
@@ -140,6 +140,17 @@ export const register: Register = on => {
       catch (x) { await update($, error, () => `Couldn't write the request: ${String((x as Error)?.message ?? x).slice(0, 160)}. Type it yourself: open a new chat in ${p.slug}.`) }
       finally { await update($, busy, () => '') }
     }
+    // A chat opens in the main pane through the app's window tool, which serves only chats this
+    // conversation started (the ones New chat asked for here); any other is found in the sidebar group.
+    const show = async (c: Chat) => {
+      await update($, error, () => '')
+      try {
+        const r = await $.mcp.call('ccd_window', 'open_session_in', { session_id: c.id, target: 'focus' })
+        if (r.isError || /^Refused/.test(text(r))) throw new Error(text(r))
+      } catch (x) {
+        await update($, error, () => `Couldn't show "${c.title}" here: ${String((x as Error)?.message ?? x).slice(0, 120)}. Open it from the sidebar group ${p.slug}.`)
+      }
+    }
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="row" gap={1}>
@@ -156,9 +167,8 @@ export const register: Register = on => {
         {dc.map(d => <Text dimColor>- {d}</Text>)}
         <Text bold>Chats</Text>
         {cs.length === 0 && <Text dimColor>No chats yet</Text>}
-        {cs.map(c => c.link
-          ? <Link key={c.id} href={c.link}>{c.title} · {c.at}</Link>
-          : <Text>{c.title} · {c.at}</Text>)}
+        {cs.map(c => (
+          <Button key={c.id} plain onPress={() => void show(c)}>{c.title} <Text dimColor>· {c.at}</Text></Button>))}
         <Text bold>Instructions</Text>
         <Markdown text={instr} />
       </Box>)

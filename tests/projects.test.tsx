@@ -25,6 +25,7 @@ function workspace(on: any, calls: { tool: string; args: any }[], fillFails = fa
     if (e.tool === 'list_sessions') return t(JSON.stringify([{ sessionId: 'local_1', title: 'Spike', cwd: '/ws/projects/dock', lastActivityAt: '2026-11-04T10:00:00Z' }, { sessionId: 'local_2', title: 'Other', cwd: '/elsewhere' }]))
     if (e.tool === 'list_groups') return t('[]')
     if (e.tool === 'create_group') return t('cg-0a1b2c3d-0000-4000-8000-000000000002')
+    if (e.tool === 'open_session_in') return t('Refused: not a session this one started')
     return t('ok')
   })
 }
@@ -49,12 +50,23 @@ test('New chat writes the request in the prompt box and starts nothing itself', 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'p-dock' })
   expect(await ui.find({ type: 'Text', text: /build Dock Folders/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Spike · 2026-11-04 10:00/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Other/ })).toBeUndefined()
+  expect((await ui.find({ key: 'local_1' }))?.text).toMatch(/Spike · 2026-11-04 10:00/)
+  expect(await ui.find({ key: 'local_2' })).toBeUndefined()
   await ui.press({ key: 'new' })
   const fill = calls.find(c => c.tool === 'prompt.fill')!
   expect(fill.args.text).toMatch(/project "dock": a local session in \/ws\/projects\/dock \(no worktree\), detached to top level and filed in the sidebar group "dock"/)
   expect(calls.some(c => c.tool.startsWith('ccd_session.start') || c.tool.startsWith('ccd_sidebar.create'))).toBe(false)
+  await ui.unmount()
+})
+
+test('a chat opens in the main pane, and a refusal points to the sidebar group', async ($, on) => {
+  const calls: { tool: string; args: any }[] = []
+  workspace(on, calls)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'p-dock' })
+  await ui.press({ key: 'local_1' })
+  expect(calls.find(c => c.tool === 'ccd_window.open_session_in')?.args).toEqual({ session_id: 'local_1', target: 'focus' })
+  expect((await ui.find({ type: 'Text', text: /Couldn't show/ }))?.text).toMatch(/Refused.*sidebar group dock/)
   await ui.unmount()
 })
 
