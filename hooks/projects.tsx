@@ -103,16 +103,27 @@ async function waitingOnOwner($: EngineInterface, r: string, slug: string): Prom
   return out
 }
 
-type Thread = { id: string; title: string; state: 'working' | 'idle' | 'resolved'; at: number }
+type Thread = { id: string; title: string; state: 'review' | 'working' | 'idle' | 'resolved'; at: number }
+const WEEK = 7 * 24 * 3600 * 1000
 
 // the sessions this conversation started (linked, not detached), newest first
+// The states of claude.ai Projects that a local session can show: a thread with its pull request open is
+// Ready for review; merged or closed, or archived, or a week with no activity, it is Resolved.
+export const threadState = (s: { isArchived?: boolean; isRunning?: boolean; prState?: string; lastActivityAt?: string }, now: number): Thread['state'] => {
+  if (s.isArchived || /^(MERGED|CLOSED)$/.test(s.prState ?? '')) return 'resolved'
+  if (s.isRunning) return 'working'
+  if (s.prState === 'OPEN') return 'review'
+  return now - (Date.parse(s.lastActivityAt ?? '') || now) > WEEK ? 'resolved' : 'idle'
+}
+
 export async function threads($: EngineInterface): Promise<Thread[]> {
+  const now = await $.clock.now()
   const me = JSON.parse(text(await $.mcp.call('ccd_session_mgmt', 'get_session', { session_id: 'self' }))).sessionId
   let rows: any[] = []
   try { rows = JSON.parse(text(await $.mcp.call('ccd_session_mgmt', 'list_sessions', { linked: true, include_archived: true, limit: 100 }))) } catch { return [] }
   return rows.filter(s => s.startedBy === me).map(s => ({
     id: s.sessionId, title: s.title || 'Untitled', at: Date.parse(s.lastActivityAt ?? '') || 0,
-    state: s.isArchived ? 'resolved' : s.isRunning ? 'working' : 'idle',
+    state: threadState(s, now),
   }))
 }
 
@@ -175,6 +186,7 @@ export const register: Register = on => {
           <Text bold>{slug || 'Threads'}</Text>
           <Button key="refresh" dimColor onPress={() => $.ui.invalidate('ui.render')}>Refresh</Button>
         </Box>
+        {by('review').length > 0 && group('Ready for review', by('review'))}
         <Box flexDirection="column">
           <Text dimColor>Waiting on you · {asks.length}</Text>
           {asks.length === 0 && <Text dimColor>Decisions show here.</Text>}

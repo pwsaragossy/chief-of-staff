@@ -102,6 +102,9 @@ test('the Threads pane groups the threads this conversation started and lists th
       { sessionId: 'local_a', title: 'Build slice 1', startedBy: 'local_me', isRunning: true, lastActivityAt: '2026-11-05T11:39:00Z' },
       { sessionId: 'local_b', title: 'Spec the app', startedBy: 'local_me', isRunning: false, lastActivityAt: '2026-10-31T12:00:00Z' },
       { sessionId: 'local_c', title: 'Old', startedBy: 'local_me', isArchived: true, lastActivityAt: '2026-10-30T12:00:00Z' },
+      { sessionId: 'local_r', title: 'Fix login', startedBy: 'local_me', isRunning: false, prState: 'OPEN', lastActivityAt: '2026-11-05T10:00:00Z' },
+      { sessionId: 'local_o', title: 'Stale', startedBy: 'local_me', isRunning: false, lastActivityAt: '2026-10-20T12:00:00Z' },
+      { sessionId: 'local_m', title: 'Merged', startedBy: 'local_me', isRunning: false, prState: 'MERGED', lastActivityAt: '2026-11-05T09:00:00Z' },
       { sessionId: 'local_x', title: 'Not mine', startedBy: 'local_other', isRunning: true },
     ]))
     return t('Opened')
@@ -115,7 +118,12 @@ test('the Threads pane groups the threads this conversation started and lists th
   expect(await ui.find({ type: 'Text', text: /Working · 1/ })).toBeDefined()
   expect((await ui.find({ key: 'local_a' }))?.text).toMatch(/Build slice 1 · 21m/)
   expect((await ui.find({ key: 'local_b' }))?.text).toMatch(/Spec the app · 5d/)
-  expect(await ui.find({ type: 'Text', text: /Resolved · 1/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Ready for review · 1/ })).toBeDefined()
+  expect((await ui.find({ key: 'local_r' }))?.text).toMatch(/Fix login · 2h/)
+  expect(await ui.find({ type: 'Text', text: /Idle · 1/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Resolved · 3/ })).toBeDefined()
+  const order = (await ui.findAll({ type: 'Text' })).map(x => x.text).filter(t => / · \d+$/.test(t))
+  expect(order).toEqual(['Ready for review · 1', 'Waiting on you · 1', 'Working · 1', 'Idle · 1', 'Resolved · 3'])
   expect(await ui.find({ key: 'local_x' })).toBeUndefined()
   await ui.press({ key: 'local_a' })
   expect(calls.find(c => c.tool === 'ccd_window.open_session_in')?.args).toEqual({ session_id: 'local_a', target: 'focus' })

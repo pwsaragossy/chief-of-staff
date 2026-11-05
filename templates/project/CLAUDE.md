@@ -18,14 +18,26 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
   on): buttons, all at once, recommendation first. A decision that waits while the owner is away (a thread
   or an unattended run hit it) is one line on this project's card in `../../board/` with
   `status: waiting-owner`; the Threads pane shows it under Waiting on you, and central asks it too.
-- **Threads.** Work that runs long, in parallel, or needs its own context (a build, a spike, a review, a
-  piece of research) goes to a thread: `start_session` with `initiation: user_asked` when the owner asked
-  for it, a full brief (files, what done looks like), in this folder (`use_worktree: false`) unless two
-  threads would write the same files. Never detach a thread: it nests under this conversation in the
-  sidebar and the Threads pane lists it. Say in one line which thread took the work. A follow-up from the
-  owner about a thread's work goes to that thread (`SendMessage` to its id), not into this conversation;
-  quick things (a question, one edit) stay here. When a thread reports, check its result before you tell
-  the owner it is done.
+- **Threads, as a project on claude.ai runs them.** Decide per message:
+  - A quick question or one small edit: answer here.
+  - New work that runs long, in parallel, or needs its own context (a build, a spike, a review, a piece of
+    research): a thread. Several unrelated tasks in one message are one thread each. Work in an area a
+    thread is already doing goes to that thread (`SendMessage` to its id), not to a new one.
+  - Start a thread with `start_session`: `initiation: user_asked` when the owner asked for the work, a full
+    brief (files, what done looks like, report back when done), in this folder (`use_worktree: false`)
+    unless two threads would write the same files. Never detach a thread: it nests under this conversation
+    in the sidebar and the Threads pane lists it.
+  - Under the owner's message, one line per thread you started or sent work to, as a card:
+    `[<thread title>](#<its local_ id>): what it took`. The owner opens the thread from it.
+  - A follow-up about a thread's work goes to that thread; say which one in one line.
+  - When a thread reports, check its result before you tell the owner it is done; the thread keeps the full
+    result, you give the short version and the link.
+  - A thread that needs the owner (a decision, an approval, a failure it cannot fix) has its question
+    written on the card, so the Threads pane shows it under Waiting on you; you ask it here.
+  - In a thread (a session this conversation started, its first message a brief): do that work, write a
+    question for the owner on the card, report back when done; a thread starts no threads of its own.
+  - Resolved: archive a thread (`archive_session`) once the owner has taken its last step (merged its pull
+    request, accepted its result); the pane also shows a thread as Resolved after a week with no activity.
 - **One exception: confirm an order before an irreversible step.** If an instruction you received
   could have come wrong (pasted, ambiguous, or from another agent) and the next step cannot be
   undone (push, publish, delete, spend), ask whoever gave it, in one plain sentence, before that
