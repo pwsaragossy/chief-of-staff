@@ -8,6 +8,9 @@ const view = atom({ plugin: 'chief-of-staff', key: 'view' } as const, '', { shap
 const busy = atom({ plugin: 'chief-of-staff', key: 'busy' } as const, '', { shape: 'busy-1' })
 const error = atom({ plugin: 'chief-of-staff', key: 'error' } as const, '', { shape: 'error-1' })
 const DONE = /^(done|delivered|closed|cancelled|dropped|paused)$/
+// A project's coordinator (a session in projects/<slug>/) gets the Threads pane: the sessions it started.
+const THREADS = 'cos-threads'
+const coord = atom({ plugin: 'chief-of-staff', key: 'coord' } as const, '', { shape: 'coord-1' })
 
 type Project = { slug: string; dir: string; status: string; updated: string; next: string; goal: string }
 type Chat = { id: string; title: string; at: string; link?: string }
@@ -79,13 +82,55 @@ export const newChatDraft = (p: Project): string =>
   `Open a new chat in the project "${p.slug}": a local session in ${p.dir} (no worktree), ` +
   `detached to top level and filed in the sidebar group "${p.slug}", shown in the main pane. Its first step: the arrival steps in CLAUDE.md.`
 
+// the open questions of a card: the lines under "## For the owner to decide", without their asked-stamp
+export const ownerQuestions = (card: string): string[] => {
+  const out: string[] = []
+  let on = false
+  for (const l of card.replace(/\r/g, '').split('\n')) {
+    if (l.startsWith('## ')) { on = l.toLowerCase().startsWith('## for the owner to decide'); continue }
+    if (on && /^[-*] /.test(l)) out.push(l.replace(/^[-*] +/, '').replace(/^\(asked [^)]*\) */, ''))
+  }
+  return out
+}
+
+async function waitingOnOwner($: EngineInterface, r: string, slug: string): Promise<string[]> {
+  const out: string[] = []
+  for (const e of await $.fs.list(`${r}/board`).catch(() => [])) {
+    if (e.kind !== 'file' || !e.name.endsWith('.md')) continue
+    const c = await $.fs.read(`${r}/board/${e.name}`).catch(() => '')
+    if (fm(c, 'project') === slug && fm(c, 'status') === 'waiting-owner') out.push(...ownerQuestions(c))
+  }
+  return out
+}
+
+type Thread = { id: string; title: string; state: 'working' | 'idle' | 'resolved'; at: number }
+
+// the sessions this conversation started (linked, not detached), newest first
+export async function threads($: EngineInterface): Promise<Thread[]> {
+  const me = JSON.parse(text(await $.mcp.call('ccd_session_mgmt', 'get_session', { session_id: 'self' }))).sessionId
+  let rows: any[] = []
+  try { rows = JSON.parse(text(await $.mcp.call('ccd_session_mgmt', 'list_sessions', { linked: true, include_archived: true, limit: 100 }))) } catch { return [] }
+  return rows.filter(s => s.startedBy === me).map(s => ({
+    id: s.sessionId, title: s.title || 'Untitled', at: Date.parse(s.lastActivityAt ?? '') || 0,
+    state: s.isArchived ? 'resolved' : s.isRunning ? 'working' : 'idle',
+  }))
+}
+
+export const ago = (ms: number, now: number): string => {
+  const m = Math.max(0, Math.round((now - ms) / 60000))
+  return m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const ran = await next(e)
     const r = await findRoot($, e.cwd)
     if (r) await $.store.set('root', r)
     await $.command.register({ name: 'projects', description: 'Show the workspace projects and open their chats', argumentHint: '[workspace folder]' })
-    if (r && /\/central(\/|$)/.test(e.cwd.slice(r.length))) void $.ui.open({ id: PANE, title: 'Projects' })
+    const rel = r ? e.cwd.slice(r.length) : ''
+    if (r && /^\/central(\/|$)/.test(rel)) void $.ui.open({ id: PANE, title: 'Projects' })
+    const slug = rel.match(/^\/projects\/([^/]+)/)?.[1]
+    if (slug) { await update($, coord, () => slug); void $.ui.open({ id: THREADS, title: 'Threads' }) }
     return ran
   })
 
@@ -100,6 +145,47 @@ export const register: Register = on => {
     }
     await $.ui.open({ id: PANE, title: 'Projects' })
     return { text: 'Projects pane opened.' }
+  })
+
+  // a thread started, a message sent, a turn ended: the Threads pane reads the app's list again
+  on('turn.complete', async ($, e, next) => { const ran = await next(e); $.ui.invalidate('ui.render'); return ran })
+
+  on('ui.render', { component: 'Pane', requestId: THREADS }, async ($, e) => {
+    const { Box, Text, Button } = $.ui.resolve(e)
+    const slug = await read($, coord), r = await root($)
+    const [ts, asks, now] = await Promise.all([threads($).catch(() => [] as Thread[]), r && slug ? waitingOnOwner($, r, slug) : [], $.clock.now()])
+    const err = await read($, error)
+    const show = async (t: Thread) => {
+      await update($, error, () => '')
+      try {
+        const res = await $.mcp.call('ccd_window', 'open_session_in', { session_id: t.id, target: 'focus' })
+        if (res.isError || /^Refused/.test(text(res))) throw new Error(text(res))
+      } catch (x) { await update($, error, () => `Couldn't show "${t.title}": ${String((x as Error)?.message ?? x).slice(0, 120)}`) }
+    }
+    const group = (label: string, list: Thread[]) => (
+      <Box flexDirection="column">
+        <Text dimColor>{label} · {list.length}</Text>
+        {list.map(t => (
+          <Button key={t.id} plain onPress={() => void show(t)}>{t.title} <Text dimColor>· {ago(t.at, now)}</Text></Button>))}
+      </Box>)
+    const by = (s: Thread['state']) => ts.filter(t => t.state === s).sort((a, b) => b.at - a.at)
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Box flexDirection="row" gap={1}>
+          <Text bold>{slug || 'Threads'}</Text>
+          <Button key="refresh" dimColor onPress={() => $.ui.invalidate('ui.render')}>Refresh</Button>
+        </Box>
+        <Box flexDirection="column">
+          <Text dimColor>Waiting on you · {asks.length}</Text>
+          {asks.length === 0 && <Text dimColor>Decisions show here.</Text>}
+          {asks.map(q => <Text>- {q.slice(0, 200)}</Text>)}
+        </Box>
+        {group('Working', by('working'))}
+        {group('Idle', by('idle'))}
+        {by('resolved').length > 0 && group('Resolved', by('resolved'))}
+        {ts.length === 0 && <Text dimColor>No threads yet. Ask for work here; long tasks become threads.</Text>}
+        {err && <Text color="error">{err}</Text>}
+      </Box>)
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {

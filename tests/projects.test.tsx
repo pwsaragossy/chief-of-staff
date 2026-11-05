@@ -78,3 +78,46 @@ test('a prompt box that cannot be filled says what to type', async ($, on) => {
   expect((await ui.find({ type: 'Text', text: /Couldn't write the request/ }))?.text).toMatch(/prompt box is not available.*open a new chat in dock/)
   await ui.unmount()
 })
+
+const THREADS = { ...PANE, requestId: 'cos-threads', props: { ...PANE.props, title: 'Threads' } } as const
+
+test('the Threads pane groups the threads this conversation started and lists the card questions', async ($, on) => {
+  const calls: { tool: string; args: any }[] = []
+  const card = '---\nproject: dock\nstatus: waiting-owner\n---\n# Dock\n\n## For the owner to decide (central asks, all at once)\n- (asked 2026-11-04 01:33 -0300) Approve target and check? Recommend: yes.\n\n## Decided\n- 2026-11-04: old\n'
+  const opened: string[] = []
+  on('store.get', () => ({ value: '/ws' }))
+  on('store.set', () => ({ value: undefined }))
+  on('fs.exists', (_: any, e: any) => ({ value: e.path === '/ws/.chief-of-staff' }))
+  on('command.register', () => ({ value: { command: 'projects' } }))
+  on('ui.open', (_: any, e: any) => { opened.push(e.id); return { value: { isPlaced: true } } })
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  on('clock.now', () => ({ value: Date.parse('2026-11-05T12:00:00Z') }))
+  on('fs.list', () => ({ value: [{ name: 'Dock.md', kind: 'file', size: 0, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', () => ({ value: card }))
+  on('mcp.call', (_: any, e: any) => {
+    calls.push({ tool: `${e.server}.${e.tool}`, args: e.args })
+    const t = (text: string) => ({ value: { content: [{ type: 'text', text }], isError: false } })
+    if (e.tool === 'get_session') return t(JSON.stringify({ sessionId: 'local_me' }))
+    if (e.tool === 'list_sessions') return t(JSON.stringify([
+      { sessionId: 'local_a', title: 'Build slice 1', startedBy: 'local_me', isRunning: true, lastActivityAt: '2026-11-05T11:39:00Z' },
+      { sessionId: 'local_b', title: 'Spec the app', startedBy: 'local_me', isRunning: false, lastActivityAt: '2026-10-31T12:00:00Z' },
+      { sessionId: 'local_c', title: 'Old', startedBy: 'local_me', isArchived: true, lastActivityAt: '2026-10-30T12:00:00Z' },
+      { sessionId: 'local_x', title: 'Not mine', startedBy: 'local_other', isRunning: true },
+    ]))
+    return t('Opened')
+  })
+  await $.session.start({ cwd: '/ws/projects/dock', surface: 'desktop', isInteractive: true })
+  expect(opened).toEqual(['cos-threads'])
+  const ui = await $.ui.mount({ ...THREADS, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^dock$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Waiting on you · 1/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^- Approve target and check\? Recommend: yes\.$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Working · 1/ })).toBeDefined()
+  expect((await ui.find({ key: 'local_a' }))?.text).toMatch(/Build slice 1 · 21m/)
+  expect((await ui.find({ key: 'local_b' }))?.text).toMatch(/Spec the app · 5d/)
+  expect(await ui.find({ type: 'Text', text: /Resolved · 1/ })).toBeDefined()
+  expect(await ui.find({ key: 'local_x' })).toBeUndefined()
+  await ui.press({ key: 'local_a' })
+  expect(calls.find(c => c.tool === 'ccd_window.open_session_in')?.args).toEqual({ session_id: 'local_a', target: 'focus' })
+  await ui.unmount()
+})

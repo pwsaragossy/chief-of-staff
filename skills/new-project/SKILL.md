@@ -5,7 +5,7 @@ description: Open a new project with the fixed playbook (opening questions, cohe
 
 # Open a new project (the playbook)
 
-Run this from `central/` only: central is the one session that asks the owner, and the only one that
+Run this from `central/` only: central is the only session that
 creates projects.
 
 ## 0. Ambition first

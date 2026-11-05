@@ -13,9 +13,19 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
 
 ## How to work here
 
-- **Do not ask the owner for decisions.** Anything only the owner can decide (scope, money, names,
-  public or private, turning automation on) becomes one line on this project's card in
-  `../../board/` with `status: waiting-owner`. Only `central/` asks those, in a batch.
+- **This conversation is the project's coordinator.** The owner talks with it, as with a project on
+  claude.ai. Ask the owner's decisions here (scope, money, names, public or private, turning automation
+  on): buttons, all at once, recommendation first. A decision that waits while the owner is away (a thread
+  or an unattended run hit it) is one line on this project's card in `../../board/` with
+  `status: waiting-owner`; the Threads pane shows it under Waiting on you, and central asks it too.
+- **Threads.** Work that runs long, in parallel, or needs its own context (a build, a spike, a review, a
+  piece of research) goes to a thread: `start_session` with `initiation: user_asked` when the owner asked
+  for it, a full brief (files, what done looks like), in this folder (`use_worktree: false`) unless two
+  threads would write the same files. Never detach a thread: it nests under this conversation in the
+  sidebar and the Threads pane lists it. Say in one line which thread took the work. A follow-up from the
+  owner about a thread's work goes to that thread (`SendMessage` to its id), not into this conversation;
+  quick things (a question, one edit) stay here. When a thread reports, check its result before you tell
+  the owner it is done.
 - **One exception: confirm an order before an irreversible step.** If an instruction you received
   could have come wrong (pasted, ambiguous, or from another agent) and the next step cannot be
   undone (push, publish, delete, spend), ask whoever gave it, in one plain sentence, before that

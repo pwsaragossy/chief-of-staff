@@ -50,7 +50,8 @@ check "briefing stays under 2000 bytes" '[ "$(b "$W/central" | wc -c)" -le 2000 
 # ask guard
 g() { CLAUDE_PROJECT_DIR="$1" sh "$here/ask-guard.sh" 2>/dev/null; echo $?; }
 check "guard allows central" '[ "$(g "$W/central")" = 0 ]'
-check "guard blocks a project" '[ "$(g "$W/projects/alpha")" = 2 ]'
+check "guard allows a project's coordinator" '[ "$(g "$W/projects/alpha")" = 0 ]'
+check "guard blocks the workspace root and other folders" '[ "$(g "$W")" = 2 ] && [ "$(g "$W/board")" = 2 ]'
 check "a relative project dir is no workspace (and does not hang)" '[ "$(CLAUDE_PROJECT_DIR=rel/dir sh "$here/ask-guard.sh" 2>/dev/null; echo $?)" = 0 ]'
 check "guard ignores folders outside a workspace" '[ "$(g /tmp)" = 0 ]'
 

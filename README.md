@@ -10,9 +10,10 @@ What it gives you:
   project with its status and next action, its goal, instructions (`CLAUDE.md`), memory (`STATE.md`, the
   decisions in force) and its chats, each opening in the main pane on a press. New chat writes the request in the prompt box; the owner sends it and
   the session opens a local chat in the project's folder, filed in a sidebar group named after the project.
-- **One door to the owner.** Only the `central` session asks you for decisions. Project sessions
-  write them on a card in `board/` and keep working; central asks them all at once. The one
-  exception: any session may confirm the origin of an order before an irreversible step.
+- **Projects that talk to you, central for the overview.** Each project's conversation is its coordinator:
+  it asks you its decisions and runs long or parallel work in threads nested under it. Questions that
+  waited while you were away sit on a card in `board/`; central asks them all at once. Any other folder of
+  the workspace does not ask you, except to confirm the origin of an order before an irreversible step.
 - **A fixed project playbook with tracks.** Opening questions, a coherence check of the success
   criteria, then a track for the kind of project (hackathon, software, brand, launch, research):
   stages of minimum deliverables, each naming the specialist who makes it, what it needs first and
@@ -126,7 +127,7 @@ you, a shared library, one board for the whole team, or join a teammate's board)
 ```
 <workspace>/
   .chief-of-staff        marker the hooks look for
-  central/CLAUDE.md      the one door to the owner
+  central/CLAUDE.md      the overview of every project
   board/                 one card per open item (status, project, owner, member, due, asked)
   projects/<slug>/       CLAUDE.md + STATE.md + TRACK.md per project
   knowledge/             inbox/, notes/, templates/ (or the folder you picked; move later: library.sh offload)
@@ -278,7 +279,7 @@ What we reference or reuse as an idea:
 
 What is ours, with no equivalent found in ECC:
 
-- one door to the owner, enforced by a hook (`ask-guard`);
+- only central and each project's coordinator ask the owner, enforced by a hook (`ask-guard`);
 - a project playbook with a coherence check of the success criteria and gates;
 - a per-project state snapshot with an arrival synthesis by the next session;
 - an unattended dispatcher with a run ceiling, budget, timeout, no shell, and git hook checks;

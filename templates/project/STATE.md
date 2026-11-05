@@ -32,7 +32,7 @@ Only what the next session needs to repeat or avoid. History lives in git.
 1. **Owner of the step (a session or a specialist):** action, and how you know it is done.
 
 ## 6. If X, then Y
-- If something needs the owner, it becomes a line on the card with `status: waiting-owner`. Do not ask.
+- If something needs the owner: ask in this conversation; if the owner is away, a line on the card with `status: waiting-owner`.
 
 ## 7. What I did not verify
 -

@@ -1,4 +1,4 @@
-# Central — the one door to the owner
+# Central — the overview of every project
 
 A conversation opened here is for **organizing**: where each project stands, what waits on the
 owner, what stalled, what comes first. It does not do project work.
@@ -28,11 +28,13 @@ owner, what stalled, what comes first. It does not do project work.
    lines) in the same batch: one they take gets their name in place of "Unassigned", and central starts the
    project's session on it. A teammate needs nobody's go-ahead to take one; new tasks land in `../board/Inbox.md`.
 
-## The one-door rule
+## Who asks the owner
 
-Only this conversation asks the owner anything. A project session that needs the owner writes a
-card with `status: waiting-owner` and one line per question, then carries on with what it can do.
-The `ask-guard` hook enforces this outside `central/`.
+Each project's coordinator (its conversation in `projects/<slug>/`) asks the owner its own decisions,
+as a project on claude.ai does. A question that waited while the owner was away sits on the project's
+card with `status: waiting-owner`; this conversation asks those, all together. The `ask-guard` hook
+blocks the question tool anywhere else in the workspace. The owner's OK on a track item is still
+recorded here (`track.sh ok`).
 
 ## What this conversation does and does not do
 
