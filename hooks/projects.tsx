@@ -88,6 +88,26 @@ export const newChatDraft = (p: Project): string =>
 export const projectsDraft = (dir: string): string =>
   `/send-to-project Carry on this project's work. Run its threads on my computer, in the folder ${dir}. Next: `
 
+// Threads the project runs on this computer reach it through `claude remote-control` in the project's
+// folder (the owner chose this over the switch in Settings). It answers its one consent question with the
+// owner's yes, and lives as long as this module: the session that started it.
+// ponytail: one connection per session, kept in memory; a second coordinator starts its own
+let rc: Promise<string> | null = null
+export const connectHere = ($: EngineInterface, dir: string): Promise<string> => rc ??= new Promise<string>(done => {
+  void (async () => {
+    let tail = ''
+    try {
+      const child = $.process.spawn({ argv: ['claude', 'remote-control', '--no-create-session-in-dir'], cwd: dir, input: 'y\n' })
+      for await (const { text } of child) {
+        tail = (tail + text).slice(-400)
+        if (/Ready/.test(tail)) done('ready')
+      }
+    } catch (x) { tail = String((x as Error)?.message ?? x) }
+    rc = null
+    done(`stopped: ${tail.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').trim().slice(-160)}`)
+  })()
+})
+
 // the open questions of a card: the lines under "## For the owner to decide", without their asked-stamp
 export const ownerQuestions = (card: string): string[] => {
   const out: string[] = []
@@ -171,9 +191,13 @@ export const register: Register = on => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const slug = await read($, coord), r = await root($)
     const [ts, asks, now] = await Promise.all([threads($).catch(() => [] as Thread[]), r && slug ? waitingOnOwner($, r, slug) : [], $.clock.now()])
-    const err = await read($, error)
+    const err = await read($, error), b = await read($, busy)
     const toProjects = async () => {
       await update($, error, () => '')
+      await update($, busy, () => 'connecting')
+      const here = await connectHere($, `${r}/projects/${slug}`)
+      await update($, busy, () => '')
+      if (here !== 'ready') return void await update($, error, () => `Couldn't connect this computer to Projects (${here}). Turn on "Use this computer from your phone and claude.ai" in Settings > Claude Code and add this folder.`)
       const f = await $.prompt.fill({ text: projectsDraft(`${r}/projects/${slug}`) }).catch(() => ({ isFilled: false }))
       if (!f.isFilled) await update($, error, () => `Couldn't write the command. Type /send-to-project in the message box.`)
     }
@@ -196,7 +220,7 @@ export const register: Register = on => {
         <Box flexDirection="row" gap={1}>
           <Text bold>{slug || 'Threads'}</Text>
           <Button key="refresh" dimColor onPress={() => $.ui.invalidate('ui.render')}>Refresh</Button>
-          {r && slug && <Button key="to-projects" dimColor onPress={() => void toProjects()}>Send to Projects</Button>}
+          {r && slug && <Button key="to-projects" dimColor onPress={() => void toProjects()}>{b === 'connecting' ? 'Connecting…' : 'Send to Projects'}</Button>}
         </Box>
         {by('review').length > 0 && group('Ready for review', by('review'))}
         <Box flexDirection="column">

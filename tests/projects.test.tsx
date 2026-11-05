@@ -110,6 +110,12 @@ test('the Threads pane groups the threads this conversation started and lists th
     return t('Opened')
   })
   on('prompt.fill', (_: any, e: any) => { calls.push({ tool: 'prompt.fill', args: e }); return { isFilled: true } })
+  on('process.spawn', async function* (_: any, e: any) {
+    calls.push({ tool: 'process.spawn', args: e })
+    yield { stream: 'stdout', text: 'Enable Remote Control? (y/n) \n' }
+    yield { stream: 'stdout', text: '\x1b[32m✔\x1b[0m Ready · dock\n' }
+    await new Promise(() => {}) // stays connected, like the real one
+  })
   await $.session.start({ cwd: '/ws/projects/dock', surface: 'desktop', isInteractive: true })
   expect(opened).toEqual(['cos-threads'])
   const ui = await $.ui.mount({ ...THREADS, surface: 'desktop' })
@@ -129,6 +135,7 @@ test('the Threads pane groups the threads this conversation started and lists th
   await ui.press({ key: 'local_a' })
   expect(calls.find(c => c.tool === 'ccd_window.open_session_in')?.args).toEqual({ session_id: 'local_a', target: 'focus' })
   await ui.press({ key: 'to-projects' })
+  expect(calls.find(c => c.tool === 'process.spawn')?.args).toMatchObject({ argv: ['claude', 'remote-control', '--no-create-session-in-dir'], cwd: '/ws/projects/dock', input: 'y\n' })
   expect(calls.find(c => c.tool === 'prompt.fill')?.args.text).toMatch(/^\/send-to-project .*on my computer, in the folder \/ws\/projects\/dock\./)
   expect(calls.some(c => c.tool === 'ccd_session.start_session')).toBe(false)
   await ui.unmount()
