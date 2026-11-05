@@ -174,9 +174,13 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => { const ran = await next(e); $.ui.invalidate('ui.render'); return ran })
 
   on('ui.render', { component: 'Pane', requestId: THREADS }, async ($, e) => {
-    const { Box, Text, Button } = $.ui.resolve(e)
+    const { Box, Text, Button, Markdown } = $.ui.resolve(e)
     const slug = await read($, coord), r = await root($)
     const [ts, asks, now] = await Promise.all([threads($).catch(() => [] as Thread[]), r && slug ? waitingOnOwner($, r, slug) : [], $.clock.now()])
+    // under the threads, the project's memory and instructions, as the Projects side panel shows them
+    const p = r && slug ? (await projects($, r)).find(x => x.slug === slug) : undefined
+    const dc = p ? decisions(await $.fs.read(`${p.dir}/DECISIONS.md`).catch(() => '')).slice(-5) : []
+    const instr = p ? (await $.fs.read(`${p.dir}/CLAUDE.md`).catch(() => '')).split('\n').slice(0, 30).join('\n') : ''
     const err = await read($, error)
     const show = async (t: Thread) => {
       await update($, error, () => '')
@@ -213,6 +217,13 @@ export const register: Register = on => {
         {by('resolved').length > 0 && group('resolved', by('resolved'))}
         {ts.length === 0 && <Text dimColor>No threads yet. Ask for work here; long tasks become threads.</Text>}
         {err && <Text color="error">{err}</Text>}
+        {p && <Box flexDirection="column">
+          <Text bold>Memory</Text>
+          <Text dimColor>{p.status} · updated {p.updated || '-'}</Text>
+          {p.next && <Text>next: {p.next}</Text>}
+          {dc.map(d => <Text dimColor>- {d}</Text>)}
+        </Box>}
+        {p && instr && <Box flexDirection="column"><Text bold>Instructions</Text><Markdown text={instr} /></Box>}
       </Box>)
   })
 

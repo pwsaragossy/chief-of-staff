@@ -87,13 +87,21 @@ test('the Threads pane groups the threads this conversation started and lists th
   const opened: string[] = []
   on('store.get', () => ({ value: '/ws' }))
   on('store.set', () => ({ value: undefined }))
-  on('fs.exists', (_: any, e: any) => ({ value: e.path === '/ws/.chief-of-staff' }))
+  on('fs.exists', (_: any, e: any) => ({ value: ['/ws/.chief-of-staff', '/ws/projects'].includes(e.path) }))
   on('command.register', () => ({ value: { command: 'projects' } }))
   on('ui.open', (_: any, e: any) => { opened.push(e.id); return { value: { isPlaced: true } } })
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('clock.now', () => ({ value: Date.parse('2026-11-05T12:00:00Z') }))
-  on('fs.list', () => ({ value: [{ name: 'Dock.md', kind: 'file', size: 0, mtimeMs: 0, isLink: false }] }))
-  on('fs.read', () => ({ value: card }))
+  const files: Record<string, string> = {
+    '/ws/board/Dock.md': card,
+    '/ws/projects/dock/STATE.md': '---\nstatus: active\nupdated: 2026-11-05\nnext: ship v1\n---\n',
+    '/ws/projects/dock/DECISIONS.md': '- 2026-11-04 10:00 | Local only | owner | replaces: -\n',
+    '/ws/projects/dock/CLAUDE.md': '# Dock\nKeep the dock fast.\n',
+  }
+  on('fs.list', (_: any, e: any) => ({ value: e.path === '/ws/projects'
+    ? [{ name: 'dock', kind: 'dir', size: 0, mtimeMs: 0, isLink: false }]
+    : [{ name: 'Dock.md', kind: 'file', size: 0, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', (_: any, e: any) => (e.path in files ? { value: files[e.path] } : { deny: 'ENOENT' }))
   on('mcp.call', (_: any, e: any) => {
     calls.push({ tool: `${e.server}.${e.tool}`, args: e.args })
     const t = (text: string) => ({ value: { content: [{ type: 'text', text }], isError: false } })
@@ -123,6 +131,9 @@ test('the Threads pane groups the threads this conversation started and lists th
   const order = (await ui.findAll({ type: 'Text' })).map(x => x.text).filter(t => /^[A-Z][a-z ]+ \d+$/.test(t))
   expect(order).toEqual(['Ready for review 1', 'Waiting on you 1', 'Working 1', 'Idle 1', 'Resolved 3'])
   expect(await ui.find({ key: 'local_x' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'next: ship v1' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Local only \(owner\)/ })).toBeDefined()
+  expect(await ui.find({ type: 'Markdown' })).toBeDefined()
   await ui.press({ key: 'local_a' })
   expect(calls.find(c => c.tool === 'ccd_window.open_session_in')?.args).toEqual({ session_id: 'local_a', target: 'focus' })
   await ui.unmount()
