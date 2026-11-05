@@ -78,9 +78,10 @@ async function chats($: EngineInterface, dir: string, slug: string): Promise<Cha
 
 // The app starts a session only on a request the owner sends: the press writes that request in the prompt
 // box as a draft, and the owner sends it (or edits it, or clears it).
+// The chat is the project's coordinator: kept linked, so the sidebar shows it under this conversation.
 export const newChatDraft = (p: Project): string =>
-  `Open a new chat in the project "${p.slug}": a local session in ${p.dir} (no worktree), ` +
-  `detached to top level and filed in the sidebar group "${p.slug}", shown in the main pane. Its first step: the arrival steps in CLAUDE.md.`
+  `Start the coordinator of the project "${p.slug}": a local session in ${p.dir} (no worktree), ` +
+  `titled "${p.slug}: chat", kept as a sub-conversation of this one (not detached). Its first step: the arrival steps in CLAUDE.md.`
 
 // the open questions of a card: the lines under "## For the owner to decide", without their asked-stamp
 export const ownerQuestions = (card: string): string[] => {
@@ -259,25 +260,8 @@ export const register: Register = on => {
     const list = await projects($, r)
     const sel = await read($, view)
     const p = list.find(x => x.slug === sel)
-
-    if (!p) {
-      const open = list.filter(x => !DONE.test(x.status)), done = list.filter(x => DONE.test(x.status))
-      return (
-        <Box flexDirection="column" gap={1}>
-          {list.length === 0 && <Box flexDirection="column"><Text bold>No projects</Text><Text dimColor>Ask central for one.</Text></Box>}
-          {open.map(x => (
-            <Button key={`p-${x.slug}`} plain onPress={() => void update($, view, () => x.slug)}>
-              {x.slug} <Text dimColor>· {x.status}{x.next ? ` · next: ${x.next.slice(0, 80)}` : ''}</Text>
-            </Button>))}
-          {done.length > 0 && <Text dimColor>Done ({done.length}): {done.map(x => x.slug).join(', ')}</Text>}
-        </Box>)
-    }
-
-    const dc = decisions(await $.fs.read(`${p.dir}/DECISIONS.md`).catch(() => '')).slice(-5)
-    const cs = await chats($, p.dir, p.slug).catch(() => [] as Chat[])
-    const instr = (await $.fs.read(`${p.dir}/CLAUDE.md`).catch(() => '')).split('\n').slice(0, 30).join('\n')
     const b = await read($, busy), err = await read($, error)
-    const start = async () => {
+    const start = async (p: Project) => {
       if (await read($, busy)) return
       await update($, error, () => '')
       await update($, busy, () => p.slug)
@@ -288,6 +272,33 @@ export const register: Register = on => {
       catch (x) { await update($, error, () => `Couldn't write the request: ${String((x as Error)?.message ?? x).slice(0, 160)}. Type it yourself: open a new chat in ${p.slug}.`) }
       finally { await update($, busy, () => '') }
     }
+
+    if (!p) {
+      const open = list.filter(x => !DONE.test(x.status)), done = list.filter(x => DONE.test(x.status))
+      // a project with no session in its own folder has no coordinator yet
+      let rows: any[] = []
+      try { rows = JSON.parse(text(await $.mcp.call('ccd_session_mgmt', 'list_sessions', { limit: 100 }))) } catch {}
+      const lone = open.filter(x => !rows.some(s => s.cwd === x.dir))
+      return (
+        <Box flexDirection="column" gap={1}>
+          {list.length === 0 && <Box flexDirection="column"><Text bold>No projects</Text><Text dimColor>Ask central for one.</Text></Box>}
+          {open.map(x => (
+            <Button key={`p-${x.slug}`} plain onPress={() => void update($, view, () => x.slug)}>
+              {x.slug} <Text dimColor>· {x.status}{x.next ? ` · next: ${x.next.slice(0, 80)}` : ''}</Text>
+            </Button>))}
+          {lone.length > 0 && <Box flexDirection="column">
+            <Text bold>No coordinator <Text dimColor>{lone.length}</Text></Text>
+            {lone.map(x => <Button key={`c-${x.slug}`} plain onPress={() => void start(x)}>{b === x.slug ? 'Writing…' : `Start ${x.slug}: chat`}</Button>)}
+            <Text dimColor>Writes the request below; press Enter to send it.</Text>
+          </Box>}
+          {err && <Text color="error">{err}</Text>}
+          {done.length > 0 && <Text dimColor>Done ({done.length}): {done.map(x => x.slug).join(', ')}</Text>}
+        </Box>)
+    }
+
+    const dc = decisions(await $.fs.read(`${p.dir}/DECISIONS.md`).catch(() => '')).slice(-5)
+    const cs = await chats($, p.dir, p.slug).catch(() => [] as Chat[])
+    const instr = (await $.fs.read(`${p.dir}/CLAUDE.md`).catch(() => '')).split('\n').slice(0, 30).join('\n')
     // A chat opens in the main pane through the app's window tool, which serves only chats this
     // conversation started (the ones New chat asked for here); any other is found in the sidebar group.
     const show = async (c: Chat) => {
@@ -306,7 +317,7 @@ export const register: Register = on => {
           <Text bold>{p.slug}</Text>
         </Box>
         {p.goal && <Text>{p.goal}</Text>}
-        <Button key="new" variant="primary" onPress={() => void start()}>{b ? 'Writing…' : 'New chat'}</Button>
+        <Button key="new" variant="primary" onPress={() => void start(p)}>{b ? 'Writing…' : 'New chat'}</Button>
         <Text dimColor>Writes the request below; press Enter to send it.</Text>
         {err && <Text color="error">{err}</Text>}
         <Text bold>Memory</Text>

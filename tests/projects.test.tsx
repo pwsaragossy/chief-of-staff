@@ -13,7 +13,8 @@ const FILES: Record<string, string> = {
   '/ws/projects/old/STATE.md': '---\nstatus: delivered\nupdated: 2026-10-01\n---\n',
 }
 
-function workspace(on: any, calls: { tool: string; args: any }[], fillFails = false) {
+const SESSIONS = [{ sessionId: 'local_1', title: 'Spike', cwd: '/ws/projects/dock', lastActivityAt: '2026-11-04T10:00:00Z' }, { sessionId: 'local_2', title: 'Other', cwd: '/elsewhere' }]
+function workspace(on: any, calls: { tool: string; args: any }[], fillFails = false, sessions: unknown[] = SESSIONS) {
   on('prompt.fill', (_: any, e: any) => { calls.push({ tool: 'prompt.fill', args: e }); return { isFilled: !fillFails } })
   on('store.get', () => ({ value: '/ws' }))
   on('fs.exists', (_: any, e: any) => ({ value: e.path === '/ws/projects' || e.path in FILES }))
@@ -22,7 +23,7 @@ function workspace(on: any, calls: { tool: string; args: any }[], fillFails = fa
   on('mcp.call', (_: any, e: any) => {
     calls.push({ tool: `${e.server}.${e.tool}`, args: e.args })
     const t = (text: string) => ({ value: { content: [{ type: 'text', text }], isError: false } })
-    if (e.tool === 'list_sessions') return t(JSON.stringify([{ sessionId: 'local_1', title: 'Spike', cwd: '/ws/projects/dock', lastActivityAt: '2026-11-04T10:00:00Z' }, { sessionId: 'local_2', title: 'Other', cwd: '/elsewhere' }]))
+    if (e.tool === 'list_sessions') return t(JSON.stringify(sessions))
     if (e.tool === 'list_groups') return t('[]')
     if (e.tool === 'create_group') return t('cg-0a1b2c3d-0000-4000-8000-000000000002')
     if (e.tool === 'open_session_in') return t('Refused: not a session this one started')
@@ -41,6 +42,18 @@ test('the list shows open projects and folds delivered ones', async ($, on) => {
   expect((await ui.find({ key: 'p-dock' }))?.text).toMatch(/dock · in-progress · next: spike the panel/)
   expect(await ui.find({ key: 'p-old' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Done \(1\): old/ })).toBeDefined()
+  expect(await ui.find({ key: 'c-dock' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a project with no session in its folder is offered a coordinator', async ($, on) => {
+  const calls: { tool: string; args: any }[] = []
+  workspace(on, calls, false, [])
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^No coordinator 1$/ })).toBeDefined()
+  await ui.press({ key: 'c-dock' })
+  expect(calls.find(c => c.tool === 'prompt.fill')?.args.text).toMatch(/Start the coordinator of the project "dock"/)
+  expect(calls.some(c => c.tool.startsWith('ccd_session.start'))).toBe(false)
   await ui.unmount()
 })
 
@@ -54,7 +67,7 @@ test('New chat writes the request in the prompt box and starts nothing itself', 
   expect(await ui.find({ key: 'local_2' })).toBeUndefined()
   await ui.press({ key: 'new' })
   const fill = calls.find(c => c.tool === 'prompt.fill')!
-  expect(fill.args.text).toMatch(/project "dock": a local session in \/ws\/projects\/dock \(no worktree\), detached to top level and filed in the sidebar group "dock"/)
+  expect(fill.args.text).toMatch(/coordinator of the project "dock": a local session in \/ws\/projects\/dock \(no worktree\), titled "dock: chat", kept as a sub-conversation of this one \(not detached\)/)
   expect(calls.some(c => c.tool.startsWith('ccd_session.start') || c.tool.startsWith('ccd_sidebar.create'))).toBe(false)
   await ui.unmount()
 })

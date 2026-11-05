@@ -83,4 +83,12 @@ the owner to pick, in the same round of buttons if possible.
 The stages and their minimum deliverables are in TRACK.md; a hook stops any session that moves
 `stage:` forward, or sets STATE.md to done, while an item of an earlier stage is open or lacks its
 proof file. Add project-specific deliverables to TRACK.md in the same format. At each gate the
-decision is one of: continue, stop, pause, redo. Then tell the owner which folder to open next.
+decision is one of: continue, stop, pause, redo.
+
+Then start the project's coordinator yourself; never send the owner to open a folder. One
+`start_session` call (`mcp__ccd_session__start_session`, loaded with ToolSearch if deferred):
+`initiation: "user_asked"` (the owner asked for the project), `context: "fresh"`, `cwd` the absolute
+path of `../projects/<slug>`, `use_worktree: false`, `title: "<slug>: chat"`, and a prompt that says it
+is the project's coordinator and that its first step is the arrival steps in its CLAUDE.md. Keep it
+linked (never detach it): the sidebar shows it under central, and its threads under it. Tell the owner
+in one line that the project's chat is open, with its link.
