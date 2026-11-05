@@ -103,7 +103,7 @@ async function waitingOnOwner($: EngineInterface, r: string, slug: string): Prom
   return out
 }
 
-type Thread = { id: string; title: string; state: 'review' | 'working' | 'idle' | 'resolved'; at: number }
+type Thread = { id: string; title: string; state: 'review' | 'working' | 'idle' | 'resolved'; at: number; pr?: number }
 const WEEK = 7 * 24 * 3600 * 1000
 
 // the sessions this conversation started (linked, not detached), newest first
@@ -122,7 +122,7 @@ export async function threads($: EngineInterface): Promise<Thread[]> {
   let rows: any[] = []
   try { rows = JSON.parse(text(await $.mcp.call('ccd_session_mgmt', 'list_sessions', { linked: true, include_archived: true, limit: 100 }))) } catch { return [] }
   return rows.filter(s => s.startedBy === me).map(s => ({
-    id: s.sessionId, title: s.title || 'Untitled', at: Date.parse(s.lastActivityAt ?? '') || 0,
+    id: s.sessionId, title: s.title || 'Untitled', at: Date.parse(s.lastActivityAt ?? '') || 0, pr: s.prNumber,
     state: threadState(s, now),
   }))
 }
@@ -177,7 +177,7 @@ export const register: Register = on => {
       <Box flexDirection="column">
         <Text dimColor>{label} · {list.length}</Text>
         {list.map(t => (
-          <Button key={t.id} plain onPress={() => void show(t)}>{t.title} <Text dimColor>· {ago(t.at, now)}</Text></Button>))}
+          <Button key={t.id} plain onPress={() => void show(t)}>{t.title} <Text dimColor>{t.pr ? `· PR #${t.pr} ` : ''}· {ago(t.at, now)}</Text></Button>))}
       </Box>)
     const by = (s: Thread['state']) => ts.filter(t => t.state === s).sort((a, b) => b.at - a.at)
     return (
