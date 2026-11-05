@@ -11,6 +11,8 @@ const DONE = /^(done|delivered|closed|cancelled|dropped|paused)$/
 // A project's coordinator (a session in projects/<slug>/) gets the Threads pane: the sessions it started.
 const THREADS = 'cos-threads'
 const coord = atom({ plugin: 'chief-of-staff', key: 'coord' } as const, '', { shape: 'coord-1' })
+// the owner closed the Threads pane by hand: it stays closed until /threads
+const shut = atom({ plugin: 'chief-of-staff', key: 'threadsShut' } as const, false, { shape: 'shut-1' })
 
 type Project = { slug: string; dir: string; status: string; updated: string; next: string; goal: string }
 type Chat = { id: string; title: string; at: string; link?: string }
@@ -151,6 +153,7 @@ export const register: Register = on => {
     const r = await findRoot($, e.cwd)
     if (r) await $.store.set('root', r)
     await $.command.register({ name: 'projects', description: 'Show the workspace projects and open their chats', argumentHint: '[workspace folder]' })
+    await $.command.register({ name: 'threads', description: "Show this project's threads, questions, memory and instructions" })
     const rel = r ? e.cwd.slice(r.length) : ''
     if (r && /^\/central(\/|$)/.test(rel)) void $.ui.open({ id: PANE, title: 'Projects' })
     const slug = rel.match(/^\/projects\/([^/]+)/)?.[1]
@@ -169,6 +172,24 @@ export const register: Register = on => {
     }
     await $.ui.open({ id: PANE, title: 'Projects' })
     return { text: 'Projects pane opened.' }
+  })
+
+  // An open with no ask behind it waits undrawn in a narrow window; the owner's message is an ask, so the
+  // coordinator's pane comes up with it, unless the owner closed it.
+  on('prompt.submit', async ($, e, next) => {
+    if ((await read($, coord)) && !(await read($, shut)) && !(await $.ui.panes()).some(x => x.id === THREADS && x.isPlaced))
+      void $.ui.open({ id: THREADS, title: 'Threads' })
+    return next(e)
+  })
+  on('ui.close', async ($, e, next) => {
+    if (e.id === THREADS && e.origin.kind === 'person') await update($, shut, () => true)
+    return next(e)
+  })
+  on('command.run', { command: 'threads' }, async $ => {
+    if (!(await read($, coord))) return { text: "Threads show in a project's chat (a session in projects/<name>/)." }
+    await update($, shut, () => false)
+    await $.ui.open({ id: THREADS, title: 'Threads' })
+    return { text: 'Threads pane opened.' }
   })
 
   // a thread started, a message sent, a turn ended: the Threads pane reads the app's list again

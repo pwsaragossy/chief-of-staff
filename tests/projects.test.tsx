@@ -183,3 +183,18 @@ test('the coordinator start_session row draws as a thread card that opens the th
   expect(await starting.find({ key: 'open-tu2' })).toBeUndefined()
   await starting.unmount()
 })
+
+test('the coordinator pane comes up with the owner message', async ($, on) => {
+  const opened: string[] = []
+  on('store.get', () => ({ value: '/ws' }))
+  on('store.set', () => ({ value: undefined }))
+  on('fs.exists', (_: any, e: any) => ({ value: e.path === '/ws/.chief-of-staff' }))
+  on('command.register', () => ({ value: { command: 'x' } }))
+  on('ui.open', (_: any, e: any) => { opened.push(e.id); return { value: { isPlaced: false, reason: 'narrow' } } })
+  on('ui.panes', () => ({ value: [] }))
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  on('prompt.submit', (_: any, e: any) => e)
+  await $.session.start({ cwd: '/ws/projects/dock', surface: 'desktop', isInteractive: true })
+  await $.prompt.submit({ text: 'hi' } as any)
+  expect(opened).toEqual(['cos-threads', 'cos-threads'])
+})
