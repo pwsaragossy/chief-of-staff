@@ -82,6 +82,12 @@ export const newChatDraft = (p: Project): string =>
   `Open a new chat in the project "${p.slug}": a local session in ${p.dir} (no worktree), ` +
   `detached to top level and filed in the sidebar group "${p.slug}", shown in the main pane. Its first step: the arrival steps in CLAUDE.md.`
 
+// /send-to-project hands this conversation to a claude.ai Project (the app's own Projects screen); only the
+// owner can run it, so the press writes it in the prompt box. "On my computer" makes the project run its
+// threads here through Remote Control, in this folder.
+export const projectsDraft = (dir: string): string =>
+  `/send-to-project Carry on this project's work. Run its threads on my computer, in the folder ${dir}. Next: `
+
 // the open questions of a card: the lines under "## For the owner to decide", without their asked-stamp
 export const ownerQuestions = (card: string): string[] => {
   const out: string[] = []
@@ -166,6 +172,11 @@ export const register: Register = on => {
     const slug = await read($, coord), r = await root($)
     const [ts, asks, now] = await Promise.all([threads($).catch(() => [] as Thread[]), r && slug ? waitingOnOwner($, r, slug) : [], $.clock.now()])
     const err = await read($, error)
+    const toProjects = async () => {
+      await update($, error, () => '')
+      const f = await $.prompt.fill({ text: projectsDraft(`${r}/projects/${slug}`) }).catch(() => ({ isFilled: false }))
+      if (!f.isFilled) await update($, error, () => `Couldn't write the command. Type /send-to-project in the message box.`)
+    }
     const show = async (t: Thread) => {
       await update($, error, () => '')
       try {
@@ -185,6 +196,7 @@ export const register: Register = on => {
         <Box flexDirection="row" gap={1}>
           <Text bold>{slug || 'Threads'}</Text>
           <Button key="refresh" dimColor onPress={() => $.ui.invalidate('ui.render')}>Refresh</Button>
+          {r && slug && <Button key="to-projects" dimColor onPress={() => void toProjects()}>Send to Projects</Button>}
         </Box>
         {by('review').length > 0 && group('Ready for review', by('review'))}
         <Box flexDirection="column">
