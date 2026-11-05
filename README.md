@@ -1,7 +1,7 @@
 # chief-of-staff
 
 An AI chief of staff for [Claude Code](https://code.claude.com): a small company of agents that
-works for one owner, or for a team. Version 0.8.3.
+works for one owner, or for a team. Version 0.9.0.
 
 What it gives you:
 
@@ -14,10 +14,8 @@ What it gives you:
   it asks you its decisions and runs long or parallel work in threads nested under it. Questions that
   waited while you were away sit on a card in `board/`; central asks them all at once. Any other folder of
   the workspace does not ask you, except to confirm the origin of an order before an irreversible step.
-  Send to Projects, in the Threads pane, writes `/send-to-project` in the prompt box: sent, it moves the
-  work to a project in the app's own Projects screen whose threads run on this computer. Before it writes,
-  it connects the project's folder through Remote Control (`claude remote-control`), which stays on while
-  this conversation is open.
+  Everything runs on this computer. When the coordinator starts a thread, its row in the chat draws as a
+  thread card (title, state, a press that opens it), and the Threads pane lists every thread by state.
 - **A fixed project playbook with tracks.** Opening questions, a coherence check of the success
   criteria, then a track for the kind of project (hackathon, software, brand, launch, research):
   stages of minimum deliverables, each naming the specialist who makes it, what it needs first and

@@ -82,32 +82,6 @@ export const newChatDraft = (p: Project): string =>
   `Open a new chat in the project "${p.slug}": a local session in ${p.dir} (no worktree), ` +
   `detached to top level and filed in the sidebar group "${p.slug}", shown in the main pane. Its first step: the arrival steps in CLAUDE.md.`
 
-// /send-to-project hands this conversation to a claude.ai Project (the app's own Projects screen); only the
-// owner can run it, so the press writes it in the prompt box. "On my computer" makes the project run its
-// threads here through Remote Control, in this folder.
-export const projectsDraft = (dir: string): string =>
-  `/send-to-project Carry on this project's work. Run its threads on my computer, in the folder ${dir}. Next: `
-
-// Threads the project runs on this computer reach it through `claude remote-control` in the project's
-// folder (the owner chose this over the switch in Settings). It answers its one consent question with the
-// owner's yes, and lives as long as this module: the session that started it.
-// ponytail: one connection per session, kept in memory; a second coordinator starts its own
-let rc: Promise<string> | null = null
-export const connectHere = ($: EngineInterface, dir: string): Promise<string> => rc ??= new Promise<string>(done => {
-  void (async () => {
-    let tail = ''
-    try {
-      const child = $.process.spawn({ argv: ['claude', 'remote-control', '--no-create-session-in-dir'], cwd: dir, input: 'y\n' })
-      for await (const { text } of child) {
-        tail = (tail + text).slice(-400)
-        if (/Ready/.test(tail)) done('ready')
-      }
-    } catch (x) { tail = String((x as Error)?.message ?? x) }
-    rc = null
-    done(`stopped: ${tail.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').trim().slice(-160)}`)
-  })()
-})
-
 // the open questions of a card: the lines under "## For the owner to decide", without their asked-stamp
 export const ownerQuestions = (card: string): string[] => {
   const out: string[] = []
@@ -153,6 +127,18 @@ export async function threads($: EngineInterface): Promise<Thread[]> {
   }))
 }
 
+// how each state reads, as claude.ai Projects marks it
+export const MARK: Record<Thread['state'], { label: string; mark: string; color: string }> = {
+  review: { label: 'Ready for review', mark: '◆', color: 'merged' },
+  working: { label: 'Working', mark: '◐', color: 'claude' },
+  idle: { label: 'Idle', mark: '○', color: 'subtle' },
+  resolved: { label: 'Resolved', mark: '✓', color: 'success' },
+}
+
+// the session a start_session call opened, read off its result (`local_…`)
+export const startedId = (output: unknown): string =>
+  (typeof output === 'string' ? output : JSON.stringify(output ?? '')).match(/local_[0-9a-f][0-9a-f-]{7,}/)?.[0] ?? ''
+
 export const ago = (ms: number, now: number): string => {
   const m = Math.max(0, Math.round((now - ms) / 60000))
   return m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`
@@ -191,16 +177,7 @@ export const register: Register = on => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const slug = await read($, coord), r = await root($)
     const [ts, asks, now] = await Promise.all([threads($).catch(() => [] as Thread[]), r && slug ? waitingOnOwner($, r, slug) : [], $.clock.now()])
-    const err = await read($, error), b = await read($, busy)
-    const toProjects = async () => {
-      await update($, error, () => '')
-      await update($, busy, () => 'connecting')
-      const here = await connectHere($, `${r}/projects/${slug}`)
-      await update($, busy, () => '')
-      if (here !== 'ready') return void await update($, error, () => `Couldn't connect this computer to Projects (${here}). Turn on "Use this computer from your phone and claude.ai" in Settings > Claude Code and add this folder.`)
-      const f = await $.prompt.fill({ text: projectsDraft(`${r}/projects/${slug}`) }).catch(() => ({ isFilled: false }))
-      if (!f.isFilled) await update($, error, () => `Couldn't write the command. Type /send-to-project in the message box.`)
-    }
+    const err = await read($, error)
     const show = async (t: Thread) => {
       await update($, error, () => '')
       try {
@@ -208,11 +185,15 @@ export const register: Register = on => {
         if (res.isError || /^Refused/.test(text(res))) throw new Error(text(res))
       } catch (x) { await update($, error, () => `Couldn't show "${t.title}": ${String((x as Error)?.message ?? x).slice(0, 120)}`) }
     }
-    const group = (label: string, list: Thread[]) => (
+    // a row as claude.ai Projects draws it: the state's mark, the title, then when and the pull request
+    const group = (st: Thread['state'], list: Thread[]) => (
       <Box flexDirection="column">
-        <Text dimColor>{label} · {list.length}</Text>
+        <Text bold>{MARK[st].label} <Text dimColor>{list.length}</Text></Text>
         {list.map(t => (
-          <Button key={t.id} plain onPress={() => void show(t)}>{t.title} <Text dimColor>{t.pr ? `· PR #${t.pr} ` : ''}· {ago(t.at, now)}</Text></Button>))}
+          <Box key={`row-${t.id}`} flexDirection="column" paddingLeft={1}>
+            <Button key={t.id} plain onPress={() => void show(t)}><Text color={MARK[st].color}>{MARK[st].mark}</Text> {t.title}</Button>
+            <Text dimColor>  {ago(t.at, now)}{t.pr ? ` · PR #${t.pr}` : ''}</Text>
+          </Box>))}
       </Box>)
     const by = (s: Thread['state']) => ts.filter(t => t.state === s).sort((a, b) => b.at - a.at)
     return (
@@ -220,19 +201,41 @@ export const register: Register = on => {
         <Box flexDirection="row" gap={1}>
           <Text bold>{slug || 'Threads'}</Text>
           <Button key="refresh" dimColor onPress={() => $.ui.invalidate('ui.render')}>Refresh</Button>
-          {r && slug && <Button key="to-projects" dimColor onPress={() => void toProjects()}>{b === 'connecting' ? 'Connecting…' : 'Send to Projects'}</Button>}
         </Box>
-        {by('review').length > 0 && group('Ready for review', by('review'))}
+        {by('review').length > 0 && group('review', by('review'))}
         <Box flexDirection="column">
-          <Text dimColor>Waiting on you · {asks.length}</Text>
-          {asks.length === 0 && <Text dimColor>Decisions show here.</Text>}
-          {asks.map(q => <Text>- {q.slice(0, 200)}</Text>)}
+          <Text bold>Waiting on you <Text dimColor>{asks.length}</Text></Text>
+          {asks.length === 0 && <Text dimColor>  Nothing waiting.</Text>}
+          {asks.map(q => <Text> <Text color="warning">●</Text> {q.slice(0, 200)}</Text>)}
         </Box>
-        {group('Working', by('working'))}
-        {group('Idle', by('idle'))}
-        {by('resolved').length > 0 && group('Resolved', by('resolved'))}
+        {by('working').length > 0 && group('working', by('working'))}
+        {by('idle').length > 0 && group('idle', by('idle'))}
+        {by('resolved').length > 0 && group('resolved', by('resolved'))}
         {ts.length === 0 && <Text dimColor>No threads yet. Ask for work here; long tasks become threads.</Text>}
         {err && <Text color="error">{err}</Text>}
+      </Box>)
+  })
+
+  // The coordinator's start_session row draws as a thread card, as claude.ai Projects puts one under the
+  // message: the thread's title, its state now and a press that opens it. ctrl+o shows the engine's row.
+  on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
+    const p = e.props
+    if (!/start_session$/.test(p.tool) || p.isExpanded || !(await read($, coord))) return next(e)
+    const { Box, Text, Button } = $.ui.resolve(e)
+    const input = (p.input ?? {}) as { title?: string; prompt?: string }
+    const id = p.isRunning || p.isErrored ? '' : startedId(p.output)
+    const t = id ? (await threads($).catch(() => [] as Thread[])).find(x => x.id === id) : undefined
+    const st = t ? MARK[t.state] : undefined
+    const brief = String(input.prompt ?? '').replace(/\s+/g, ' ').slice(0, 140)
+    const open = async () => {
+      const res = await $.mcp.call('ccd_window', 'open_session_in', { session_id: id, target: 'focus' }).catch(() => undefined)
+      if (!res || res.isError || /^Refused/.test(text(res))) await update($, error, () => `Couldn't show "${t?.title ?? 'the thread'}". Open it from the Threads pane.`)
+    }
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={1}>
+        <Text>{st ? <Text color={st.color}>{st.mark}</Text> : <Text dimColor>○</Text>} <Text bold>{t?.title || input.title || 'Thread'}</Text> <Text dimColor>· {p.isRunning ? 'Starting' : p.isErrored ? 'Not started' : st ? st.label : id ? 'Thread' : 'Proposed'}</Text></Text>
+        {brief && <Text dimColor>{brief}</Text>}
+        {id && <Button key={`open-${p.tool_use_id}`} plain onPress={() => void open()}>Open thread</Button>}
       </Box>)
   })
 
