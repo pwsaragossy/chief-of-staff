@@ -225,40 +225,48 @@ export const register: Register = on => {
       } catch (x) { await update($, error, () => `Couldn't show "${t.title}": ${String((x as Error)?.message ?? x).slice(0, 120)}`) }
     }
     // a row as claude.ai Projects draws it: the state's mark, the title, then when and the pull request
-    const group = (st: Thread['state'], list: Thread[]) => (
-      <Box flexDirection="column">
-        <Text bold>{MARK[st].label} <Text dimColor>{list.length}</Text></Text>
-        {list.map(t => (
-          <Box key={`row-${t.id}`} flexDirection="column" paddingLeft={1}>
-            <Button key={t.id} plain onPress={() => void show(t)}><Text color={MARK[st].color}>{MARK[st].mark}</Text> {t.title}</Button>
-            <Text dimColor>  {ago(t.at, now)}{t.pr ? ` · PR #${t.pr}` : ''}</Text>
-          </Box>))}
+    // laid out as the claude.ai Projects side panel: "Label · n" headers, one row per thread with its mark,
+    // title and age on the right, the pull request under it
+    const head = (label: string, n: number) => <Text color="subtle">{label} · {n}</Text>
+    const row = (t: Thread) => (
+      <Box key={`row-${t.id}`} flexDirection="column">
+        <Box flexDirection="row" justifyContent="space-between" gap={1}>
+          <Button key={t.id} plain onPress={() => void show(t)}><Text color={MARK[t.state].color}>{MARK[t.state].mark}</Text> {t.title}</Button>
+          <Text dimColor>{ago(t.at, now)}</Text>
+        </Box>
+        {t.pr ? <Text dimColor>  PR #{t.pr}</Text> : null}
       </Box>)
     const by = (s: Thread['state']) => ts.filter(t => t.state === s).sort((a, b) => b.at - a.at)
+    const group = (st: Thread['state']) => by(st).length > 0 && (
+      <Box flexDirection="column" gap={1}>{head(MARK[st].label, by(st).length)}{by(st).map(row)}</Box>)
     return (
-      <Box flexDirection="column" gap={1}>
-        <Box flexDirection="row" gap={1}>
-          <Text bold>{slug || 'Threads'}</Text>
-          <Button key="refresh" dimColor onPress={() => $.ui.invalidate('ui.render')}>Refresh</Button>
+      <Box flexDirection="column" gap={2}>
+        <Box flexDirection="row" justifyContent="space-between">
+          <Text dimColor>{slug || 'Threads'}</Text>
+          <Button key="refresh" plain dimColor onPress={() => $.ui.invalidate('ui.render')}>Refresh</Button>
         </Box>
-        {by('review').length > 0 && group('review', by('review'))}
-        <Box flexDirection="column">
-          <Text bold>Waiting on you <Text dimColor>{asks.length}</Text></Text>
-          {asks.length === 0 && <Text dimColor>  Nothing waiting.</Text>}
-          {asks.map(q => <Text> <Text color="warning">●</Text> {q.slice(0, 200)}</Text>)}
+        <Box flexDirection="column" gap={1}>
+          {head('Waiting on you', asks.length)}
+          {asks.map(q => <Text><Text color="warning">●</Text> {q.slice(0, 200)}</Text>)}
         </Box>
-        {by('working').length > 0 && group('working', by('working'))}
-        {by('idle').length > 0 && group('idle', by('idle'))}
-        {by('resolved').length > 0 && group('resolved', by('resolved'))}
-        {ts.length === 0 && <Text dimColor>No threads yet. Ask for work here; long tasks become threads.</Text>}
+        {group('review')}
+        {group('working')}
+        {group('idle')}
+        <Box flexDirection="column" gap={1}>
+          {head('Resolved', by('resolved').length)}
+          {by('resolved').length === 0
+            ? <Box borderStyle="round" borderColor="subtle" paddingX={1} justifyContent="center"><Text dimColor>Completed threads.</Text></Box>
+            : by('resolved').map(row)}
+        </Box>
+        {ts.length === 0 && <Text dimColor>No threads yet.</Text>}
         {err && <Text color="error">{err}</Text>}
         {p && <Box flexDirection="column">
-          <Text bold>Memory</Text>
+          {head('Memory', dc.length)}
           <Text dimColor>{p.status} · updated {p.updated || '-'}</Text>
           {p.next && <Text>next: {p.next}</Text>}
           {dc.map(d => <Text dimColor>- {d}</Text>)}
         </Box>}
-        {p && instr && <Box flexDirection="column"><Text bold>Instructions</Text><Markdown text={instr} /></Box>}
+        {p && instr && <Box flexDirection="column"><Text color="subtle">Instructions</Text><Markdown text={instr} /></Box>}
       </Box>)
   })
 
