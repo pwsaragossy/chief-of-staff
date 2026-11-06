@@ -12,6 +12,8 @@ const DONE = /^(done|delivered|closed|cancelled|dropped|paused)$/
 const THREADS = 'cos-threads'
 const coord = atom({ plugin: 'chief-of-staff', key: 'coord' } as const, '', { shape: 'coord-1' })
 // the owner closed the Threads pane by hand: it stays closed until /threads
+// the folder name of this conversation, the label /threads gives a chat outside the workspace
+const here = atom({ plugin: 'chief-of-staff', key: 'here' } as const, '', { shape: 'here-1' })
 const shut = atom({ plugin: 'chief-of-staff', key: 'threadsShut' } as const, false, { shape: 'shut-1' })
 
 type Project = { slug: string; dir: string; status: string; updated: string; next: string; goal: string }
@@ -142,6 +144,14 @@ export const MARK: Record<Thread['state'], { label: string; mark: string; color:
 export const startedId = (output: unknown): string =>
   (typeof output === 'string' ? output : JSON.stringify(output ?? '')).match(/local_[0-9a-f][0-9a-f-]{7,}/)?.[0] ?? ''
 
+export const COORDINATOR =
+  'From now on this conversation is a project coordinator, like a claude.ai project chat. Talk with the owner here; ' +
+  'run every piece of work longer than a few tool calls as a thread: one start_session call per independent piece ' +
+  '(initiation "user_asked", context "fresh", the same folder, a short title, a full brief with files and what done ' +
+  'looks like), several at once when the pieces are independent, never detached. Keep this conversation short: ' +
+  'answer, start threads, read their reports when they end a turn, check the result, and bring results and questions ' +
+  'back to the owner here. Steer a running thread with SendMessage to its session id instead of starting a new one.'
+
 export const ago = (ms: number, now: number): string => {
   const m = Math.max(0, Math.round((now - ms) / 60000))
   return m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`
@@ -150,10 +160,11 @@ export const ago = (ms: number, now: number): string => {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const ran = await next(e)
+    await update($, here, () => e.cwd.split('/').filter(Boolean).pop() ?? 'chat')
     const r = await findRoot($, e.cwd)
     if (r) await $.store.set('root', r)
     await $.command.register({ name: 'projects', description: 'Show the workspace projects and open their chats', argumentHint: '[workspace folder]' })
-    await $.command.register({ name: 'threads', description: "Show this project's threads, questions, memory and instructions" })
+    await $.command.register({ name: 'threads', description: 'Make this chat a project coordinator: work runs in threads, shown in the Threads pane' })
     const rel = r ? e.cwd.slice(r.length) : ''
     if (r && /^\/central(\/|$)/.test(rel)) void $.ui.open({ id: PANE, title: 'Projects' })
     const slug = rel.match(/^\/projects\/([^/]+)/)?.[1]
@@ -185,11 +196,13 @@ export const register: Register = on => {
     if (e.id === THREADS && e.origin.kind === 'person') await update($, shut, () => true)
     return next(e)
   })
+  // Any chat becomes a coordinator, as a claude.ai project chat is: the pane, the thread cards, and the rule
+  // that long work runs in threads.
   on('command.run', { command: 'threads' }, async $ => {
-    if (!(await read($, coord))) return { text: "Threads show in a project's chat (a session in projects/<name>/)." }
+    if (!(await read($, coord))) { const h = await read($, here); await update($, coord, () => h || 'chat') }
     await update($, shut, () => false)
     await $.ui.open({ id: THREADS, title: 'Threads' })
-    return { text: 'Threads pane opened.' }
+    return { text: 'This chat is now the coordinator. Threads pane opened.', context: [COORDINATOR] }
   })
 
   // a thread started, a message sent, a turn ended: the Threads pane reads the app's list again

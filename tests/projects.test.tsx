@@ -198,3 +198,18 @@ test('the coordinator pane comes up with the owner message', async ($, on) => {
   await $.prompt.submit({ text: 'hi' } as any)
   expect(opened).toEqual(['cos-threads', 'cos-threads'])
 })
+
+test('/threads turns any chat into a coordinator', async ($, on) => {
+  const opened: string[] = []
+  on('store.get', () => ({ value: '' }))
+  on('store.set', () => ({ value: undefined }))
+  on('fs.exists', () => ({ value: false }))
+  on('command.register', () => ({ value: { command: 'x' } }))
+  on('ui.open', (_: any, e: any) => { opened.push(e.id); return { value: { isPlaced: true } } })
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/Users/p/Workspace/Tokenizadora', surface: 'desktop', isInteractive: true })
+  expect(opened).toEqual([])
+  const r: any = await $.command.run({ command: 'threads', args: '' } as any)
+  expect(opened).toEqual(['cos-threads'])
+  expect(String(r.context)).toMatch(/start_session/)
+})
