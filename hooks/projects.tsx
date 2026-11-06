@@ -220,7 +220,7 @@ export const register: Register = on => {
     const show = async (t: Thread) => {
       await update($, error, () => '')
       try {
-        const res = await $.mcp.call('ccd_window', 'open_session_in', { session_id: t.id, target: 'focus' })
+        const res = await $.mcp.call('ccd_window', 'open_session_in', { session_id: t.id, target: 'split' })
         if (res.isError || /^Refused/.test(text(res))) throw new Error(text(res))
       } catch (x) { await update($, error, () => `Couldn't show "${t.title}": ${String((x as Error)?.message ?? x).slice(0, 120)}`) }
     }
@@ -282,7 +282,7 @@ export const register: Register = on => {
     const st = t ? MARK[t.state] : undefined
     const brief = String(input.prompt ?? '').replace(/\s+/g, ' ').slice(0, 140)
     const open = async () => {
-      const res = await $.mcp.call('ccd_window', 'open_session_in', { session_id: id, target: 'focus' }).catch(() => undefined)
+      const res = await $.mcp.call('ccd_window', 'open_session_in', { session_id: id, target: 'split' }).catch(() => undefined)
       if (!res || res.isError || /^Refused/.test(text(res))) await update($, error, () => `Couldn't show "${t?.title ?? 'the thread'}". Open it from the Threads pane.`)
     }
     return (

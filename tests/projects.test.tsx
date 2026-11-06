@@ -148,7 +148,7 @@ test('the Threads pane groups the threads this conversation started and lists th
   expect(await ui.find({ type: 'Text', text: /Local only \(owner\)/ })).toBeDefined()
   expect(await ui.find({ type: 'Markdown' })).toBeDefined()
   await ui.press({ key: 'local_a' })
-  expect(calls.find(c => c.tool === 'ccd_window.open_session_in')?.args).toEqual({ session_id: 'local_a', target: 'focus' })
+  expect(calls.find(c => c.tool === 'ccd_window.open_session_in')?.args).toEqual({ session_id: 'local_a', target: 'split' })
   await ui.unmount()
 })
 
@@ -176,7 +176,7 @@ test('the coordinator start_session row draws as a thread card that opens the th
   expect(await ui.find({ type: 'Text', text: /◐ Daily build · Working/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Build the daily-use version\.$/ })).toBeDefined()
   await ui.press({ key: 'open-tu1' })
-  expect(calls.find(c => c.tool === 'ccd_window.open_session_in')?.args).toEqual({ session_id: 'local_0a1b2c3d-1111', target: 'focus' })
+  expect(calls.find(c => c.tool === 'ccd_window.open_session_in')?.args).toEqual({ session_id: 'local_0a1b2c3d-1111', target: 'split' })
   await ui.unmount()
   const starting = await row({ ...base, tool_use_id: 'tu2', isRunning: true })
   expect(await starting.find({ type: 'Text', text: /Daily build · Starting/ })).toBeDefined()
