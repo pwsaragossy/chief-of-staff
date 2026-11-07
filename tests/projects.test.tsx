@@ -255,7 +255,7 @@ test('a coordinator thread brief needs its specialist and opens with the thread 
 })
 
 test('the coordinator text carries the six thread rules', () => {
-  for (const rule of [/Only you talk to the owner/, /DECISIONS\.md/, /no push, no deploy/, /Review before production/, /ask the owner where it runs today/, /ROUTING\.md/, /reviewer role/])
+  for (const rule of [/Only you talk to the owner/, /DECISIONS\.md/, /no push, no deploy/, /Review before production/, /ask the owner where it runs today/, /ROUTING\.md/, /reviewer role/, /yes or no/, /in one pass/])
     expect(COORDINATOR).toMatch(rule)
   expect(briefGaps('Role card: utility find the file')).toBe('')
   expect(briefGaps('Role card: /My Drive/ws/specialists/researcher.md Library: [[a]] Ambition: the goal behind it | judge: npm test passes', ['researcher'])).toBe('')

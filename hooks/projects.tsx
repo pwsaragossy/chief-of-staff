@@ -161,7 +161,10 @@ export const COORDINATOR =
   'sent, without the owner\'s approval relayed by you; the plugin adds them); check every report for those actions ' +
   'before you relay it. Review before production: tone and facts are reviewed on the text (application, script, copy) ' +
   'before any thread renders video or images or deploys, so the costly output is made once. Before you propose where ' +
-  'something runs or is hosted, ask the owner where it runs today (their own servers, domains, accounts). Each thread ' +
+  'something runs or is hosted, ask the owner where it runs today (their own servers, domains, accounts); before you ' +
+  'build anything that changes where the work runs (cloud or this computer, a new service), get the owner\'s yes or no ' +
+  'first. To match an existing look, read the real thing first (its files, a screenshot), list every difference and ' +
+  'change them all in one pass, not one per release. Each thread ' +
   'starts with its specialist: pick the role card from the workspace ROUTING.md and give the brief the lines ' +
   '"Role card: <role>", "Library: <notes, or none found for <terms>>" and "Ambition: <goal behind the goal> | judge: ' +
   '<outside judge>"; the thread follows the specialists skill. Anything that goes outside (a submission, a video, a ' +

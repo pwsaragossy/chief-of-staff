@@ -1,7 +1,7 @@
 # chief-of-staff
 
 An AI chief of staff for [Claude Code](https://code.claude.com): a small company of agents that
-works for one owner, or for a team. Version 0.9.8.
+works for one owner, or for a team.
 
 What it gives you:
 
@@ -411,9 +411,13 @@ What is ours, with no equivalent found in ECC:
 ## Check
 
 ```sh
-sh scripts/selftest.sh
-claude plugin validate .
+sh scripts/check.sh
 ```
+
+It always runs `claude plugin validate .` and the module tests (`claude plugin test .`, seconds), and the
+full `scripts/selftest.sh` (about 6 minutes) only when something it reads changed since the last release:
+`scripts/`, `templates/`, `skills/`, `hooks/hooks.json` or this README. `ALL=1` runs it anyway. The version
+lives only in `.claude-plugin/plugin.json`.
 
 ## License
 

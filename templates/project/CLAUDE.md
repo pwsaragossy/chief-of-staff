@@ -36,7 +36,10 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
     tell the other threads.
   - Review before production: tone and facts are reviewed on the text before a thread renders video or
     images or deploys. Anything going outside passes the `reviewer` before it reaches the owner. Ask the
-    owner where something runs today before you propose a host or a deploy path.
+    owner where something runs today before you propose a host or a deploy path, and get a yes or no before
+    you build anything that changes where the work runs (cloud or this computer, a new service). To match an
+    existing look, read the real thing first (its files, a screenshot), list every difference and change
+    them all in one pass.
   - Under the owner's message, one line per thread you started or sent work to, as a card:
     `[<thread title>](#<its local_ id>): what it took`. The owner opens the thread from it.
   - A follow-up about a thread's work goes to that thread; say which one in one line.
