@@ -134,7 +134,7 @@ export async function threads($: EngineInterface): Promise<Thread[]> {
 
 // how each state reads, as claude.ai Projects marks it
 export const MARK: Record<Thread['state'], { label: string; mark: string; color: string }> = {
-  review: { label: 'Ready for review', mark: '◆', color: 'merged' },
+  review: { label: 'Ready for review', mark: '◆', color: 'suggestion' },
   working: { label: 'Working', mark: '◐', color: 'claude' },
   idle: { label: 'Idle', mark: '○', color: 'subtle' },
   resolved: { label: 'Resolved', mark: '✓', color: 'success' },
@@ -187,6 +187,19 @@ export const briefGaps = (brief: string, cards?: string[]): string => {
   if (!brief.includes('Library:')) return 'the line "Library: [[id]] ..." with the notes from library.sh search, or "Library: none found for <terms>"'
   if (!AMBITION.test(brief)) return 'the line "Ambition: <the goal behind the goal> | judge: <what measures that goal from outside>"'
   return ''
+}
+
+// The icons the app's own thread list draws, in its colors (read from the app's stylesheet: --cds-fill-warning
+// #fbb315, --cds-fill-accent #2a78d6, --cds-fill-success #10a122, --cds-text-muted gray). A surface with Svg
+// (desktop, mobile) draws these; the terminal draws MARK's character in the theme color.
+const ring = (stroke: string, extra = '') => `<circle cx="8" cy="8" r="6.25" fill="none" stroke="${stroke}" stroke-width="1.5"${extra}/>`
+const svg = (body: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">${body}</svg>`
+export const ICON: Record<Thread['state'] | 'waiting', string> = {
+  waiting: svg(ring('#fbb315') + '<rect x="5.9" y="5" width="1.4" height="6" rx=".7" fill="#fbb315"/><rect x="8.7" y="5" width="1.4" height="6" rx=".7" fill="#fbb315"/>'),
+  review: svg(ring('#2a78d6') + '<circle cx="8" cy="8" r="3" fill="#2a78d6"/>'),
+  working: svg(ring('#7b7974', ' opacity=".35"') + '<path d="M8 1.75a6.25 6.25 0 0 1 6.25 6.25" fill="none" stroke="#7b7974" stroke-width="1.5" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 8 8" to="360 8 8" dur="1s" repeatCount="indefinite"/></path>'),
+  idle: svg(ring('#7b7974', ' stroke-dasharray="2.2 2.2"')),
+  resolved: svg('<circle cx="8" cy="8" r="7" fill="#10a122"/><path d="M5 8.2l2 2 4-4.2" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'),
 }
 
 export const ago = (ms: number, now: number): string => {
@@ -260,7 +273,11 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => { const ran = await next(e); $.ui.invalidate('ui.render'); return ran })
 
   on('ui.render', { component: 'Pane', requestId: THREADS }, async ($, e) => {
-    const { Box, Text, Button, Markdown } = $.ui.resolve(e)
+    const { Box, Text, Button, Markdown, Svg: S } = $.ui.resolve(e) as ReturnType<typeof $.ui.resolve> & { Svg?: any }
+    const Svg = e.surface === 'terminal' ? undefined : S   // the terminal has no Svg
+    const icon = (k: Thread['state'] | 'waiting') => Svg
+      ? <Svg source={ICON[k]} alt={k === 'waiting' ? 'Waiting on you' : MARK[k].label} width={16} height={16} />
+      : <Text color={k === 'waiting' ? 'warning' : MARK[k].color}>{k === 'waiting' ? '●' : MARK[k].mark}</Text>
     const slug = await read($, coord), r = await root($)
     const [ts, asks, now] = await Promise.all([threads($).catch(() => [] as Thread[]), r && slug ? waitingOnOwner($, r, slug) : [], $.clock.now()])
     // under the threads, the project's memory and instructions, as the Projects side panel shows them
@@ -282,7 +299,11 @@ export const register: Register = on => {
     const row = (t: Thread) => (
       <Box key={`row-${t.id}`} flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between" gap={1}>
-          <Button key={t.id} plain onPress={() => void show(t)}><Text color={MARK[t.state].color}>{MARK[t.state].mark}</Text> {t.title}</Button>
+          {/* the mark sits outside the Button: a desktop draws a Button natively, in its own text color */}
+          <Box flexDirection="row" gap={1}>
+            {icon(t.state)}
+            <Button key={t.id} plain onPress={() => void show(t)}>{t.title}</Button>
+          </Box>
           <Text dimColor>{ago(t.at, now)}</Text>
         </Box>
         {t.pr ? <Text dimColor>  PR #{t.pr}</Text> : null}
@@ -298,7 +319,7 @@ export const register: Register = on => {
         </Box>
         <Box flexDirection="column" gap={1}>
           {head('Waiting on you', asks.length)}
-          {asks.map(q => <Text><Text color="warning">●</Text> {q.slice(0, 200)}</Text>)}
+          {asks.map(q => <Box flexDirection="row" gap={1}>{icon('waiting')}<Text>{q.slice(0, 200)}</Text></Box>)}
         </Box>
         {group('review')}
         {group('working')}
@@ -326,7 +347,8 @@ export const register: Register = on => {
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     const p = e.props
     if (!/start_session$/.test(p.tool) || p.isExpanded || !(await read($, coord))) return next(e)
-    const { Box, Text, Button } = $.ui.resolve(e)
+    const { Box, Text, Button, Svg: S } = $.ui.resolve(e) as ReturnType<typeof $.ui.resolve> & { Svg?: any }
+    const Svg = e.surface === 'terminal' ? undefined : S
     const input = (p.input ?? {}) as { title?: string; prompt?: string }
     const id = p.isRunning || p.isErrored ? '' : startedId(p.output)
     const t = id ? (await threads($).catch(() => [] as Thread[])).find(x => x.id === id) : undefined
@@ -338,7 +360,10 @@ export const register: Register = on => {
     }
     return (
       <Box flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={1}>
-        <Text>{st ? <Text color={st.color}>{st.mark}</Text> : <Text dimColor>○</Text>} <Text bold>{t?.title || input.title || 'Thread'}</Text> <Text dimColor>· {p.isRunning ? 'Starting' : p.isErrored ? 'Not started' : st ? st.label : id ? 'Thread' : 'Proposed'}</Text></Text>
+        <Box flexDirection="row" gap={1}>
+          {t && Svg ? <Svg source={ICON[t.state]} alt={MARK[t.state].label} width={16} height={16} /> : st ? <Text color={st.color}>{st.mark}</Text> : <Text dimColor>○</Text>}
+          <Text><Text bold>{t?.title || input.title || 'Thread'}</Text> <Text dimColor>· {p.isRunning ? 'Starting' : p.isErrored ? 'Not started' : st ? st.label : id ? 'Thread' : 'Proposed'}</Text></Text>
+        </Box>
         {brief && <Text dimColor>{brief}</Text>}
         {id && <Button key={`open-${p.tool_use_id}`} plain onPress={() => void open()}>Open thread</Button>}
       </Box>)
