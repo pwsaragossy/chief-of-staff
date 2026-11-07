@@ -150,7 +150,44 @@ export const COORDINATOR =
   '(initiation "user_asked", context "fresh", the same folder, a short title, a full brief with files and what done ' +
   'looks like), several at once when the pieces are independent, never detached. Keep this conversation short: ' +
   'answer, start threads, read their reports when they end a turn, check the result, and bring results and questions ' +
-  'back to the owner here. Steer a running thread with SendMessage to its session id instead of starting a new one.'
+  'back to the owner here. Steer a running thread with SendMessage to its session id instead of starting a new one. ' +
+  // the rules a grant run with six threads broke: the owner asked from many places, facts drifted, a thread
+  // pushed unapproved, a video rendered 8 times, a host proposed before asking, no thread used a specialist
+  'Only you talk to the owner: threads report to you and never ask the owner; put everything that needs the owner ' +
+  'in one message, all questions at once. Shared facts (slogan, amounts, names, roles, links) live in DECISIONS.md: ' +
+  'the project\'s own, or create DECISIONS.md in this folder now ("- YYYY-MM-DD HH:MM | decision | who | replaces: -"). ' +
+  'Only you write it; a decision the owner makes in a thread reaches you, you record it and tell the other threads. ' +
+  'Every brief opens with the thread rules (no Save or Submit in an external form, no push, no deploy, no message ' +
+  'sent, without the owner\'s approval relayed by you; the plugin adds them); check every report for those actions ' +
+  'before you relay it. Review before production: tone and facts are reviewed on the text (application, script, copy) ' +
+  'before any thread renders video or images or deploys, so the costly output is made once. Before you propose where ' +
+  'something runs or is hosted, ask the owner where it runs today (their own servers, domains, accounts). Each thread ' +
+  'starts with its specialist: pick the role card from the workspace ROUTING.md and give the brief the lines ' +
+  '"Role card: <role>", "Library: <notes, or none found for <terms>>" and "Ambition: <goal behind the goal> | judge: ' +
+  '<outside judge>"; the thread follows the specialists skill. Anything that goes outside (a submission, a video, a ' +
+  'text to a partner) passes the reviewer role before it reaches the owner.'
+
+// what every thread brief opens with; the start_session check below adds it when the coordinator left it out
+export const THREAD_RULES =
+  'Thread rules (from the coordinator): never, without the owner\'s explicit approval relayed by the coordinator, ' +
+  'press Save or Submit in an external form, push, deploy, or send a message. Never ask the owner directly: report ' +
+  'to the coordinator, questions included. Read DECISIONS.md before you use a shared fact (slogan, amounts, names, ' +
+  'roles); a decision you hear goes to the coordinator, who records it. Follow the specialists skill with the role ' +
+  'card below.'
+
+const AMBITION = /Ambition: [^|\n]{12,}\| *judge: [^\n]{8,}/
+// what a coordinator's thread brief lacks, as protocol.sh checks an Agent brief: '' when it is complete.
+// A role is a name or a card path; with the workspace's cards known, the role must be one of them.
+export const briefGaps = (brief: string, cards?: string[]): string => {
+  const m = brief.match(/Role card: *(?:[^\n]*\/specialists\/([a-z-]+)\.md|([a-z-]+))/)
+  const role = m?.[1] ?? m?.[2] ?? ''
+  if (!role) return `the line "Role card: <role>" (the right card from ROUTING.md${cards?.length ? `: ${cards.join(', ')}` : ''})`
+  if (role === 'utility') return ''
+  if (cards && !cards.includes(role)) return `a role card that exists (no specialists/${role}.md; cards: ${cards.join(', ') || 'none'})`
+  if (!brief.includes('Library:')) return 'the line "Library: [[id]] ..." with the notes from library.sh search, or "Library: none found for <terms>"'
+  if (!AMBITION.test(brief)) return 'the line "Ambition: <the goal behind the goal> | judge: <what measures that goal from outside>"'
+  return ''
+}
 
 export const ago = (ms: number, now: number): string => {
   const m = Math.max(0, Math.round((now - ms) / 60000))
@@ -203,6 +240,20 @@ export const register: Register = on => {
     await update($, shut, () => false)
     await $.ui.open({ id: THREADS, title: 'Threads' })
     return { text: 'This chat is now the coordinator. Threads pane opened.', context: [COORDINATOR] }
+  })
+
+  // A coordinator's thread brief carries its specialist's lines, as an Agent brief does (protocol.sh), and opens
+  // with the thread rules. A start with no brief (an offer card, a proposal started by id) has nothing to check.
+  on('tool.call', { tool: /start_session$/ }, async ($, e, next) => {
+    const brief = (e as { prompt?: unknown }).prompt
+    if (typeof brief !== 'string' || !brief.trim() || !(await read($, coord))) return next(e)
+    const r = await root($)
+    const cards = r && (await $.fs.exists(`${r}/specialists`))
+      ? (await $.fs.list(`${r}/specialists`)).filter(x => x.kind === 'file' && x.name.endsWith('.md')).map(x => x.name.slice(0, -3))
+      : undefined
+    const gap = briefGaps(brief, cards)
+    if (gap) return { deny: `chief-of-staff: a thread starts with its specialist. Add to the brief ${gap}, then start it again.` }
+    return next({ ...e, prompt: brief.includes(THREAD_RULES) ? brief : `${THREAD_RULES}\n\n${brief}` } as typeof e)
   })
 
   // a thread started, a message sent, a turn ended: the Threads pane reads the app's list again

@@ -27,6 +27,16 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
     brief (files, what done looks like, report back when done), in this folder (`use_worktree: false`)
     unless two threads would write the same files. Never detach a thread: it nests under this conversation
     in the sidebar and the Threads pane lists it.
+  - The brief carries its specialist (the card from `../../ROUTING.md`): `Role card: <role>`, `Library:`
+    and `Ambition: <goal behind the goal> | judge: <outside judge>`; the plugin refuses a brief without
+    them and opens it with the thread rules: no Save or Submit in an external form, no push, no deploy, no
+    message sent, without the owner's approval relayed by you. Check every report for those actions.
+  - Only you write `DECISIONS.md` and talk to the owner. A thread reads `DECISIONS.md` before it uses a
+    shared fact (slogan, amounts, names, roles) and reports a decision it hears to you; you record it and
+    tell the other threads.
+  - Review before production: tone and facts are reviewed on the text before a thread renders video or
+    images or deploys. Anything going outside passes the `reviewer` before it reaches the owner. Ask the
+    owner where something runs today before you propose a host or a deploy path.
   - Under the owner's message, one line per thread you started or sent work to, as a card:
     `[<thread title>](#<its local_ id>): what it took`. The owner opens the thread from it.
   - A follow-up about a thread's work goes to that thread; say which one in one line.

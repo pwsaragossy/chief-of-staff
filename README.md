@@ -1,7 +1,7 @@
 # chief-of-staff
 
 An AI chief of staff for [Claude Code](https://code.claude.com): a small company of agents that
-works for one owner, or for a team. Version 0.9.6.
+works for one owner, or for a team. Version 0.9.7.
 
 What it gives you:
 
@@ -16,6 +16,11 @@ What it gives you:
   the workspace does not ask you, except to confirm the origin of an order before an irreversible step.
   Everything runs on this computer. When the coordinator starts a thread, its row in the chat draws as a
   thread card (title, state, a press that opens it), and the Threads pane lists every thread by state.
+  Only the coordinator talks to you and writes `DECISIONS.md`; a thread brief that names no specialist
+  (`Role card:`, `Library:`, `Ambition:`) is refused, and every brief opens with the thread rules: no
+  Save or Submit in an external form, no push, no deploy, no message sent without your approval.
+  Text is reviewed before video or images are rendered, and the coordinator asks where things run
+  before it proposes a host.
 - **A fixed project playbook with tracks.** Opening questions, a coherence check of the success
   criteria, then a track for the kind of project (hackathon, software, brand, launch, research):
   stages of minimum deliverables, each naming the specialist who makes it, what it needs first and

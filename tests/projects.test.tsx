@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { decisions, fm } from '../hooks/projects'
+import { briefGaps, COORDINATOR, decisions, fm, THREAD_RULES } from '../hooks/projects'
 
 const PANE = {
   plugin: 'chief-of-staff', component: 'Pane', requestId: 'cos-projects',
@@ -219,4 +219,42 @@ test('/threads turns any chat into a coordinator', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: 'Completed threads.' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Resolved · 0' })).toBeDefined()
   await ui.unmount()
+})
+
+test('a coordinator thread brief needs its specialist and opens with the thread rules', async ($, on) => {
+  const ran: any[] = []
+  on('store.get', () => ({ value: '/ws' }))
+  on('store.set', () => ({ value: undefined }))
+  on('fs.exists', (_: any, e: any) => ({ value: e.path === '/ws/.chief-of-staff' || e.path === '/ws/specialists' }))
+  on('fs.list', () => ({ value: ['researcher.md', 'reviewer.md', 'ROUTING.md'].map(name => ({ name, kind: 'file', size: 0, mtimeMs: 0, isLink: false })) }))
+  on('command.register', () => ({ value: { command: 'x' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  on('tool.call', (_: any, e: any) => { ran.push(e); return { result: 'Started session local_0a1b2c3d-2222' } })
+  const call = (prompt?: string) => $.tool.call({ tool: 'mcp__ccd_session__start_session', title: 'Video', ...(prompt === undefined ? {} : { prompt }) } as any) as Promise<any>
+  const ok = 'Role card: researcher\nLibrary: none found for scf video\nAmbition: a panel reviewer funds it on the first watch | judge: the scf-reviewer rubric score\nCut the video.'
+  // not a coordinator yet: any brief passes, untouched
+  await call('Cut the video.')
+  expect(ran.pop().prompt).toBe('Cut the video.')
+  await $.session.start({ cwd: '/ws/projects/dock', surface: 'desktop', isInteractive: true })
+  const bare: any = await call('Cut the video.')
+  expect(typeof bare.deny).toBe('string')
+  expect(String(bare.deny)).toMatch(/Role card: <role>.*researcher, reviewer/)
+  expect(String((await call('Role card: astrologer\nLibrary: x\nAmbition: a panel reviewer funds it | judge: the rubric score')).deny)).toMatch(/no specialists\/astrologer\.md/)
+  expect(String((await call('Role card: researcher\nLibrary: none found for x')).deny)).toMatch(/Ambition:/)
+  expect(ran).toEqual([])
+  await call(ok)
+  expect(ran.pop().prompt).toBe(`${THREAD_RULES}\n\n${ok}`)
+  await call(`${THREAD_RULES}\n\n${ok}`)
+  expect(ran.pop().prompt).toBe(`${THREAD_RULES}\n\n${ok}`)
+  // starting an offer or a proposal by id carries no brief
+  await call()
+  expect(ran.pop().prompt).toBeUndefined()
+})
+
+test('the coordinator text carries the six thread rules', () => {
+  for (const rule of [/Only you talk to the owner/, /DECISIONS\.md/, /no push, no deploy/, /Review before production/, /ask the owner where it runs today/, /ROUTING\.md/, /reviewer role/])
+    expect(COORDINATOR).toMatch(rule)
+  expect(briefGaps('Role card: utility find the file')).toBe('')
+  expect(briefGaps('Role card: /My Drive/ws/specialists/researcher.md Library: [[a]] Ambition: the goal behind it | judge: npm test passes', ['researcher'])).toBe('')
 })
