@@ -1269,12 +1269,13 @@ rm -rf "$OB"
 # knowledge bases: at session start, in any folder, the briefing offers the bases knowledge-mcp found that were never
 # offered (its discover remembers each answer); silent without the server's path, or with nothing new
 K="$W.km"; mkdir -p "$K/anywhere"
-printf '%s\n' 'import sys, os' 'if sys.argv[1:] == ["discover"]:' '    open(os.environ["KM_LOG"], "w").write(os.getcwd())' '    print("{\"path\": \"/x/Livros\", \"label\": \"Livros\", \"kind\": \"courses / books (needs an index first)\", \"files\": 41}")' '    print("{\"path\": \"/x/Notas\", \"label\": \"Notas\", \"kind\": \"notes\", \"files\": 20}")' > "$K/server.py"
+printf '%s\n' 'import sys, os' 'if sys.argv[1:] == ["discover"]:' '    open(os.environ["KM_LOG"], "w").write(os.getcwd())' '    print("{\"path\": \"/x/Livros\", \"label\": \"Livros\", \"kind\": \"courses / books (needs an index first)\", \"files\": 41, \"id\": \"0123456789\"}")' '    print("{\"path\": \"/x/Notas\", \"label\": \"Notas\", \"kind\": \"notes\", \"files\": 20, \"id\": \"abcdef0123\"}")' '    print("{\"path\": \"/x/e$(id)\", \"label\": \"e$(id)`id`\", \"kind\": \"notes\", \"files\": 20, \"id\": \"a$(id)\"}")' > "$K/server.py"
 kb() { printf '{"session_id":"kb1","source":"%s"}' "${2:-startup}" | KM_LOG="$K/cwd" CLAUDE_PROJECT_DIR="$1" sh "$here/briefing.sh" 2>&1; }
 check "knowledge bases: without the server's path the briefing stays silent outside a workspace" '[ -z "$(kb "$K/anywhere")" ]'
 mkdir -p "$CLAUDE_PLUGIN_DATA"; printf '%s\n' "$K/server.py" > "$CLAUDE_PLUGIN_DATA/knowledge-mcp"
 o=$(kb "$K/anywhere")
-check "knowledge bases: a session anywhere is told the new base and how to record the owner's answer" 'printf "%s" "$o" | grep -q "^- Livros (courses / books (needs an index first), 41 files): /x/Livros$" && printf "%s" "$o" | grep -q "^- Notas (notes, 20 files): /x/Notas$" && printf "%s" "$o" | grep -q "AskUserQuestion" && printf "%s" "$o" | grep -q "server.py\" add <path>" && printf "%s" "$o" | grep -q "decline <path>"'
+check "knowledge bases: a session anywhere is told the new base and how to record the owner's answer" 'printf "%s" "$o" | grep -q "^- Livros (courses / books (needs an index first), 41 files) \[id 0123456789\]$" && printf "%s" "$o" | grep -q "^- Notas (notes, 20 files) \[id abcdef0123\]$" && printf "%s" "$o" | grep -q "AskUserQuestion" && printf "%s" "$o" | grep -q "server.py\" add <id>" && printf "%s" "$o" | grep -q "decline <id>"'
+check "knowledge bases: a base whose id is not 10 hex characters is dropped, and no folder path reaches the session" '! printf "%s" "$o" | grep -q "(id)" && ! printf "%s" "$o" | grep -q "/x/"'
 check "knowledge bases: discover runs from the session's folder (its two-brain scope)" '[ "$(cat "$K/cwd")" = "$K/anywhere" ] || [ "$(cat "$K/cwd")" = "$(cd "$K/anywhere" && pwd -P)" ]'
 check "knowledge bases: a resume or a compaction does not ask again" '[ -z "$(kb "$K/anywhere" resume)" ] && [ -z "$(kb "$K/anywhere" compact)" ]'
 check "knowledge bases: inside a workspace the offer comes with the briefing" 'kb "$W/central" | grep -q "^- Livros"'

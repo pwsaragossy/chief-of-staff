@@ -216,6 +216,9 @@ Opt-in for the rest of your folders: list them in `everywhere` inside the plugin
 (`~/.claude/plugins/data/chief-of-staff-chief-of-staff/everywhere`, one absolute path per line, `/` for all).
 There the specialists and ambition gate runs with the plugin's own role cards; no library, board, track or
 rotation, and turns are logged to `protocol.log` in the same data folder.
+A second opt-in, `knowledge-mcp` in the same data folder, holds the path of a knowledge-mcp `server.py`: at each new
+session, in any folder, the briefing lists the knowledge bases its `discover` found and never offered, and the session
+asks the owner once which to add (each answer is recorded by its id, a no too, and never asked again).
 
 - `SessionStart` prints a factual briefing (at most 2000 characters): cards waiting on the owner,
   the project's status and next action, the library's counts and the project's latest notes.
