@@ -125,7 +125,7 @@ test('the coordinator pane comes up with the owner message', async ($, on) => {
 })
 
 // a project folder at /p/Alpha: marker kind: project, its own board and STATE.md
-function folder(on: any, opts: { thread?: boolean; appDown?: boolean; marker?: boolean; runs?: { argv: readonly string[] }[]; initFails?: boolean; registered?: string[]; opened?: string[] } = {}) {
+function folder(on: any, opts: { thread?: boolean; appDown?: boolean; storeRoot?: string; marker?: boolean; runs?: { argv: readonly string[] }[]; initFails?: boolean; registered?: string[]; opened?: string[] } = {}) {
   let marker = opts.marker ?? true
   const files = (): Record<string, string> => ({
     ...(marker ? { '/p/Alpha/.chief-of-staff': 'chief-of-staff project v0.1\nkind: project\n' } : {}),
@@ -133,7 +133,7 @@ function folder(on: any, opts: { thread?: boolean; appDown?: boolean; marker?: b
     '/p/Alpha/DECISIONS.md': '- 2026-11-08 10:00 | Name is Alpha | Pedro | replaces: -\n',
     '/p/Alpha/board/Q.md': '---\nstatus: waiting-owner\n---\n# Q\n\n## For the owner to decide\n- Ship it? Recommended: yes\n',
   })
-  let rootv = ''
+  let rootv = opts.storeRoot ?? ''
   on('store.get', () => ({ value: rootv }))
   on('store.set', (_: any, e: any) => { rootv = e.value; return { value: undefined } })
   on('fs.exists', (_: any, e: any) => ({ value: e.path in files() }))
@@ -218,6 +218,18 @@ test('a chat whose parent the app cannot tell at start does not become a coordin
   folder(on, { appDown: true, opened })
   await $.session.start({ cwd: '/p/Alpha', surface: 'desktop', isInteractive: true })
   expect(opened).toEqual([])
+})
+
+// $.store is shared by every session: a project another chat opened must not follow a chat in another folder.
+// Here a thread started from elsewhere (not in /p/Alpha) asks its own owner as any chat does.
+test('a chat outside a project folder is not held by a project another chat opened', async ($, on) => {
+  const ran: string[] = []
+  folder(on, { thread: true, storeRoot: '/p/Alpha' })
+  on('tool.call', (_: any, e: any) => { ran.push(e.tool); return { result: 'ok' } })
+  await $.session.start({ cwd: '/elsewhere', surface: 'desktop', isInteractive: true })
+  const r: any = await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as any)
+  expect(r?.deny).toBeUndefined()
+  expect(ran).toEqual(['AskUserQuestion'])
 })
 
 test('a thread in a project folder does not ask the owner nor record the owner OK', async ($, on) => {

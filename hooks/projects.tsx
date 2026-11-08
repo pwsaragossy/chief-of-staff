@@ -49,8 +49,10 @@ async function findRoot($: EngineInterface, cwd: string): Promise<string> {
   return ''
 }
 
+// the project folder this conversation works in: its own, never another chat's ($.store is shared by every session)
+const proj = atom({ plugin: 'chief-of-staff', key: 'root' } as const, '', { shape: 'root-1' })
 async function root($: EngineInterface): Promise<string> {
-  return ((await $.store.get('root')) as string) || ''
+  return read($, proj)
 }
 
 // a project folder: its marker says kind: project (lib.sh cos_isproj)
@@ -225,7 +227,7 @@ export const register: Register = on => {
     const ran = await next(e)
     await update($, here, () => e.cwd)
     const r = await findRoot($, e.cwd)
-    if (r) await $.store.set('root', r)
+    await update($, proj, () => r)
     await $.command.register({ name: 'threads', description: 'Make this folder a project and this chat its coordinator: work runs in threads, shown in the Threads pane' })
     // a new conversation at the root of a project folder carries on as its coordinator: only when the app says it
     // has no parent. A thread, or a chat the app cannot place yet, is not (/threads makes the owner's chat one)
@@ -257,7 +259,7 @@ export const register: Register = on => {
     // inside a workspace of the older layout the folder belongs to it: the chat only becomes a coordinator
     const ws = await findRoot($, dir)
     if (ws && !(await isProject($, ws))) {
-      await $.store.set('root', ws)
+      await update($, proj, () => ws)
       await update($, coord, () => base(dir)); await update($, shut, () => false)
       await $.ui.open({ id: THREADS, title: 'Threads' })
       return { text: 'This chat is now the coordinator. Threads pane opened.', context: [COORDINATOR] }
@@ -266,7 +268,7 @@ export const register: Register = on => {
       .catch(x => ({ exitCode: 1, stdout: '', stderr: String((x as Error)?.message ?? x) }))
     if (run.exitCode !== 0) return { text: `Couldn't make ${dir} a project: ${(run.stderr || run.stdout).trim().slice(0, 300) || 'project.sh failed'}. Fix that, then run /threads again.` }
     const r = await findRoot($, dir)
-    if (r) await $.store.set('root', r)
+    if (r) await update($, proj, () => r)
     await update($, coord, () => base(dir))
     await update($, shut, () => false)
     await $.ui.open({ id: THREADS, title: 'Threads' })
@@ -289,7 +291,7 @@ export const register: Register = on => {
     const ran = await next(e)
     // new-project ends with project.sh init: the conversation at the new project's root becomes its coordinator
     if (/project\.sh/.test(cmd) && dir && !(await read($, coord)) && (await findRoot($, dir)) === dir && (await isProject($, dir)) && !(await isThread($))) {
-      await $.store.set('root', dir)
+      await update($, proj, () => dir)
       await update($, coord, () => base(dir))
       void $.ui.open({ id: THREADS, title: 'Threads' })
     }
