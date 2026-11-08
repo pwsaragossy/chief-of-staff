@@ -1,6 +1,6 @@
 ---
 name: panel
-description: Open the local panel of a chief-of-staff workspace — green, yellow or red per project, track progress, cards waiting on the owner with their questions, the deadline countdown, the last 24 hours in three counts, and a box to import files or links into the knowledge inbox. Use when the user asks for the panel, the dashboard, "how is everything going", or runs /chief-of-staff:panel.
+description: Open the panel — in the chat (overview.sh, also on a phone) or the local web panel of a chief-of-staff workspace — green, yellow or red per project, track progress, cards waiting on the owner with their questions, the deadline countdown, the last 24 hours in three counts, and a box to import files or links into the knowledge inbox. Use when the user asks for the panel, the dashboard, "how is everything going", or runs /chief-of-staff:panel.
 ---
 
 # Open the panel
@@ -8,8 +8,13 @@ description: Open the local panel of a chief-of-staff workspace — green, yello
 The panel is `${CLAUDE_PLUGIN_ROOT}/scripts/panel.py` (copy that literal path; the variable is not
 set in your shell). It needs `python3` (standard library only) and runs on this computer only.
 
+0. The owner on a phone (Remote Control), or a folder with no workspace above it whose `CLAUDE.md`
+   names board folders (folders of cards with `status:` front matter): the chat is the panel, since
+   the web panel listens on this computer only. Run `sh "<plugin>/scripts/overview.sh" <each board folder>`
+   and give its lines in the owner's language, in the same order, nothing added: waiting on the owner,
+   due in 7 days, changed in 24 hours, moving, stopped. Then stop.
 1. Find the workspace root: the nearest folder above the current one holding `.chief-of-staff`.
-   None: say "No workspace here. Run /chief-of-staff:setup first." and stop.
+   None, and no board folders named: say "No workspace here. Run /chief-of-staff:setup first." and stop.
 2. Start it in the background: `python3 "<plugin>/scripts/panel.py" "<workspace>"`. It prints one
    line, `Panel: http://127.0.0.1:<port>/?t=<token>`. The token is required, so give the user the
    whole link, and open it (`open` on macOS, `xdg-open` on Linux).

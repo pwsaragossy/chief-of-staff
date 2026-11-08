@@ -1234,4 +1234,35 @@ check "the central briefing lists open projects and counts delivered ones instea
 check "setup gives a personal workspace central.s STATE.md" 'grep -q "templates/central/STATE.md\|\$T/central/STATE.md" "$here/setup.sh"'
 rm -rf "$RP" "$RT" "$RW"
 
+# everywhere: the owner's work runs in folders outside any workspace (a repo, ~/brain, a scratch folder), where the
+# hooks were silent, so no specialist was ever asked for. With the opt-in file the specialists gate runs there too,
+# with the plugin's own role cards and no library, board or track
+O="$W.outside"; O2="$W.other"; mkdir -p "$O/repo" "$O2"
+eo() { printf '{"session_id":"ev1","hook_event_name":"%s"%s}' "$1" "${2:-}" | CLAUDE_PROJECT_DIR="$O/repo" sh "$here/protocol.sh" 2>&1; }
+eor() { eo "$@" >/dev/null; echo $?; }
+AG=',"tool_name":"Agent","tool_input":{"prompt":"Role card: researcher\nLibrary: none found for rates\nAmbition: the rate that holds up with the regulator | judge: the rule with its source"}'
+RV=',"tool_name":"Agent","tool_input":{"prompt":"Role card: reviewer\nLibrary: none found for rates\nAmbition: the rate that holds up with the regulator | judge: the rule with its source"}'
+check "everywhere: without the opt-in a folder outside a workspace stays silent" '[ -z "$(eo UserPromptSubmit ",\"prompt\":\"hi\"")" ] && [ "$(eor Stop ",\"stop_hook_active\":false,\"last_assistant_message\":\"$(long 7000)\"")" = 0 ]'
+printf '%s\n' "$O" > "$CLAUDE_PLUGIN_DATA/everywhere"
+check "everywhere: a covered folder gets the specialists and ambition protocol, without the library" 'o=$(eo UserPromptSubmit ",\"prompt\":\"hi\""); printf "%s" "$o" | grep -q "at least one specialist and the independent reviewer" && printf "%s" "$o" | grep -q "ambition skill" && ! printf "%s" "$o" | grep -q "library.sh"'
+check "everywhere: a long answer with no specialist is sent back" 'o=$(eo Stop ",\"stop_hook_active\":false,\"last_assistant_message\":\"$(long 7000)\""); [ "$(eor Stop ",\"stop_hook_active\":false,\"last_assistant_message\":\"$(long 7000)\"")" = 2 ] && printf "%s" "$o" | grep -q "specialists skill"'
+check "everywhere: a subagent without a role card is blocked; one with the plugin.s card passes" '[ "$(eor PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"look around\"}")" = 2 ] && [ "$(eor PreToolUse "$AG")" = 0 ]'
+check "everywhere: web search is not held back for a library this folder does not have" '[ "$(eor PreToolUse ",\"tool_name\":\"WebSearch\"")" = 0 ]'
+eo UserPromptSubmit ",\"prompt\":\"hi\"" >/dev/null; eo PostToolUse "$AG" >/dev/null; eo PostToolUse "$RV" >/dev/null
+check "everywhere: a specialist and the reviewer let the long answer end" '[ "$(eor Stop ",\"stop_hook_active\":false,\"last_assistant_message\":\"$(long 7000)\"")" = 0 ]'
+check "everywhere: the turn is logged in the plugin data, never in the plugin folder" 'grep -q "specialists=1 reviewers=1" "$CLAUDE_PLUGIN_DATA/protocol.log" && [ ! -e "$here/../templates/.protocol.log" ]'
+check "everywhere: a folder the file does not list stays silent" 'o=$(printf "{\"session_id\":\"ev2\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"hi\"}" | CLAUDE_PROJECT_DIR="$O2" sh "$here/protocol.sh"); [ -z "$o" ]'
+rm -rf "$O" "$O2" "$CLAUDE_PLUGIN_DATA/everywhere"
+# end everywhere
+
+# overview: the whole picture as chat text, from board folders in English or Portuguese
+OB="$W.boards"; mkdir -p "$OB/a" "$OB/b"
+printf -- '---\nstatus: aguardando-pedro\nprojeto: x\nprazo: 2000-01-01\n---\n\n# Sign the lease\n' > "$OB/a/1.md"
+printf -- '---\nstatus: in-progress\nproject: y\n---\n\n# Ship the app\n' > "$OB/b/2.md"
+printf -- '---\nstatus: parado\nprojeto: y\n---\n\n# Old idea\n' > "$OB/b/3.md"
+printf -- '---\nstatus: encerrado\nprojeto: y\n---\n\n# Done thing\n' > "$OB/b/4.md"
+ov=$(sh "$here/overview.sh" "$OB/a" "$OB/b")
+check "overview: waiting, late, changed, moving and stopped across two boards; closed cards left out" 'printf "%s\n" "$ov" | grep -qx "Waiting on you: 1" && printf "%s\n" "$ov" | grep -qx "\- Sign the lease (x)" && printf "%s\n" "$ov" | grep -q "2000-01-01 LATE Sign the lease" && printf "%s\n" "$ov" | grep -qx "Changed in 24 hours: 3" && printf "%s\n" "$ov" | grep -qx "\- Ship the app (y, in-progress)" && printf "%s\n" "$ov" | grep -qx "Stopped: y 1" && ! printf "%s\n" "$ov" | grep -q "Done thing"'
+rm -rf "$OB"
+
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }

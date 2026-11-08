@@ -8,11 +8,22 @@
 #   Stop              blocks the end of a substantive turn that skipped specialists or the reviewer, researched
 #                     without saving to the library, or left the project's TRACK.md with a gate problem
 #                     (track.sh check). One push per turn (stop_hook_active), then it lets go and logs a violation.
-# Silent outside a workspace. Every turn is logged to <workspace>/.protocol.log (the adherence metric).
+# Silent outside a workspace, unless the owner listed the folder in <plugin data>/everywhere (one absolute path per
+# line, / for all): there the specialists gate runs with the plugin's own role cards (templates/specialists), and
+# nothing of a workspace (library, board, track, rotation) is read or written. Every turn is logged to
+# <workspace>/.protocol.log, or <plugin data>/protocol.log outside one (the adherence metric).
 . "$(dirname "$0")/lib.sh"
 
 in=$(cat)
-root=$(cos_root "${CLAUDE_PROJECT_DIR:-$PWD}") || exit 0
+DATA=${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}
+# everywhere DIR -> the plugin's templates folder (it holds specialists/) when DIR is under a folder the owner listed
+everywhere() { [ -f "$DATA/everywhere" ] || return 1
+  while IFS= read -r _e; do _e=${_e%/}; case $_e in /*|'') case "$1/" in "$_e/"*) (cd "$(dirname "$0")/../templates" && pwd -P); return ;; esac ;; esac
+  done < "$DATA/everywhere"; return 1; }
+lite=
+root=$(cos_root "${CLAUDE_PROJECT_DIR:-$PWD}") || { root=$(everywhere "${CLAUDE_PROJECT_DIR:-$PWD}") && lite=1; } || exit 0
+# outside a workspace only the turn's specialists, research and files count: a Read, Grep or Glob names no library
+[ -n "$lite" ] && case $in in *'"hook_event_name":"PostToolUse"'*) case $in in *'"tool_name":"Agent"'*|*'"tool_name":"Web'*|*'"tool_name":"Write"'*|*'"tool_name":"Edit"'*|*'"tool_name":"MultiEdit"'*) ;; *) exit 0 ;; esac ;; esac
 # fast path, no fork: a Read, Grep or Glob only counts when it names a library (the turn searched it), so
 # one that names none of the library folders written in the marker, nor library.sh, ends here
 case $in in *'"hook_event_name":"PostToolUse"'*)
@@ -25,7 +36,8 @@ case $in in *'"hook_event_name":"PostToolUse"'*)
       [ -n "$hit" ] || exit 0 ;; esac ;; esac ;; esac
 rel=${CLAUDE_PROJECT_DIR:-$PWD}; rel=${rel#"$root"}; rel=${rel#/}
 # the session's library (its project's, or personal) and its state; lst != 0: offline or misconfigured (library.sh where)
-lname=$(cos_libname "$root" "${CLAUDE_PROJECT_DIR:-$PWD}"); lib=$(cos_libpath "$root" "$lname"); lst=$?
+if [ -n "$lite" ]; then lname=; lib=/nonexistent-library; lst=1
+else lname=$(cos_libname "$root" "${CLAUDE_PROJECT_DIR:-$PWD}"); lib=$(cos_libpath "$root" "$lname"); lst=$?; fi
 L="$(dirname "$0")/library.sh"; TAB=$(printf '\t')
 # a team library's paths changed here or committed and not pushed yet, deletions left out (they leak nothing)
 # the sentences of a note's body (40+ characters), with quote, list and quotation marks dropped, so a sentence
@@ -78,7 +90,7 @@ roleof() { _r=$(printf '%s' "$in" | grep -o 'Role card: */[^"\\]*/specialists/[a
 
 sid=$(jget session_id | tr -cd 'A-Za-z0-9_-')
 [ -n "$sid" ] || exit 0
-st="${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}/turns/$sid"   # per user, never shared /tmp
+st="$DATA/turns/$sid"   # per user, never shared /tmp
 mkdir -p "$st"
 mark() { : > "$st/$1"; echo x >> "$st/$1.count"; }
 count() { [ -f "$st/$1.count" ] && wc -l < "$st/$1.count" | tr -d ' ' || echo 0; }
@@ -103,15 +115,16 @@ case $(jget hook_event_name) in
     # The text goes out first, before any slow step, and is marked as seen only once it is out
     if [ -f "$st.full" ] || [ ! -f "$st.seen" ]; then
       pt=$( echo "Chief-of-staff protocol for this request (checked by hooks at the end of the turn):"
-      echo "- A deliverable for other people, a decision that crosses areas, or research goes through the specialists skill: at least one specialist and the independent reviewer, as subagents, each briefed with the line 'Role card: <role>' naming its card in $root/specialists/ (the subagent reads the card itself), a 'Library:' line and an 'Ambition: <goal behind the goal> | judge: <outside judge>' line. A new request from the owner goes through the ambition skill first."
+      echo "- A deliverable for other people, a decision that crosses areas, or research goes through the specialists skill: at least one specialist and the independent reviewer, as subagents, each briefed with the line 'Role card: <role>' naming its card in $root/specialists/ (the subagent reads the card itself),$([ -z "$lite" ] && printf " a 'Library:' line and") an 'Ambition: <goal behind the goal> | judge: <outside judge>' line. A new request from the owner goes through the ambition skill first."
       cos_fast "$root" && echo "- Hackathon pace (pace: fast): internal work (plans, code, cards, research for the team) needs one specialist subagent, no reviewer. The independent reviewer runs only on what goes outside: the submission, the video, the README, messages to judges, partners or users. Independent work goes to parallel sessions, not one long turn."
-      echo "- Research starts in the library: sh \"$L\" search <terms> (workspace: $root). Web search only for what the library lacks. Every new finding, decision, how-to or option becomes a note: sh \"$L\" new <finding|decision|howto|option|topic> <origin> <title>, then fill it. Hooks check every note."
+      [ -z "$lite" ] && echo "- Research starts in the library: sh \"$L\" search <terms> (workspace: $root). Web search only for what the library lacks. Every new finding, decision, how-to or option becomes a note: sh \"$L\" new <finding|decision|howto|option|topic> <origin> <title>, then fill it. Hooks check every note."
       echo "- Facts that change (what runs in production, balances, public links, deploy state) are measured again before they are repeated, never copied from STATE.md or a card." )
       # one write: a reader that stops at the first line (grep -q) cannot cut the text before it is marked seen
       printf '%s\n' "$pt" && { rm -f "$st.full"; : > "$st.seen"; }
     else
-      echo "Chief-of-staff protocol as stated at the start of this session (checked at the end of the turn): specialists and the reviewer for deliverables, research and cross-area decisions; the library first (sh \"$L\" search <terms>); each finding becomes a note.$(cos_fast "$root" && printf ' Hackathon pace: one specialist for internal work; the reviewer runs only on what goes outside.')"
+      echo "Chief-of-staff protocol as stated at the start of this session (checked at the end of the turn): specialists and the reviewer for deliverables, research and cross-area decisions$([ -z "$lite" ] && printf '; the library first (sh "%s" search <terms>); each finding becomes a note' "$L").$(cos_fast "$root" && printf ' Hackathon pace: one specialist for internal work; the reviewer runs only on what goes outside.')"
     fi
+    [ -n "$lite" ] && exit 0
     # first use: trust the settings as they are, but only while there is no team to share with
     [ -f "$(cos_cfgrec "$root")" ] || cos_libs "$root" | cut -f1 | grep -qvx personal || cos_cfgsave "$root"
     # what each other team library holds now, so the turn end blames this session only for what it changed there
@@ -156,11 +169,11 @@ case $(jget hook_event_name) in
         nope() { echo x >> "$st/rejected.count"; echo "Library note rejected: $1" >&2; exit 2; }
         # the library that holds the file, whichever it is (the session's, personal or another team's)
         wl=/nonexistent-library; wn=
-        if [ "$ok" = 1 ]; then
+        if [ "$ok" = 1 ] && [ -z "$lite" ]; then
           o=$(cos_libs "$root" | while IFS="$TAB" read -r n q; do case $fp in ("$q"/*) printf '%s\t%s\n' "$n" "$q"; break ;; esac; done)
           [ -n "$o" ] && { wn=${o%%"$TAB"*}; wl=${o#*"$TAB"}; }
         fi
-        pers=$(cos_lib "$root")
+        pers=; [ -n "$lite" ] || pers=$(cos_lib "$root")
         case "$ok:$fp" in
           1:"$wl/notes/"*/./*|1:"$wl/notes/"*/../*|1:"$wl/notes/"*//*|1:"$wl/notes/"./*|1:"$wl/notes/"../*)
             nope "write it by its plain path, $wl/notes/<id>.md (no ./, ../ or //)" ;;
@@ -199,7 +212,7 @@ $p"; fi ;;
         role=$(roleof)
         [ "$role" = utility ] && exit 0
         if [ -n "$role" ] && [ -f "$root/specialists/$role.md" ]; then
-          case $in in *"Library:"*) ;; *)
+          [ -n "$lite" ] || case $in in *"Library:"*) ;; *)
             echo "Blocked by chief-of-staff: the brief must carry what the library already knows. Add a line 'Library: [[id]] [[id]] ...' with the notes from library.sh search, or 'Library: none found for <terms>'." >&2
             exit 2 ;; esac
           # a real line, not a placeholder: the goal and the judge both have to say something
@@ -211,6 +224,7 @@ $p"; fi ;;
         echo "Blocked by chief-of-staff: every subagent brief names its role card. Add the line 'Role card: <role>' (the role name is enough, for example 'Role card: researcher'), and tell the subagent to read $root/specialists/<role>.md itself; do not paste the card. Cards: ${cards:-none found}. For a search or file-reading helper, write 'Role card: utility'." >&2
         exit 2 ;;
       WebSearch|WebFetch)
+        [ -n "$lite" ] && exit 0
         [ -f "$st/library" ] && exit 0
         # only a library that is really absent (disk unplugged) lets research go on without it; a broken one does not
         [ $lst = 1 ] && { mark offline; exit 0; }
@@ -218,6 +232,7 @@ $p"; fi ;;
         echo "Blocked by chief-of-staff: search the library first, then search the web only for what it lacks. Run: sh \"$(dirname "$0")/library.sh\" search <terms>" >&2
         exit 2 ;;
       Write|Edit|MultiEdit|Bash)   # the marker says where the library lives: only the owner edits it
+        [ -n "$lite" ] && exit 0
         # macOS file names ignore case: .CHIEF-OF-STAFF is the marker, and so is .owner-oK with a Kelvin sign (cos_fold)
         lc=$(printf '%s' "$in" | tr 'A-Z' 'a-z' | cos_fold)
         case $(jget tool_name) in
@@ -434,7 +449,7 @@ WS
     me=; [ -n "$shared" ] && me=$(cos_member "$root")
     fresh=; [ -n "$project" ] && [ -f "$st/start" ] && fresh=$(find "$root/board" -name '*.md' -type f -cnewer "$st/start" 2>/dev/null)
     now=$(date '+%F %H:%M %z'); US=$(printf '\037')
-    cos_board "$root" > "$st/board"
+    [ -n "$lite" ] && : > "$st/board" || cos_board "$root" > "$st/board"
     while IFS=$US read -r c cm cp cs a _d nq nu sp _r; do
       if [ -n "$shared" ]; then   # a shared board: each card is stamped by its own member's computer only
         # a card without a member gets this person's, from central or from the session of its own project
@@ -475,6 +490,7 @@ WS
     # and fails closed, holding back what goes to the team this turn
     slow() { lslow="${lslow:+$lslow
 }$1"; }
+    if [ -z "$lite" ]; then   # libraries, the shared workspace and the settings record: a workspace's only
     if [ -f "$st/start" ]; then
       while IFS="$TAB" read -r n q; do
         [ -n "$n" ] || continue
@@ -590,6 +606,7 @@ $wg"
     r=$(cos_cfgrec "$root")
     [ ! -f "$r" ] && cos_libs "$root" | cut -f1 | grep -qvx personal && gap "The record of the library settings is missing. Ask the owner to check library.sh libs from central and confirm library.sh trust."
     [ -f "$r" ] && [ "$(cat "$r")" != "$(cos_cfg "$root")" ] && gap "The library settings (.chief-of-staff or a project's .library) changed without library.sh join, use or leave, which the owner approves. Restore them: git -C \"$root\" checkout -- .chief-of-staff projects (or delete a new .library)."
+    fi
     [ -n "$lgaps" ] && reason="${reason:+$reason }Library notes written this turn have problems:
 $lgaps
 Fix each note (format: $lib/templates/note.md). When a new note is better than an old one, or merges several, retire the old: sh \"$L\" retire <old-id> <new-id> \"<why it lost>\". Valid alternatives stay: write [[id]] coexists (reason)."
@@ -628,7 +645,7 @@ $lslow"
     printf '%s t=%s turn=%s project=%s substantive=%s agents=%s specialists=%s reviewers=%s library=%s web=%s saved=%s track=%s pushed=%s violation=%s notes=%s offline=%s rejected=%s slow=%s\n' \
       "$(date '+%F %T')" "$(date +%s)" "$sid" "${project:--}" "$substantive" "$agents" "$specialists" "$reviewers" \
       "$([ -f "$st/library" ] && echo 1 || echo 0)" "$([ -f "$st/web" ] && echo 1 || echo 0)" "$([ -f "$st/saved" ] && echo 1 || echo 0)" \
-      "$(printf '%s' "$gaps" | grep -c .)" "${pushed:-false}" "$violation" "$(printf '%s' "$lgaps" | grep -c .)" "$([ $lst = 0 ] && echo 0 || echo 1)" "$(count rejected)" "$(printf '%s' "$lslow" | grep -c .)" >> "$root/.protocol.log"
+      "$(printf '%s' "$gaps" | grep -c .)" "${pushed:-false}" "$violation" "$(printf '%s' "$lgaps" | grep -c .)" "$([ $lst = 0 ] && echo 0 || echo 1)" "$(count rejected)" "$(printf '%s' "$lslow" | grep -c .)" >> "$([ -n "$lite" ] && echo "$DATA/protocol.log" || echo "$root/.protocol.log")"
     [ "$pushed" = true ] && exit 0
     [ -n "$reason" ] || exit 0
     echo "$reason" >&2
