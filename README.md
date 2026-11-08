@@ -166,6 +166,9 @@ Skills: `setup`, `new-project`, `ambition`, `handoff`, `specialists`, `knowledge
 
 ## Panel
 
+On a phone, or with no workspace, `scripts/overview.sh <board folder>...` prints the whole picture as chat
+text: what waits on you, due in 7 days, changed in 24 hours, moving, stopped (English or Portuguese card fields).
+
 `/chief-of-staff:panel` starts `scripts/panel.py` (needs `python3`, standard library only) and opens
 a link like `http://127.0.0.1:<port>/?t=<token>`. It listens on this computer only and refuses any
 request without the token. Colors come from `scripts/health.sh`; `health.sh text <workspace>` prints them
@@ -209,6 +212,10 @@ the same stage shows as "↳ id", and pointing at an item outlines what it needs
 ## Hooks
 
 Every hook does nothing outside a workspace, so the plugin does not affect your other projects.
+Opt-in for the rest of your folders: list them in `everywhere` inside the plugin's data folder
+(`~/.claude/plugins/data/chief-of-staff-chief-of-staff/everywhere`, one absolute path per line, `/` for all).
+There the specialists and ambition gate runs with the plugin's own role cards; no library, board, track or
+rotation, and turns are logged to `protocol.log` in the same data folder.
 
 - `SessionStart` prints a factual briefing (at most 2000 characters): cards waiting on the owner,
   the project's status and next action, the library's counts and the project's latest notes.
@@ -278,7 +285,7 @@ What we reference or reuse as an idea:
   every session start gets two briefings.
 - **Minimal profile.** ECC's `minimal` install profile (`manifests/install-profiles.json`) leaves out
   its hook runtime. This package follows the same idea by default: 7 skills, 3 hook scripts that do
-  nothing outside a workspace, and the dispatcher off.
+  nothing outside a workspace unless you opt in, and the dispatcher off.
 - **Security scan.** ECC's AgentShield (`npx ecc-agentshield scan`, separate MIT package) scans
   `CLAUDE.md`, settings, MCP servers, hooks and agents for risky configuration. We do not bundle it.
   It is a useful check before turning the dispatcher on. For this repository we scan for secrets
