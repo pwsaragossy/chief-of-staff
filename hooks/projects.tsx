@@ -83,9 +83,12 @@ export async function isThread($: EngineInterface): Promise<boolean> {
 export const ownerCommand = (cmd: string): boolean =>
   /project\.sh(?![\s'"]+list([^a-z]|$))/.test(cmd) || (/track/.test(cmd) && /(^|[^a-z0-9_.-])ok([^a-z0-9_.-]|$)/.test(cmd))
 
+// a shell word in single quotes: a folder name with " or $( ) stays one literal argument
+const sq = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`
+
 // what /threads tells the conversation once the folder is a project: open its web panel in the app's browser
 export const panelAsk = (pluginRoot: string, dir: string): string =>
-  `Open this project's web panel now: run python3 "${pluginRoot}/scripts/panel.py" "${dir}" in the background, ` +
+  `Open this project's web panel now: run python3 ${sq(`${pluginRoot}/scripts/panel.py`)} ${sq(dir)} in the background, ` +
   'then open the "Panel:" link it prints in the app\'s built-in browser. Tell the owner in one line that it is open.'
 
 // the open questions of a card: the lines under "## For the owner to decide", without their asked-stamp

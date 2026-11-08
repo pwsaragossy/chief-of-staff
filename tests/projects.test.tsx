@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { briefGaps, COORDINATOR, decisions, fm, ownerCommand, THREAD_RULES } from '../hooks/projects'
+import { briefGaps, COORDINATOR, decisions, fm, ownerCommand, panelAsk, THREAD_RULES } from '../hooks/projects'
 
 
 const FILES: Record<string, string> = {
@@ -167,7 +167,7 @@ test('/threads makes the folder a project, the chat its coordinator, and asks fo
   expect(opened).toEqual(['cos-threads'])
   expect(r.text).toMatch(/coordinator of Alpha/)
   expect(String(r.context)).toMatch(/start_session/)
-  expect(String(r.context)).toMatch(/panel\.py" "\/p\/Alpha"/)
+  expect(String(r.context)).toMatch(/panel\.py' '\/p\/Alpha'/)
   const ui = await $.ui.mount({ ...THREADS, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: /Ship it\? Recommended: yes/ })).toBeDefined()   // every card of the folder's board
   expect(await ui.find({ type: 'Text', text: 'next: first slice' })).toBeDefined()
@@ -305,4 +305,9 @@ test('the terminal, which has no Svg, draws the state as a colored character', a
   expect(await ui.findAll({ type: 'Svg' })).toEqual([])
   expect(await ui.find({ type: 'Text', text: '◐' })).toBeDefined()
   await ui.unmount()
+})
+
+test('panelAsk quotes the folder so a name with quotes or $( ) stays one argument', () => {
+  const ask = panelAsk('/plug in', '/x/a"$(touch pwn)\'b')
+  expect(ask).toContain(`python3 '/plug in/scripts/panel.py' '/x/a"$(touch pwn)'\\''b'`)
 })
