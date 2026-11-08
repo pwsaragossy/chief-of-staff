@@ -228,7 +228,7 @@ export const register: Register = on => {
     await update($, here, () => e.cwd)
     const r = await findRoot($, e.cwd)
     await update($, proj, () => r)
-    await $.command.register({ name: 'threads', description: 'Make this folder a project and this chat its coordinator: work runs in threads, shown in the Threads pane' })
+    await $.command.register({ name: 'threads', description: 'Make this chat a coordinator: work runs in threads, shown in the Threads pane' })
     // a new conversation at the root of a project folder carries on as its coordinator: only when the app says it
     // has no parent. A thread, or a chat the app cannot place yet, is not (/threads makes the owner's chat one)
     const slug = r && r === e.cwd && (await isProject($, r)) ? ((await hasParent($)) === false ? base(r) : '')
@@ -249,30 +249,28 @@ export const register: Register = on => {
     return next(e)
   })
   // Any chat becomes a coordinator, as a claude.ai project chat is: the pane, the thread cards, and the rule
-  // that long work runs in threads.
-  // /threads makes this conversation's folder a project (scripts/project.sh init: marker, board/, STATE.md,
-  // DECISIONS.md when new; registered in <plugin data>/projects) and the conversation its coordinator.
+  // that long work runs in threads. /threads makes a coordinator, never a project: new-project creates the
+  // project (scripts/project.sh init). In a project folder the coordinator is that project's.
   on('command.run', { command: 'threads' }, async $ => {
     const dir = await read($, here)
-    if (!dir) return { text: 'This chat has no folder to make a project. Open a chat in the project folder and run /threads there.' }
-    if (await isThread($)) return { text: 'This chat is a thread another chat started: run /threads in the project\'s own chat.' }
-    // inside a workspace of the older layout the folder belongs to it: the chat only becomes a coordinator
-    const ws = await findRoot($, dir)
-    if (ws && !(await isProject($, ws))) {
-      await update($, proj, () => ws)
-      await update($, coord, () => base(dir)); await update($, shut, () => false)
-      await $.ui.open({ id: THREADS, title: 'Threads' })
-      return { text: 'This chat is now the coordinator. Threads pane opened.', context: [COORDINATOR] }
-    }
-    const run = await $.process.run(['sh', `${$.plugin.root}/scripts/project.sh`, 'init', dir], { timeoutMs: 15000 })
-      .catch(x => ({ exitCode: 1, stdout: '', stderr: String((x as Error)?.message ?? x) }))
-    if (run.exitCode !== 0) return { text: `Couldn't make ${dir} a project: ${(run.stderr || run.stdout).trim().slice(0, 300) || 'project.sh failed'}. Fix that, then run /threads again.` }
+    if (!dir) return { text: 'This chat has no folder. Open a chat in a folder and run /threads there.' }
+    if (await isThread($)) return { text: 'This chat is a thread another chat started: run /threads in the owner\'s own chat.' }
     const r = await findRoot($, dir)
-    if (r) await update($, proj, () => r)
-    await update($, coord, () => base(dir))
+    await update($, proj, () => r)
     await update($, shut, () => false)
+    if (r && (await isProject($, r))) {
+      await update($, coord, () => base(r))
+      await $.ui.open({ id: THREADS, title: 'Threads' })
+      return { text: `This chat is now the coordinator of ${base(r)}. Threads pane opened.`, context: [COORDINATOR, panelAsk($.plugin.root, r)] }
+    }
+    // inside a workspace of the older layout, or a folder that is not a project: a coordinator, nothing created
+    await update($, coord, () => base(dir))
     await $.ui.open({ id: THREADS, title: 'Threads' })
-    return { text: `This chat is now the coordinator of ${base(dir)}. Threads pane opened.`, context: [COORDINATOR, panelAsk($.plugin.root, dir)] }
+    return {
+      text: r ? 'This chat is now the coordinator. Threads pane opened.'
+        : 'This chat is now the coordinator. Threads pane opened. This folder is not a project: /chief-of-staff:new-project makes it one.',
+      context: [COORDINATOR],
+    }
   })
 
   // In a project folder only the coordinator asks the owner or records the owner's OK; a thread it started runs in

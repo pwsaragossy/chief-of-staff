@@ -6,7 +6,7 @@
 #                               recorded in <plugin data>/library (setup asks the owner where)
 #   project.sh list             each registered folder, "ok<TAB>path" or "missing<TAB>path"
 # The list and the library setting are read-only on disk and protected by the hooks: only this script writes them,
-# from /threads, new-project and setup. A thread never runs it (hooks/projects.tsx).
+# from new-project and setup (/threads makes a coordinator, never a project). A thread never runs it (hooks/projects.tsx).
 set -u
 . "$(dirname "$0")/lib.sh"
 die() { echo "project.sh: $*" >&2; exit 1; }

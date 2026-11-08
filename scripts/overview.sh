@@ -7,7 +7,7 @@ if [ "${1:-}" = --all ]; then
   # every registered project folder that still exists (project.sh list), one per line like the list itself
   nl='
 '; set -f; IFS=$nl; set -- $(sh "$(dirname "$0")/project.sh" list | sed -n 's/^ok	\(.*\)$/\1\/board/p'); unset IFS; set +f
-  [ $# -gt 0 ] || { echo "No projects yet. Run /threads in a folder."; exit 0; }
+  [ $# -gt 0 ] || { echo "No projects yet. Run /chief-of-staff:new-project in a folder."; exit 0; }
 fi
 [ $# -gt 0 ] || { echo "usage: sh overview.sh <board folder>... | --all" >&2; exit 1; }
 now=$(date +%s); today=$(date +%F); soon=$(date -v+7d +%F 2>/dev/null || date -d '+7 days' +%F)

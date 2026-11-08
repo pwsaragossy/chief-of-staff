@@ -24,6 +24,6 @@ clicking; you do everything else.
 4. Tell the owner in at most 3 lines where the library is, that every conversation in any folder now
    searches and saves to it, and that each project is the folder it lives in.
 5. Run the `new-project` skill in this conversation's folder when the owner wants a project now; it
-   ends by making this folder a project (the light way, without the opening questions, is `/threads`).
+   ends by making this folder a project (`/threads` alone only makes a conversation a coordinator, no project).
 
 In cloud sessions (Claude Code on the web) the plugin hooks do not run.

@@ -395,7 +395,7 @@ WS
               elif printf '%s\n' "$nq" | grep -Eq "library\\.sh +((use|join|leave|trust)([^a-z0-9_-]|\$)|$DYN|--lib[^;&|]*([^a-z0-9_-](use|join|leave|trust)([^a-z0-9_-]|\$)|[][\$\`{?*]))|library\\.sh$FEED|<+ *[^ ;&|]*library\\.sh|${FROM}library\\.sh *([)\`;&|]|\$)"; then
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this changes which library a project uses, or connects or disconnects a team library: what is shared with whom. Only approve if you asked for it."}}'
               # registering a project folder makes its root session a coordinator, and setting the library chooses
-              # where every note goes: the owner approves each run (/threads registers through the module, not Bash)
+              # where every note goes: the owner approves each run (new-project registers through project.sh, which the owner approves)
               elif printf '%s\n' "$nq" | grep -Eq "project\\.sh +((init|library)([^a-z0-9_-]|\$)|$DYN)|project\\.sh$FEED|<+ *[^ ;&|]*project\\.sh|${FROM}project\\.sh *([)\`;&|]|\$)"; then
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this registers a project folder (its root conversation becomes the coordinator that asks you) or sets your library. Only approve if you asked for it."}}'
               # a push whose commits change a term that a decision in force guards ("guard: <term>" in the project's
@@ -429,7 +429,7 @@ WS
              if [ -n "$o" ] && [ "$o" != "$lname" ]; then
                echo "Blocked by chief-of-staff: $fp is in the library '$o', and this session works in '$lname'. A session writes only its own library, so nothing personal or from another team leaks into a shared one. Write the note in $lib/notes/." >&2; exit 2
              fi
-             # the project list and the library setting (project.sh writes them, from /threads, new-project and setup)
+             # the project list and the library setting (project.sh writes them, from new-project and setup)
              case $rp in "$(real "$DATA")/projects"|"$(real "$DATA")/library"|*/plugins/data/*/projects|*/plugins/data/*/library) rp=blocked ;; esac
              [ "$rp" = blocked ] || case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.library|*/.chief-of-staff/*|*/.owner-ok|*/.owner-items) ;; *) exit 0 ;; esac ;;
         esac

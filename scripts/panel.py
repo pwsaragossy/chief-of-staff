@@ -871,7 +871,7 @@ function render(){
     ws.append(" ",p)}
   document.getElementById("fetch").hidden=!d.source;
   const P=document.getElementById("projects");
-  if(!d.projects.length)empty(P,"No projects yet. Run /threads in a folder.");else P.replaceChildren(...d.projects.map(p=>{
+  if(!d.projects.length)empty(P,"No projects yet. Run /chief-of-staff:new-project in a folder.");else P.replaceChildren(...d.projects.map(p=>{
     const row=el("div","row"),body=el("div","grow");row.append(el("span","dot "+p.color),body);
     body.append(el("div","name",p.slug+(p.member?" · "+p.member:"")));
     const rs=p.reasons||[];if(rs.length<2)body.append(el("div","",p.reason));if(p.path)body.append(el("div","muted",p.path));

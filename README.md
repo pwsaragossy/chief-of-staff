@@ -5,11 +5,11 @@ works for one owner, or for a team.
 
 What it gives you:
 
-- **A project is the folder you work in.** No central folder: type `/threads` in a conversation and its
-  folder becomes a project (a `.chief-of-staff` marker, `board/`, `STATE.md`, `DECISIONS.md`, nothing asked),
-  the folder joins the plugin's project list and the conversation becomes the project's coordinator.
-  `/chief-of-staff:new-project` does the same after its opening questions; `/chief-of-staff:setup` picks
-  where the library lives first. The web panel shows one project, or every registered one.
+- **A project is the folder you work in.** No central folder: `/chief-of-staff:new-project` makes the
+  conversation's folder a project (opening questions, then a `.chief-of-staff` marker, `board/`, `STATE.md`,
+  `DECISIONS.md`), the folder joins the plugin's project list and the conversation becomes its coordinator.
+  `/threads` only makes a conversation a coordinator (threads, the Threads pane); it creates no project.
+  `/chief-of-staff:setup` picks where the library lives first. The web panel shows one project, or every registered one.
 - **Projects that talk to you.** Each project's conversation at its folder's root is its coordinator:
   it asks you its decisions and runs long or parallel work in threads nested under it. Questions that
   waited while you were away sit on a card in `board/`; the coordinator asks them all at once. Threads and
@@ -155,8 +155,8 @@ Nothing to migrate by hand; existing workspaces keep working:
 
 ## Daily use
 
-1. Open a conversation in the project's folder. The first time, type `/threads` (or run
-   `/chief-of-staff:new-project` for the opening questions and a track). Later conversations there are its
+1. Open a conversation in the project's folder. The first time, run `/chief-of-staff:new-project` (opening
+   questions and a track; it makes the folder a project). Later conversations there are its
    coordinator from the start: the briefing shows where it stopped, the decisions and what waits on you.
 2. Long or parallel work runs as threads the coordinator starts; the Threads pane lists them.
 3. `/chief-of-staff:panel` in a project shows that project; anywhere else, every project.

@@ -1333,7 +1333,7 @@ assert [c[\"title\"] for c in allp[\"cards\"]] == [\"Q\"], allp[\"cards\"]
   check "pf: an empty project list says how to start one" 'CLAUDE_PLUGIN_DATA="$PF/empty-data" python3 -c "
 import sys; sys.path.insert(0, sys.argv[1]); import panel
 assert panel.registered() == []
-assert \"No projects yet. Run /threads in a folder.\" in panel.PAGE
+assert \"No projects yet. Run /chief-of-staff:new-project in a folder.\" in panel.PAGE
 " "$here"'
 fi
 # the library a project folder uses: <plugin data>/library, set by project.sh library (setup)

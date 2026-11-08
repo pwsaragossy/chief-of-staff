@@ -156,33 +156,35 @@ function folder(on: any, opts: { thread?: boolean; appDown?: boolean; storeRoot?
   return { make: () => { marker = true } }
 }
 
-test('/threads makes the folder a project, the chat its coordinator, and asks for the web panel', async ($, on) => {
+// /threads makes a coordinator, never a project: new-project creates the project (project.sh init). A /threads
+// run in a throwaway folder (the app's scratch chat) registered it as a project and made every chat there a coordinator.
+test('/threads in a folder that is not a project makes the chat a coordinator and creates no project', async ($, on) => {
   const opened: string[] = [], runs: { argv: readonly string[] }[] = [], registered: string[] = []
   folder(on, { marker: false, runs, opened, registered })
   await $.session.start({ cwd: '/p/Alpha', surface: 'desktop', isInteractive: true })
   expect(opened).toEqual([])
-  expect(registered).toEqual(['threads'])   // the Projects pane and /projects are gone
+  expect(registered).toEqual(['threads'])
   const r: any = await $.command.run({ command: 'threads', args: '' } as any)
-  expect(runs.map(x => x.argv.slice(2))).toEqual([['init', '/p/Alpha']])
-  expect(String(runs[0]!.argv[1])).toMatch(/\/scripts\/project\.sh$/)
+  expect(runs).toEqual([])   // no project.sh: no marker, no board, no project list
   expect(opened).toEqual(['cos-threads'])
-  expect(r.text).toMatch(/coordinator of Alpha/)
+  expect(r.text).toMatch(/coordinator/)
+  expect(r.text).toMatch(/new-project/)
   expect(String(r.context)).toMatch(/start_session/)
-  expect(String(r.context)).toMatch(/panel\.py' '\/p\/Alpha'/)
-  const ui = await $.ui.mount({ ...THREADS, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /Ship it\? Recommended: yes/ })).toBeDefined()   // every card of the folder's board
-  expect(await ui.find({ type: 'Text', text: 'next: first slice' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Name is Alpha \(Pedro\)/ })).toBeDefined()
-  await ui.unmount()
 })
 
-test('/threads that cannot make the project says why and opens nothing', async ($, on) => {
-  const opened: string[] = []
-  folder(on, { marker: false, initFails: true, opened, runs: [] })
+test('/threads in a project folder makes the chat its coordinator and asks for the web panel', async ($, on) => {
+  const opened: string[] = [], runs: { argv: readonly string[] }[] = []
+  folder(on, { appDown: true, runs, opened })   // the app did not place the chat at start: not a coordinator yet
   await $.session.start({ cwd: '/p/Alpha', surface: 'desktop', isInteractive: true })
   const r: any = await $.command.run({ command: 'threads', args: '' } as any)
-  expect(r.text).toMatch(/Couldn't make \/p\/Alpha a project: project\.sh: \/p\/Alpha is not a folder/)
-  expect(opened).toEqual([])
+  expect(runs).toEqual([])
+  expect(opened).toContain('cos-threads')
+  expect(r.text).toMatch(/coordinator of Alpha/)
+  expect(String(r.context)).toMatch(/panel\.py' '\/p\/Alpha'/)
+  const ui = await $.ui.mount({ ...THREADS, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /Ship it\? Recommended: yes/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'next: first slice' })).toBeDefined()
+  await ui.unmount()
 })
 
 test('/threads inside a workspace of the older layout makes the chat its coordinator and registers nothing', async ($, on) => {
