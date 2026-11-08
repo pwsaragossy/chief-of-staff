@@ -3,7 +3,7 @@ tags:
   - board
 status: in-progress
 project:
-owner: central
+owner: coordinator
 member: team
 due:
 since: {{DATE}}

@@ -467,14 +467,14 @@ U() { HOME="$Y" PATH="$Y/bin:$PATH" sh "$here/setup.sh" "$@" 2>&1; }
 Y=$(cd "$(mktemp -d)" && pwd -P); mkdir -p "$Y/My Vault/.obsidian" "$Y/Library/Mobile Documents/com~apple~CloudDocs" "$Y/bin" "$Y/Library/CloudStorage/GoogleDrive-a" "$Y/Library/CloudStorage/MacDroid-phone"
 check "setup warns about a workspace on a Windows drive seen from WSL" 'U create "/mnt/q/cos-selftest-$$" | grep -q "Windows drive seen from WSL"'
 check "setup lists sync folders, not phones or network mounts" 'U detect | grep -q "^GoogleDrive-a" && ! U detect | grep -q MacDroid'
-check "setup puts the only Obsidian vault first, then the workspace, then iCloud" 'U detect | head -n 3 | cut -f1 | tr "\n" "|" | grep -q "^Obsidian vault \"My Vault\"|Inside the workspace|iCloud Drive|$"'
+check "setup puts the only Obsidian vault first, then this computer, then iCloud" 'U detect | head -n 3 | cut -f1 | tr "\n" "|" | grep -q "^Obsidian vault \"My Vault\"|On this computer|iCloud Drive|$"'
 check "setup refuses a library folder that is not empty and creates nothing" 'mkdir -p "$Y/full"; : > "$Y/full/x"; U create "$Y/ws0" --library "$Y/full" | grep -q "not empty" && [ ! -e "$Y/ws0" ]'
 check "setup creates the workspace with the library inside the vault" 'U create "$Y/ws" --library "$Y/My Vault/Company library" | grep -q "^Library: $Y/My Vault/Company library" && [ "$(cd "$Y/ws/central" && CLAUDE_PROJECT_DIR="$Y/ws/central" sh "$here/library.sh" where)" = "$Y/My Vault/Company library" ]'
 check "the new workspace is committed, with no leftover library copy" '[ -z "$(git -C "$Y/ws" status --porcelain)" ] && ! ls -d "$Y/ws"/knowledge* >/dev/null 2>&1 && [ -d "$Y/My Vault/Company library/notes" ]'
 check "without --backup it says there is no backup yet, in plain words, and who to ask" 'o=$(U create "$Y/ws2"); printf "%s\n" "$o" | grep -q "^Backup: none yet: the workspace is only on this computer. Ask central to back it up to a private GitHub repo when you want one.$" && ! printf "%s\n" "$o" | grep -q "git remote"'
 git init -q "$Y/Git Vault"; mkdir -p "$Y/Git Vault/.obsidian"
-check "a computer with one place for the library gets no Library question (the setup skill skips it)" '( H="$(mktemp -d)"; HOME="$H" sh "$here/setup.sh" detect | head -n 1 | grep -q "^Inside the workspace" && rm -rf "$H" && grep -q "only when \`detect\` printed two or more places" "$here/../skills/setup/SKILL.md" )'
-check "with two vaults it recommends the workspace and lists both" 'U detect | head -n 1 | grep -q "^Inside the workspace" && [ "$(U detect | grep -c "^Obsidian vault")" = 2 ]'
+check "a computer with one place for the library gets no Library question (the setup skill skips it)" '( H="$(mktemp -d)"; HOME="$H" sh "$here/setup.sh" detect | head -n 1 | grep -q "^On this computer	$H/Company library" && rm -rf "$H" && grep -q "With a single place, do not ask" "$here/../skills/setup/SKILL.md" )'
+check "with two vaults it recommends this computer and lists both" 'U detect | head -n 1 | grep -q "^On this computer" && [ "$(U detect | grep -c "^Obsidian vault")" = 2 ]'
 check "a library inside a vault kept in git gets no repo of its own" 'U create "$Y/ws3" --library "$Y/Git Vault/Company library" >/dev/null && [ ! -d "$Y/Git Vault/Company library/.git" ]'
 printf '#!/bin/sh\necho "$*" >> "%s/gh.log"\n' "$Y" > "$Y/bin/gh"; chmod +x "$Y/bin/gh"
 check "backup creates private repos for the workspace and the library" 'U create "$Y/ws4" --library "$Y/lib4" --backup | grep -q "^Library backup: private GitHub repo ws4-library" && grep -q "^repo create ws4 --private --source $Y/ws4 " "$Y/gh.log" && grep -q "^repo create ws4-library --private --source $Y/lib4 " "$Y/gh.log"'
@@ -875,7 +875,7 @@ check "tc: verify stops a check that runs too long" 'cp "$TC/TRACK.md" "$W/tt.ba
 echo 5 > "$TC/app.out"; echo built > "$TC/build.md"; echo ok > "$TC/r2.md"
 sed -i.bak 's/^- \[ \] build | Build | card: engineer | needs: - | evidence:/- [x] build | Build | card: engineer | needs: - | evidence: build.md/; s/^- \[ \] review-2 | Review | card: reviewer | needs: build | evidence:/- [x] review-2 | Review | card: reviewer | needs: build | evidence: r2.md/' "$TC/TRACK.md"
 check "tc: closing the delivery without the owner delivery OK is a gate problem" 'T check "$TC" | grep -q "owner.s delivery OK with the check result is missing"'
-check "tc: the panel does not call it delivered while the owner.s delivery OK is missing" '[ "$(T status "$TC" | cut -d "$(printf "\037")" -f6)" = 0 ] && T brief "$TC" | grep -q "central runs the check"'
+check "tc: the panel does not call it delivered while the owner.s delivery OK is missing" '[ "$(T status "$TC" | cut -d "$(printf "\037")" -f6)" = 0 ] && T brief "$TC" | grep -q "the coordinator runs the check"'
 check "tc: a STATE that says delivered is not called delivered before the delivery OK" 'fm_set "$TC/STATE.md" status delivered; o=$(T brief "$TC"); fm_set "$TC/STATE.md" status in-progress; printf "%s" "$o" | grep -q "Not delivered yet" && ! printf "%s" "$o" | grep -q "^Delivered:"'
 check "tc: the delivery OK runs the check and refuses a failing result" '! CLAUDE_PROJECT_DIR="$C" T ok "$TC" delivery "ship it" > "$W/tc.out" 2>&1 && grep -q "the check fails: 5 s (target: under 2 s for the full run)" "$W/tc.out" && ! grep -q "^delivery" "$TC/.owner-ok"'
 check "tc: the owner can waive a failing check, and the value is kept" 'CLAUDE_PROJECT_DIR="$C" T ok "$TC" delivery "waive: demo is in 10 min" >/dev/null && grep -q "^delivery.*check=waived fail 5 s" "$TC/.owner-ok" && ! T check "$TC" | grep -q "delivery OK"'
@@ -1116,7 +1116,7 @@ check "a question written without the status still waits on the owner" 'hk "$(ev
 printf -- '---\nstatus: done\nproject: pa\nmember: Ana\n---\n## For the owner to decide\n- old leftover\n' > "$SW/a/board/Old.md"; printf -- '---\nstatus: in-progress\nproject: pa\nmember: Bia\n---\n## For the owner to decide\n- Bia asks\n' > "$SW/a/board/Bias.md"
 check "the hook reopens neither a done card nor a teammate.s card" 'hk "$(ev UserPromptSubmit)" "$PJ2" >/dev/null 2>&1; touch "$SW/a/board/Old.md" "$SW/a/board/Bias.md"; hk "$(ev Stop ",\"stop_hook_active\":false")" "$PJ2" >/dev/null 2>&1; [ "$(fm_get "$SW/a/board/Old.md" status)" = done ] && [ "$(fm_get "$SW/a/board/Bias.md" status)" = in-progress ]'
 rm -f "$SW/a/board/Old.md" "$SW/a/board/Bias.md"
-check "central cannot record the OK on a teammate.s project" 'cp "$here/../templates/tracks/hackathon.md" "$SW/b/projects/pa/TRACK.md"; CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/track.sh" ok "$SW/b/projects/pa" scope yes 2>&1 | grep -q "only their central records its OK" && [ ! -e "$SW/b/projects/pa/.owner-ok" ]'
+check "central cannot record the OK on a teammate.s project" 'cp "$here/../templates/tracks/hackathon.md" "$SW/b/projects/pa/TRACK.md"; CLAUDE_PROJECT_DIR="$SW/b/central" sh "$here/track.sh" ok "$SW/b/projects/pa" scope yes 2>&1 | grep -q "only their coordinator records its OK" && [ ! -e "$SW/b/projects/pa/.owner-ok" ]'
 git -C "$SW/b" checkout -q -- projects/pa/TRACK.md 2>/dev/null; rm -f "$SW/b/projects/pa/TRACK.md.tmp."*
 printf -- '---\nstage: 2\ntarget: under 1 s\ncheck: sh x.sh\n---\n' > "$SW/b/projects/pa/TRACK.v3"; cp "$SW/b/projects/pa/TRACK.v3" "$SW/b/projects/pa/TRACK.md" 2>/dev/null
 check "tc: verify never runs a teammate.s check on this computer" 'echo "touch pwned" > "$SW/b/projects/pa/x.sh"; T verify "$SW/b/projects/pa" 2>&1 | grep -q "only their own computer runs its check" && [ ! -e "$SW/b/projects/pa/pwned" ]'
@@ -1283,4 +1283,62 @@ printf '%s\n' 'print("", end="")' > "$K/server.py"
 check "knowledge bases: nothing new, nothing said" '[ -z "$(kb "$K/anywhere")" ]'
 rm -rf "$K" "$CLAUDE_PLUGIN_DATA/knowledge-mcp"
 
+
+# project folders (no central of any kind): the folder the owner creates is the project. project.sh init makes it
+# one (marker kind: project, board/, STATE.md, DECISIONS.md) and registers it in <plugin data>/projects; the
+# coordinator is the owner's session at a registered project root, and only it asks the owner or records an OK
+PF=$(mktemp -d); PA="$PF/Alpha Project"; PB="$PF/beta"; mkdir -p "$PA" "$PB/src"; REG="$CLAUDE_PLUGIN_DATA/projects"
+PJ() { sh "$here/project.sh" "$@"; }
+check "pf: init makes a folder a project: marker, board, STATE, DECISIONS, and registers it" 'PJ init "$PA" >/dev/null && grep -qx "kind: project" "$PA/.chief-of-staff" && ro "$PA/.chief-of-staff" && [ -f "$PA/board/Inbox.md" ] && [ -f "$PA/STATE.md" ] && [ -f "$PA/DECISIONS.md" ] && grep -Fxq "$(cd "$PA" && pwd -P)" "$REG" && ro "$REG"'
+echo "next: kept" >> "$PA/STATE.md"
+check "pf: init again creates nothing and registers once" 'PJ init "$PA" >/dev/null && grep -qx "next: kept" "$PA/STATE.md" && [ "$(grep -Fxc "$(cd "$PA" && pwd -P)" "$REG")" = 1 ]'
+ln -s "$PB" "$PF/link-b"
+check "pf: a folder opened through a link registers its real path, once" 'PJ init "$PF/link-b" >/dev/null && PJ init "$PB" >/dev/null && [ "$(grep -Fxc "$(cd "$PB" && pwd -P)" "$REG")" = 1 ] && ! grep -Fq "link-b" "$REG"'
+check "pf: init refuses a relative or missing folder" '! PJ init rel/dir 2>/dev/null && ! PJ init "$PF/nope" 2>/dev/null'
+check "pf: init refuses a folder inside a project: a subfolder or a thread's worktree never becomes its own project" '! PJ init "$PB/src" 2>/dev/null && mkdir -p "$PB/.claude/worktrees/w" && ! PJ init "$PB/.claude/worktrees/w" 2>/dev/null && [ ! -f "$PB/.claude/worktrees/w/.chief-of-staff" ] && ! grep -q "worktrees" "$REG"'
+check "pf: list says which registered folders exist" 'mkdir -p "$PF/gone"; PJ init "$PF/gone" >/dev/null; rm -rf "$PF/gone"; o=$(PJ list); printf "%s\n" "$o" | grep -q "^ok	$(cd "$PA" && pwd -P)$" && printf "%s\n" "$o" | grep -q "^missing	.*/gone$"'
+# the coordinator: a session at the registered root. Not a subfolder, not an unregistered root, not a worktree inside
+mkdir -p "$PA/.claude/worktrees/t1" "$PF/rogue"; printf 'kind: project\n' > "$PA/.claude/worktrees/t1/.chief-of-staff"; printf 'kind: project\n' > "$PF/rogue/.chief-of-staff"
+check "pf: ask-guard lets the project root ask the owner" '[ "$(g "$PA")" = 0 ] && [ "$(g "$PF/link-b")" = 0 ]'
+check "pf: ask-guard blocks a subfolder, a worktree with its own marker and an unregistered root" '[ "$(g "$PB/src")" = 2 ] && [ "$(g "$PA/.claude/worktrees/t1")" = 2 ] && [ "$(g "$PF/rogue")" = 2 ]'
+printf -- '---\nstage: 1\n---\n## Stage 1: Plan\n- [x] scope | Scope | card: product | needs: - | owner: ok | evidence: scope.md\n- [ ] review-1 | Review | card: reviewer | needs: scope | evidence:\n' > "$PB/TRACK.md"
+echo "Scope: export. Owner OK: yes" > "$PB/scope.md"
+check "pf: only the coordinator records the owner OK, on its own project only" '! CLAUDE_PROJECT_DIR="$PB/src" T ok "$PB" scope yes 2>/dev/null && ! CLAUDE_PROJECT_DIR="$PA" T ok "$PB" scope yes 2>/dev/null && ! CLAUDE_PROJECT_DIR="$PF/rogue" T ok "$PB" scope yes 2>/dev/null && [ ! -e "$PB/.owner-ok" ] && CLAUDE_PROJECT_DIR="$PB" T ok "$PB" scope "yes, freeze it" >/dev/null && ro "$PB/.owner-ok" && ! T check "$PB" | grep -q "owner.s OK"'
+TOK="sh $here/track.sh ok $PB scope yes"
+check "pf: recording the OK asks the owner at the root and is blocked anywhere else in the project" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$TOK\"}")" "$PB" | grep -q "permissionDecision\":\"ask" && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$TOK\"}")" "$PB/src")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$TOK\"}")" "$PA/.claude/worktrees/t1")" = 2 ]'
+check "pf: the project list and the library setting cannot be written by a session" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$REG\"}")" "$PB")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$CLAUDE_PLUGIN_DATA/library\"}")" "$PB")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo /x >> ~/.claude/plugins/data/chief-of-staff-chief-of-staff/projects\"}")" "$PB")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat ~/.claude/plugins/data/chief-of-staff-chief-of-staff/projects\"}")" "$PB")" = 0 ]'
+check "pf: registering a folder or setting the library through Bash asks the owner, in any spelling" 'k=0; for c in "sh $here/project.sh init /x" "sh $here/project.sh library /l" "sh project.sh \$cmd /x" "echo init | xargs sh project.sh"; do h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$c\"}")" "$PB/src" | grep -q "permissionDecision\":\"ask" || k=1; done; [ $k = 0 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/project.sh list\"}")" "$PB/src")" = 0 ]'
+# the track gate and the rotation read the project folder itself
+sed -i.bak 's/^- \[ \] review-1 /- [x] review-1 /; s/| needs: scope | evidence:$/| needs: scope | evidence: nope.md/' "$PB/TRACK.md"
+check "pf: the turn end checks the project's own TRACK.md" 'hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$PB" >/dev/null; hk "$(ev Stop ",\"stop_hook_active\":false")" "$PB" 2>&1 | grep -q "Track gate"'
+check "pf: TRACK.md and DELIVERY.md of the project are control files, not deliverables" 'hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$PB" >/dev/null; hk "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$PB/DELIVERY.md\"}")" "$PB" >/dev/null 2>&1; [ ! -f "$CLAUDE_PLUGIN_DATA/turns/s1/deliverable" ]'
+check "pf: the briefing at the root is the coordinator's: state, decisions, cards waiting on the owner" 'printf -- "---\nstatus: waiting-owner\n---\n# Q\n\n## For the owner to decide\n- Ship it? Recommended: yes\n" > "$PA/board/Q.md"; printf -- "- 2026-11-08 10:00 | Name is Alpha | Pedro | replaces: -\n" >> "$PA/DECISIONS.md"; o=$(b "$PA"); printf "%s" "$o" | grep -q "coordinator" && printf "%s" "$o" | grep -q "Next action recorded" && printf "%s" "$o" | grep -q "Name is Alpha" && printf "%s" "$o" | grep -q "Ship it? Recommended: yes"'
+check "pf: a session in a subfolder is told it does not ask the owner" 'b "$PB/src" | grep -q "does not ask the owner"'
+check "pf: the role cards are the plugin's when the project has none" 'hk "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher\\nLibrary: none found for x\\nAmbition: the goal behind the goal here | judge: an outside measure\"}")" "$PB" >/dev/null 2>&1; [ $? = 0 ]'
+# health, panel and overview: one project folder, or every registered one (the global panel), no central anywhere
+check "pf: health reads a project folder as one project" '[ "$(sh "$here/health.sh" "$PB" | cut -d "$(printf "\037")" -f1)" = beta ]'
+check "pf: overview --all reads every registered board" 'sh "$here/overview.sh" --all | grep -q "Q (-)"'
+if command -v python3 >/dev/null; then
+  check "pf: the project panel shows only its folder; the global one shows both, worst first, and a missing folder grey" 'python3 -c "
+import sys; sys.path.insert(0, sys.argv[1]); import panel
+one = panel.snapshot([sys.argv[2]])
+assert [p[\"slug\"] for p in one[\"projects\"]] == [\"beta\"], one[\"projects\"]
+allp = panel.snapshot(panel.registered())
+s = [p[\"slug\"] for p in allp[\"projects\"]]
+assert \"beta\" in s and \"Alpha Project\" in s, s
+gone = [p for p in allp[\"projects\"] if p[\"color\"] == \"gray\"]
+assert len(gone) == 1 and gone[0][\"reason\"] == \"Folder not found\" and gone[0][\"slug\"] == \"gone\", gone
+assert [c[\"title\"] for c in allp[\"cards\"]] == [\"Q\"], allp[\"cards\"]
+" "$here" "$PB"'
+  check "pf: an empty project list says how to start one" 'CLAUDE_PLUGIN_DATA="$PF/empty-data" python3 -c "
+import sys; sys.path.insert(0, sys.argv[1]); import panel
+assert panel.registered() == []
+assert \"No projects yet. Run /threads in a folder.\" in panel.PAGE
+" "$here"'
+fi
+# the library a project folder uses: <plugin data>/library, set by project.sh library (setup)
+check "pf: project.sh library starts a library in an empty folder and records it" 'PJ library "$PF/Lib" >/dev/null && [ -f "$PF/Lib/.library-id" ] && [ -d "$PF/Lib/notes" ] && [ "$(cat "$CLAUDE_PLUGIN_DATA/library")" = "$PF/Lib" ] && [ "$(cd "$PB" && CLAUDE_PROJECT_DIR="$PB" sh "$here/library.sh" where)" = "$PF/Lib" ]'
+check "pf: project.sh library refuses a non-empty folder that is no library" 'mkdir -p "$PF/junk"; touch "$PF/junk/x"; ! PJ library "$PF/junk" 2>/dev/null && [ "$(cat "$CLAUDE_PLUGIN_DATA/library")" = "$PF/Lib" ]'
+check "pf: no central, no projects/ and no Projects pane in the setup, new-project and panel skills" '! grep -qi "central" "$here/../skills/setup/SKILL.md" "$here/../skills/new-project/SKILL.md" "$here/../skills/panel/SKILL.md" "$here/../skills/handoff/SKILL.md" && ! grep -q "registerProjects\|name: .projects." "$here/../hooks/projects.tsx"'
+chmod -R u+w "$PF" 2>/dev/null; rm -rf "$PF"; chmod u+w "$REG" 2>/dev/null; rm -f "$REG" "$CLAUDE_PLUGIN_DATA/library"
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }

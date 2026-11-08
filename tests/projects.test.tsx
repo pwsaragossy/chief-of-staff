@@ -1,34 +1,10 @@
 import { expect, test } from 'claude-code/testing'
-import { briefGaps, COORDINATOR, decisions, fm, THREAD_RULES } from '../hooks/projects'
+import { briefGaps, COORDINATOR, decisions, fm, ownerCommand, THREAD_RULES } from '../hooks/projects'
 
-const PANE = {
-  plugin: 'chief-of-staff', component: 'Pane', requestId: 'cos-projects',
-  props: { title: 'Projects', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
-} as const
 
 const FILES: Record<string, string> = {
   '/ws/projects/dock/STATE.md': '---\nstatus: in-progress\nupdated: 2026-11-04\nnext: spike the panel\n---\n# Dock',
-  '/ws/projects/dock/CLAUDE.md': '# Dock — project agent\n\nA conversation opened here handles **one thing only**: build Dock Folders.\n',
   '/ws/projects/dock/DECISIONS.md': '- 2026-11-04 01:15 | Waitlist only | Pedro | -\n- 2026-11-04 01:16 | old | Pedro | -\n- 2026-11-04 01:17 | new one | Pedro | replaces: 2026-11-04 01:16\n',
-  '/ws/projects/old/STATE.md': '---\nstatus: delivered\nupdated: 2026-10-01\n---\n',
-}
-
-const SESSIONS = [{ sessionId: 'local_1', title: 'Spike', cwd: '/ws/projects/dock', lastActivityAt: '2026-11-04T10:00:00Z' }, { sessionId: 'local_2', title: 'Other', cwd: '/elsewhere' }]
-function workspace(on: any, calls: { tool: string; args: any }[], fillFails = false, sessions: unknown[] = SESSIONS) {
-  on('prompt.fill', (_: any, e: any) => { calls.push({ tool: 'prompt.fill', args: e }); return { isFilled: !fillFails } })
-  on('store.get', () => ({ value: '/ws' }))
-  on('fs.exists', (_: any, e: any) => ({ value: e.path === '/ws/projects' || e.path in FILES }))
-  on('fs.list', () => ({ value: ['dock', 'old', 'README.md'].map(name => ({ name, kind: name.endsWith('.md') ? 'file' : 'dir', size: 0, mtimeMs: 0, isLink: false })) }))
-  on('fs.read', (_: any, e: any) => (e.path in FILES ? { value: FILES[e.path] } : { deny: 'ENOENT' }))
-  on('mcp.call', (_: any, e: any) => {
-    calls.push({ tool: `${e.server}.${e.tool}`, args: e.args })
-    const t = (text: string) => ({ value: { content: [{ type: 'text', text }], isError: false } })
-    if (e.tool === 'list_sessions') return t(JSON.stringify(sessions))
-    if (e.tool === 'list_groups') return t('[]')
-    if (e.tool === 'create_group') return t('cg-0a1b2c3d-0000-4000-8000-000000000002')
-    if (e.tool === 'open_session_in') return t('Refused: not a session this one started')
-    return t('ok')
-  })
 }
 
 test('front matter and decisions read like lib.sh', () => {
@@ -36,63 +12,10 @@ test('front matter and decisions read like lib.sh', () => {
   expect(decisions(FILES['/ws/projects/dock/DECISIONS.md']!)).toEqual(['Waitlist only (Pedro)', 'new one (Pedro)'])
 })
 
-test('the list shows open projects and folds delivered ones', async ($, on) => {
-  workspace(on, [])
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ key: 'p-dock' }))?.text).toMatch(/dock · in-progress · next: spike the panel/)
-  expect(await ui.find({ key: 'p-old' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /Done \(1\): old/ })).toBeDefined()
-  expect(await ui.find({ key: 'c-dock' })).toBeUndefined()
-  await ui.unmount()
-})
-
-test('a project with no session in its folder is offered a coordinator', async ($, on) => {
-  const calls: { tool: string; args: any }[] = []
-  workspace(on, calls, false, [])
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /^No coordinator 1$/ })).toBeDefined()
-  await ui.press({ key: 'c-dock' })
-  expect(calls.find(c => c.tool === 'prompt.fill')?.args.text).toMatch(/Start the coordinator of the project "dock"/)
-  expect(calls.some(c => c.tool.startsWith('ccd_session.start'))).toBe(false)
-  await ui.unmount()
-})
-
-test('New chat writes the request in the prompt box and starts nothing itself', async ($, on) => {
-  const calls: { tool: string; args: any }[] = []
-  workspace(on, calls)
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'p-dock' })
-  expect(await ui.find({ type: 'Text', text: /build Dock Folders/ })).toBeDefined()
-  expect((await ui.find({ key: 'local_1' }))?.text).toMatch(/Spike · 2026-11-04 10:00/)
-  expect(await ui.find({ key: 'local_2' })).toBeUndefined()
-  await ui.press({ key: 'new' })
-  const fill = calls.find(c => c.tool === 'prompt.fill')!
-  expect(fill.args.text).toMatch(/coordinator of the project "dock": a local session in \/ws\/projects\/dock \(no worktree\), titled "dock: chat", kept as a sub-conversation of this one \(not detached\)/)
-  expect(calls.some(c => c.tool.startsWith('ccd_session.start') || c.tool.startsWith('ccd_sidebar.create'))).toBe(false)
-  await ui.unmount()
-})
-
-test('a chat opens in the main pane, and a refusal points to the sidebar group', async ($, on) => {
-  const calls: { tool: string; args: any }[] = []
-  workspace(on, calls)
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'p-dock' })
-  await ui.press({ key: 'local_1' })
-  expect(calls.find(c => c.tool === 'ccd_window.open_session_in')?.args).toEqual({ session_id: 'local_1', target: 'focus' })
-  expect((await ui.find({ type: 'Text', text: /Couldn't show/ }))?.text).toMatch(/Refused.*sidebar group dock/)
-  await ui.unmount()
-})
-
-test('a prompt box that cannot be filled says what to type', async ($, on) => {
-  workspace(on, [], true)
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'p-dock' })
-  await ui.press({ key: 'new' })
-  expect((await ui.find({ type: 'Text', text: /Couldn't write the request/ }))?.text).toMatch(/prompt box is not available.*open a new chat in dock/)
-  await ui.unmount()
-})
-
-const THREADS = { ...PANE, requestId: 'cos-threads', props: { ...PANE.props, title: 'Threads' } } as const
+const THREADS = {
+  plugin: 'chief-of-staff', component: 'Pane', requestId: 'cos-threads',
+  props: { title: 'Threads', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
+} as const
 
 test('the Threads pane groups the threads this conversation started and lists the card questions', async ($, on) => {
   const calls: { tool: string; args: any }[] = []
@@ -201,26 +124,135 @@ test('the coordinator pane comes up with the owner message', async ($, on) => {
   expect(opened).toEqual(['cos-threads', 'cos-threads'])
 })
 
-test('/threads turns any chat into a coordinator', async ($, on) => {
+// a project folder at /p/Alpha: marker kind: project, its own board and STATE.md
+function folder(on: any, opts: { thread?: boolean; marker?: boolean; runs?: { argv: readonly string[] }[]; initFails?: boolean; registered?: string[]; opened?: string[] } = {}) {
+  let marker = opts.marker ?? true
+  const files = (): Record<string, string> => ({
+    ...(marker ? { '/p/Alpha/.chief-of-staff': 'chief-of-staff project v0.1\nkind: project\n' } : {}),
+    '/p/Alpha/STATE.md': '---\nstatus: in-progress\nupdated: 2026-11-08\nnext: first slice\n---\n',
+    '/p/Alpha/DECISIONS.md': '- 2026-11-08 10:00 | Name is Alpha | Pedro | replaces: -\n',
+    '/p/Alpha/board/Q.md': '---\nstatus: waiting-owner\n---\n# Q\n\n## For the owner to decide\n- Ship it? Recommended: yes\n',
+  })
+  let rootv = ''
+  on('store.get', () => ({ value: rootv }))
+  on('store.set', (_: any, e: any) => { rootv = e.value; return { value: undefined } })
+  on('fs.exists', (_: any, e: any) => ({ value: e.path in files() }))
+  on('fs.read', (_: any, e: any) => (e.path in files() ? { value: files()[e.path] } : { deny: 'ENOENT' }))
+  on('fs.list', (_: any, e: any) => ({ value: e.path === '/p/Alpha/board' ? [{ name: 'Q.md', kind: 'file', size: 0, mtimeMs: 0, isLink: false }] : [] }))
+  on('command.register', (_: any, e: any) => { (opts.registered ?? []).push(e.name); return { value: { command: e.name } } })
+  on('ui.open', (_: any, e: any) => { (opts.opened ?? []).push(e.id); return { value: { isPlaced: true } } })
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  on('clock.now', () => ({ value: Date.parse('2026-11-08T12:00:00Z') }))
+  on('process.run', (_: any, e: any) => {
+    opts.runs?.push(e); if (!opts.initFails) marker = true
+    return { value: opts.initFails ? { exitCode: 1, stdout: '', stderr: 'project.sh: /p/Alpha is not a folder' } : { exitCode: 0, stdout: 'Project: /p/Alpha (new)', stderr: '' } }
+  })
+  on('mcp.call', (_: any, e: any) => {
+    const t = (text: string) => ({ value: { content: [{ type: 'text', text }], isError: false } })
+    if (e.tool === 'get_session') return t(JSON.stringify(opts.thread ? { sessionId: 'local_t', parentSessionId: 'local_me', detached: false } : { sessionId: 'local_me' }))
+    return t('[]')
+  })
+  return { make: () => { marker = true } }
+}
+
+test('/threads makes the folder a project, the chat its coordinator, and asks for the web panel', async ($, on) => {
+  const opened: string[] = [], runs: { argv: readonly string[] }[] = [], registered: string[] = []
+  folder(on, { marker: false, runs, opened, registered })
+  await $.session.start({ cwd: '/p/Alpha', surface: 'desktop', isInteractive: true })
+  expect(opened).toEqual([])
+  expect(registered).toEqual(['threads'])   // the Projects pane and /projects are gone
+  const r: any = await $.command.run({ command: 'threads', args: '' } as any)
+  expect(runs.map(x => x.argv.slice(2))).toEqual([['init', '/p/Alpha']])
+  expect(String(runs[0]!.argv[1])).toMatch(/\/scripts\/project\.sh$/)
+  expect(opened).toEqual(['cos-threads'])
+  expect(r.text).toMatch(/coordinator of Alpha/)
+  expect(String(r.context)).toMatch(/start_session/)
+  expect(String(r.context)).toMatch(/panel\.py" "\/p\/Alpha"/)
+  const ui = await $.ui.mount({ ...THREADS, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /Ship it\? Recommended: yes/ })).toBeDefined()   // every card of the folder's board
+  expect(await ui.find({ type: 'Text', text: 'next: first slice' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Name is Alpha \(Pedro\)/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('/threads that cannot make the project says why and opens nothing', async ($, on) => {
   const opened: string[] = []
-  on('store.get', () => ({ value: '' }))
-  on('store.set', () => ({ value: undefined }))
-  on('fs.exists', () => ({ value: false }))
-  on('command.register', () => ({ value: { command: 'x' } }))
+  folder(on, { marker: false, initFails: true, opened, runs: [] })
+  await $.session.start({ cwd: '/p/Alpha', surface: 'desktop', isInteractive: true })
+  const r: any = await $.command.run({ command: 'threads', args: '' } as any)
+  expect(r.text).toMatch(/Couldn't make \/p\/Alpha a project: project\.sh: \/p\/Alpha is not a folder/)
+  expect(opened).toEqual([])
+})
+
+test('/threads inside a workspace of the older layout makes the chat its coordinator and registers nothing', async ($, on) => {
+  const opened: string[] = [], runs: unknown[] = []
+  const files: Record<string, string> = { '/w/.chief-of-staff': 'chief-of-staff workspace v0.1\n' }
+  on('store.get', () => ({ value: '' })); on('store.set', () => ({ value: undefined }))
+  on('fs.exists', (_: any, e: any) => ({ value: e.path in files }))
+  on('fs.read', (_: any, e: any) => (e.path in files ? { value: files[e.path] } : { deny: 'ENOENT' }))
+  on('fs.list', () => ({ value: [] }))
+  on('command.register', (_: any, e: any) => ({ value: { command: e.name } }))
   on('ui.open', (_: any, e: any) => { opened.push(e.id); return { value: { isPlaced: true } } })
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
-  on('mcp.call', () => ({ value: { content: [{ type: 'text', text: '[]' }], isError: false } }))
-  on('clock.now', () => ({ value: 0 }))
-  on('fs.list', () => ({ value: [] }))
-  await $.session.start({ cwd: '/Users/p/Workspace/Tokenizadora', surface: 'desktop', isInteractive: true })
-  expect(opened).toEqual([])
+  on('process.run', (_: any, e: any) => { runs.push(e); return { value: { exitCode: 1, stdout: '', stderr: 'inside a workspace' } } })
+  on('mcp.call', () => ({ value: { content: [{ type: 'text', text: JSON.stringify({ sessionId: 'local_me' }) }], isError: false } }))
+  await $.session.start({ cwd: '/w/notes', surface: 'desktop', isInteractive: true })
   const r: any = await $.command.run({ command: 'threads', args: '' } as any)
+  expect(runs).toEqual([])
+  expect(r.text).toMatch(/now the coordinator/)
   expect(opened).toEqual(['cos-threads'])
-  expect(String(r.context)).toMatch(/start_session/)
-  const ui = await $.ui.mount({ ...THREADS, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: 'Completed threads.' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'Resolved · 0' })).toBeDefined()
-  await ui.unmount()
+})
+
+test('a new chat at a project root carries on as its coordinator; a thread there does not', async ($, on) => {
+  const opened: string[] = []
+  folder(on, { opened })
+  await $.session.start({ cwd: '/p/Alpha', surface: 'desktop', isInteractive: true })
+  expect(opened).toEqual(['cos-threads'])
+})
+
+test('a thread in a project folder does not ask the owner nor record the owner OK', async ($, on) => {
+  const opened: string[] = [], ran: any[] = []
+  folder(on, { thread: true, opened })
+  on('tool.call', (_: any, e: any) => { ran.push(e); return { result: 'ok' } })
+  await $.session.start({ cwd: '/p/Alpha', surface: 'desktop', isInteractive: true })
+  expect(opened).toEqual([])
+  expect(String(((await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as any)) as any).deny)).toMatch(/does not ask the owner/)
+  expect(String(((await $.tool.call({ tool: 'Bash', command: 'sh /x/track.sh ok /p/Alpha scope yes' } as any)) as any).deny)).toMatch(/owner.s OK/)
+  expect(String(((await $.tool.call({ tool: 'Bash', command: 'sh /x/project.sh init /p/Alpha/.claude/worktrees/t' } as any)) as any).deny)).toMatch(/register projects/)
+  await $.tool.call({ tool: 'Bash', command: 'sh /x/track.sh check /p/Alpha' } as any)
+  expect(ran.map(x => x.command)).toEqual(['sh /x/track.sh check /p/Alpha'])
+})
+
+test('the coordinator itself asks and records the OK', async ($, on) => {
+  const ran: any[] = []
+  folder(on, {})
+  on('tool.call', (_: any, e: any) => { ran.push(e.tool); return { result: 'ok' } })
+  await $.session.start({ cwd: '/p/Alpha', surface: 'desktop', isInteractive: true })
+  await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as any)
+  await $.tool.call({ tool: 'Bash', command: 'sh /x/track.sh ok /p/Alpha scope yes' } as any)
+  expect(ran).toEqual(['AskUserQuestion', 'Bash'])
+})
+
+test('new-project ending in project.sh init makes the chat the coordinator', async ($, on) => {
+  const opened: string[] = []
+  const f = folder(on, { marker: false, opened, runs: [] })
+  let made = false
+  on('tool.call', () => { made = true; f.make(); return { result: 'Project: /p/Alpha (new)' } })
+  await $.session.start({ cwd: '/p/Alpha', surface: 'desktop', isInteractive: true })
+  expect(opened).toEqual([])
+  await $.tool.call({ tool: 'Bash', command: 'sh "/x/scripts/project.sh" init /p/Alpha' } as any)
+  expect(made).toBe(true)
+  expect(opened).toEqual(['cos-threads'])
+})
+
+test('ownerCommand names the OK and the registration, not other track commands', () => {
+  expect(ownerCommand('sh track.sh ok p scope yes')).toBe(true)
+  expect(ownerCommand('T=track.sh; sh "$T" ok p x')).toBe(true)
+  expect(ownerCommand('sh project.sh init /x')).toBe(true)
+  expect(ownerCommand('sh track.sh check /p')).toBe(false)
+  expect(ownerCommand('sh project.sh list')).toBe(false)
+  expect(ownerCommand('sh project.sh list; sh project.sh init /x')).toBe(true)
+  expect(ownerCommand('git commit -m "looks ok"')).toBe(false)
 })
 
 test('a coordinator thread brief needs its specialist and opens with the thread rules', async ($, on) => {

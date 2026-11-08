@@ -47,14 +47,15 @@ trap 'kill $watch $run 2>/dev/null; rm -rf "$lock"' EXIT
 trap 'exit 130' INT TERM
 
 # We hold the lock, so a project still marked running was cut off by a crash or a kill: park it.
-for s in "$root"/projects/*/STATE.md; do
+if cos_isproj "$root"; then set -- "$root/STATE.md"; else set -- "$root"/projects/*/STATE.md; fi   # a project folder is one project
+for s in "$@"; do
   [ -f "$s" ] && [ "$(fm_get "$s" dispatch)" = "running" ] || continue
   fm_set "$s" dispatch off; note "parked $(basename "$(dirname "$s")"): previous run was interrupted"
 done
 
 prompt='You were started by the chief-of-staff dispatcher, with nobody watching. Follow this folder'"'"'s CLAUDE.md. Do the next action recorded in STATE.md and nothing beyond it. Do not ask anyone anything: write questions on the project card with status waiting-owner. Finish with the handoff skill, but do not run git: the dispatcher commits after you.'
 
-for s in "$root"/projects/*/STATE.md; do
+for s in "$@"; do
   [ -f "$s" ] || continue
   [ "$(fm_get "$s" status)" = "in-progress" ] && [ "$(fm_get "$s" dispatch)" = "ready" ] || continue
   # a shared workspace: only this person's projects, so two teammates' dispatchers never run the same one
@@ -68,7 +69,7 @@ for s in "$root"/projects/*/STATE.md; do
   # The whole workspace is reachable (board, ROUTING.md); agent rules, settings, git internals and
   # the dispatcher's own files are denied by absolute paths ("//" + root). Permission rules, not a sandbox.
   before=$(git_fingerprint)
-  (cos_gitenv_off; cd "$root/projects/$p" && exec "$bin" -p "$prompt" \
+  (cos_gitenv_off; cd "$(dirname "$s")" && exec "$bin" -p "$prompt" \
     --add-dir "$root" \
     --permission-mode default \
     --max-budget-usd "$budget" \

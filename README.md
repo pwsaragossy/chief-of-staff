@@ -5,15 +5,15 @@ works for one owner, or for a team.
 
 What it gives you:
 
-- **Projects, locally.** A Projects pane beside the chat (central opens it; anywhere else
-  `/chief-of-staff:projects [workspace folder]`) works like the app's Projects tab on this computer: each
-  project with its status and next action, its goal, instructions (`CLAUDE.md`), memory (`STATE.md`, the
-  decisions in force) and its chats, each opening in the main pane on a press. New chat writes the request in the prompt box; the owner sends it and
-  the session opens a local chat in the project's folder, filed in a sidebar group named after the project.
-- **Projects that talk to you, central for the overview.** Each project's conversation is its coordinator:
+- **A project is the folder you work in.** No central folder: type `/threads` in a conversation and its
+  folder becomes a project (a `.chief-of-staff` marker, `board/`, `STATE.md`, `DECISIONS.md`, nothing asked),
+  the folder joins the plugin's project list and the conversation becomes the project's coordinator.
+  `/chief-of-staff:new-project` does the same after its opening questions; `/chief-of-staff:setup` picks
+  where the library lives first. The web panel shows one project, or every registered one.
+- **Projects that talk to you.** Each project's conversation at its folder's root is its coordinator:
   it asks you its decisions and runs long or parallel work in threads nested under it. Questions that
-  waited while you were away sit on a card in `board/`; central asks them all at once. Any other folder of
-  the workspace does not ask you, except to confirm the origin of an order before an irreversible step.
+  waited while you were away sit on a card in `board/`; the coordinator asks them all at once. Threads and
+  subfolders do not ask you, except to confirm the origin of an order before an irreversible step.
   Everything runs on this computer. When the coordinator starts a thread, its row in the chat draws as a
   thread card (title, state, a press that opens it), and the Threads pane lists every thread by state.
   Only the coordinator talks to you and writes `DECISIONS.md`; a thread brief that names no specialist
@@ -72,7 +72,7 @@ What it gives you:
   or adding a newer question never makes an old one look young. With `deputy: <name>` in TRACK.md, a
   question past its limit less than 3 hours before the deadline is escalated to the deputy. The panel and
   the briefing show the questions themselves. Items marked `owner: ok`
-  (the hackathon's scope freeze and submission) close only with the owner's OK, which central records
+  (the hackathon's scope freeze and submission) close only with the owner's OK, which the coordinator records
   with `track.sh ok` and the owner approves.
 - **Past the literal request (ambition loop).** Every new request goes through the `ambition` skill:
   the goal behind the goal, the rawest material, who does this work, and an outside judge that
@@ -125,23 +125,22 @@ The repository is public, so installing needs no GitHub account or access. Insid
 do the same. Update later with `claude plugin marketplace update chief-of-staff`.
 
 Then open Claude Code in any folder and run `/chief-of-staff:setup`. It looks at your computer first,
-then asks up to four questions in one block, each with a recommendation: where the workspace goes
-(default `~/chief-of-staff`); where the company library goes (inside the workspace, your Obsidian
-vault, iCloud Drive, Dropbox, Google Drive, OneDrive or an external disk); when the GitHub CLI is
-signed in, whether to back up to private GitHub repositories; and whether to work with a team (just
-you, a shared library, one board for the whole team, or join a teammate's board). Then it creates:
+asks one question: where the company library goes (your Obsidian vault, iCloud Drive, Dropbox, Google
+Drive, OneDrive or an external disk). A project folder then holds:
 
 ```
-<workspace>/
-  .chief-of-staff        marker the hooks look for
-  central/CLAUDE.md      the overview of every project
-  board/                 one card per open item (status, project, owner, member, due, asked)
-  projects/<slug>/       CLAUDE.md + STATE.md + TRACK.md per project
-  knowledge/             inbox/, notes/, templates/ (or the folder you picked; move later: library.sh offload)
-  libraries/<team>/      one git clone per team library you joined (ignored by the workspace repo)
-  specialists/           one role card per specialist (edit freely)
-  ROUTING.md             who to call for what
+<project folder>/
+  .chief-of-staff        marker the hooks look for (kind: project)
+  board/                 one card per open item (status, owner, member, due, asked)
+  STATE.md               the snapshot the next conversation starts from
+  DECISIONS.md           the decisions in force, one line each
+  TRACK.md               the stages and gates, when the project has a track
+  specialists/           optional: role cards of its own (else the plugin's)
 ```
+
+The plugin's data folder keeps `projects` (one registered folder per line) and `library` (the library's
+path). Workspaces of the older layout (`central/`, `projects/<slug>/`) keep working until their projects
+move to folders of their own.
 
 ## Upgrading from 0.4.x
 
@@ -156,10 +155,11 @@ Nothing to migrate by hand; existing workspaces keep working:
 
 ## Daily use
 
-1. Open Claude Code in `<workspace>/central`. It briefs you in at most 5 lines and asks whatever
-   is waiting on you, as buttons.
-2. To start something, tell central. It runs `/chief-of-staff:new-project`.
-3. To work on a project, open Claude Code in `projects/<slug>`. The briefing shows the next action.
+1. Open a conversation in the project's folder. The first time, type `/threads` (or run
+   `/chief-of-staff:new-project` for the opening questions and a track). Later conversations there are its
+   coordinator from the start: the briefing shows where it stopped, the decisions and what waits on you.
+2. Long or parallel work runs as threads the coordinator starts; the Threads pane lists them.
+3. `/chief-of-staff:panel` in a project shows that project; anywhere else, every project.
 4. Close every session with `/chief-of-staff:handoff`.
 
 Skills: `setup`, `new-project`, `ambition`, `handoff`, `specialists`, `knowledge`, `panel`.
@@ -193,7 +193,7 @@ past its limit near the deadline names the `deputy:` who decides, and a card too
 In a shared workspace, teammates' data older than 15 minutes carries "Teammate data as of sync HH:MM".
 
 Files or links dropped in the import box land in the library's `inbox/` (the panel warns when one
-looks like it holds a key or token); central turns them into library notes with the `knowledge`
+looks like it holds a key or token); the coordinator turns them into library notes with the `knowledge`
 skill. The Library section shows the notes as an interactive graph, drawn on a canvas with no outside
 code (it works offline): color by type (finding, decision, howto, option; topics are squares), size
 by links, a dashed yellow ring past the review date, an outline only when retired, a red dot with
@@ -222,7 +222,7 @@ asks the owner once which to add (each answer is recorded by its id, a no too, a
 
 - `SessionStart` prints a factual briefing (at most 2000 characters): cards waiting on the owner,
   the project's status and next action, the library's counts and the project's latest notes.
-- `PreToolUse` on `AskUserQuestion` blocks button questions in any session that is not `central/`.
+- `PreToolUse` on `AskUserQuestion` blocks button questions in any session that is not a project's coordinator.
 - `PreToolUse` on `Bash` approves by itself the plugin's own read-only commands, the ones the hooks already
   run on their own: one call of `library.sh` (`search`, `similar`, `check`, `gate`, `doctor`, `backlinks`,
   `brief`, `where`, `libs`) or `track.sh` (`check`, `brief`, `status`, `items`) at the plugin's own path, with no
@@ -296,7 +296,7 @@ What we reference or reuse as an idea:
 
 What is ours, with no equivalent found in ECC:
 
-- only central and each project's coordinator ask the owner, enforced by a hook (`ask-guard`);
+- only each project's coordinator asks the owner, enforced by hooks (`ask-guard`, and a thread check in the module);
 - a project playbook with a coherence check of the success criteria and gates;
 - a per-project state snapshot with an arrival synthesis by the next session;
 - an unattended dispatcher with a run ceiling, budget, timeout, no shell, and git hook checks;
@@ -370,7 +370,7 @@ What is ours, with no equivalent found in ECC:
   seen. Then the reviewer and the owner's own read of `.owner-ok` are the last line.
 - Ambition: the hooks check that the `Ambition:` line and `## Versions` exist, not that the judge is
   a good one; the reviewer checks that, and it is the same model.
-- Target and check: the check runs a shell command written in TRACK.md, so only a session or central
+- Target and check: the check runs a shell command written in TRACK.md, so only a session or the coordinator
   on your computer runs it (never a hook), never for a teammate's project in a shared workspace, and
   only a command the owner approved on this computer (the approval lives in `.owner-ok`, which never
   syncs; in a shared workspace one that git tracks, in any letter case, came from the team repo: it is

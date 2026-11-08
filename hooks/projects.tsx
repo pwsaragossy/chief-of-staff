@@ -1,23 +1,18 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-// The app's Projects tab, local: a pane that lists the workspace's projects, shows each one's
-// instructions, memory and chats (the desktop app's session list), and asks for a new local chat.
-const PANE = 'cos-projects'
-const view = atom({ plugin: 'chief-of-staff', key: 'view' } as const, '', { shape: 'view-1' })
-const busy = atom({ plugin: 'chief-of-staff', key: 'busy' } as const, '', { shape: 'busy-1' })
+// A project is the folder the owner creates (marker kind: project, scripts/project.sh); its coordinator is the
+// owner's conversation at the folder's root and gets the Threads pane: the sessions it started. The older layout
+// (a workspace with central/ and projects/<slug>/) works the same until its projects move out.
 const error = atom({ plugin: 'chief-of-staff', key: 'error' } as const, '', { shape: 'error-1' })
-const DONE = /^(done|delivered|closed|cancelled|dropped|paused)$/
-// A project's coordinator (a session in projects/<slug>/) gets the Threads pane: the sessions it started.
 const THREADS = 'cos-threads'
 const coord = atom({ plugin: 'chief-of-staff', key: 'coord' } as const, '', { shape: 'coord-1' })
+// this conversation's folder: /threads makes it a project
+const here = atom({ plugin: 'chief-of-staff', key: 'here' } as const, '', { shape: 'here-2' })
 // the owner closed the Threads pane by hand: it stays closed until /threads
-// the folder name of this conversation, the label /threads gives a chat outside the workspace
-const here = atom({ plugin: 'chief-of-staff', key: 'here' } as const, '', { shape: 'here-1' })
 const shut = atom({ plugin: 'chief-of-staff', key: 'threadsShut' } as const, false, { shape: 'shut-1' })
 
 type Project = { slug: string; dir: string; status: string; updated: string; next: string; goal: string }
-type Chat = { id: string; title: string; at: string; link?: string }
 
 // front matter value, as lib.sh fm_get reads it
 export const fm = (text: string, key: string): string => {
@@ -44,6 +39,7 @@ export const decisions = (text: string): string[] => {
   return rows.filter(x => !gone.has(x.id) && !x.d.startsWith('revoked:')).map(x => `${x.d} (${x.who})`)
 }
 
+const base = (dir: string) => dir.split('/').filter(Boolean).pop() ?? 'chat'
 const text = (r: { content?: { type: string; text?: string }[] }) => (r.content ?? []).map(c => c.text ?? '').join('\n')
 
 async function findRoot($: EngineInterface, cwd: string): Promise<string> {
@@ -57,35 +53,40 @@ async function root($: EngineInterface): Promise<string> {
   return ((await $.store.get('root')) as string) || ''
 }
 
-async function projects($: EngineInterface, r: string): Promise<Project[]> {
-  if (!r || !(await $.fs.exists(`${r}/projects`))) return []
-  const out: Project[] = []
-  for (const e of await $.fs.list(`${r}/projects`)) {
-    if (e.kind !== 'dir') continue
-    const dir = `${r}/projects/${e.name}`
-    const s = await $.fs.read(`${dir}/STATE.md`).catch(() => '')
-    const c = await $.fs.read(`${dir}/CLAUDE.md`).catch(() => '')
-    const goal = (c.match(/handles \*\*one thing only\*\*: (.*)/)?.[1] ?? '').trim()
-    out.push({ slug: e.name, dir, status: fm(s, 'status') || 'new', updated: fm(s, 'updated'), next: fm(s, 'next'), goal })
-  }
-  return out.sort((a, b) => b.updated.localeCompare(a.updated))
+// a project folder: its marker says kind: project (lib.sh cos_isproj)
+async function isProject($: EngineInterface, r: string): Promise<boolean> {
+  return /^kind: project$/m.test(await $.fs.read(`${r}/.chief-of-staff`).catch(() => ''))
 }
 
-async function chats($: EngineInterface, dir: string, slug: string): Promise<Chat[]> {
-  const r = await $.mcp.call('ccd_session_mgmt', 'list_sessions', { limit: 100 })
-  let rows: any[] = []
-  try { rows = JSON.parse(text(r)) } catch { return [] }
-  return rows
-    .filter(s => s.cwd === dir || String(s.cwd ?? '').startsWith(dir + '/') || s.group?.name === slug)
-    .map(s => ({ id: s.sessionId, title: s.title || 'Untitled', at: String(s.lastActivityAt ?? '').slice(0, 16).replace('T', ' '), link: s.link }))
+// the coordinator's project: the folder itself, or projects/<slug> in the older layout
+async function project($: EngineInterface, r: string, slug: string): Promise<Project | undefined> {
+  const dir = (await isProject($, r)) ? r : `${r}/projects/${slug}`
+  const s = await $.fs.read(`${dir}/STATE.md`).catch(() => null)
+  if (s === null) return undefined
+  const c = await $.fs.read(`${dir}/CLAUDE.md`).catch(() => '')
+  const goal = (c.match(/handles \*\*one thing only\*\*: (.*)/)?.[1] ?? '').trim()
+  return { slug, dir, status: fm(s, 'status') || 'new', updated: fm(s, 'updated'), next: fm(s, 'next'), goal }
 }
 
-// The app starts a session only on a request the owner sends: the press writes that request in the prompt
-// box as a draft, and the owner sends it (or edits it, or clears it).
-// The chat is the project's coordinator: kept linked, so the sidebar shows it under this conversation.
-export const newChatDraft = (p: Project): string =>
-  `Start the coordinator of the project "${p.slug}": a local session in ${p.dir} (no worktree), ` +
-  `titled "${p.slug}: chat", kept as a sub-conversation of this one (not detached). Its first step: the arrival steps in CLAUDE.md.`
+// a thread: a session another session started and kept linked. It runs in its coordinator's folder, so the folder
+// does not tell them apart; the app's own record does. Unknown (the app does not answer): not a thread, and the
+// hooks' folder and registration checks still hold (scripts/ask-guard.sh, protocol.sh)
+export async function isThread($: EngineInterface): Promise<boolean> {
+  try {
+    const s = JSON.parse(text(await $.mcp.call('ccd_session_mgmt', 'get_session', { session_id: 'self' })))
+    return !!s.parentSessionId && !s.detached
+  } catch { return false }
+}
+
+// what a thread may not run in a project folder: the owner's OK (track.sh ok) and project.sh (registers a
+// coordinator). ponytail: a word match on the command; the hooks parse it fully and the owner approves every OK
+export const ownerCommand = (cmd: string): boolean =>
+  /project\.sh(?![\s'"]+list([^a-z]|$))/.test(cmd) || (/track/.test(cmd) && /(^|[^a-z0-9_.-])ok([^a-z0-9_.-]|$)/.test(cmd))
+
+// what /threads tells the conversation once the folder is a project: open its web panel in the app's browser
+export const panelAsk = (pluginRoot: string, dir: string): string =>
+  `Open this project's web panel now: run python3 "${pluginRoot}/scripts/panel.py" "${dir}" in the background, ` +
+  'then open the "Panel:" link it prints in the app\'s built-in browser. Tell the owner in one line that it is open.'
 
 // the open questions of a card: the lines under "## For the owner to decide", without their asked-stamp
 export const ownerQuestions = (card: string): string[] => {
@@ -99,11 +100,11 @@ export const ownerQuestions = (card: string): string[] => {
 }
 
 async function waitingOnOwner($: EngineInterface, r: string, slug: string): Promise<string[]> {
-  const out: string[] = []
+  const out: string[] = [], all = await isProject($, r)   // a project folder's board is all its own
   for (const e of await $.fs.list(`${r}/board`).catch(() => [])) {
     if (e.kind !== 'file' || !e.name.endsWith('.md')) continue
     const c = await $.fs.read(`${r}/board/${e.name}`).catch(() => '')
-    if (fm(c, 'project') === slug && fm(c, 'status') === 'waiting-owner') out.push(...ownerQuestions(c))
+    if ((all || fm(c, 'project') === slug) && fm(c, 'status') === 'waiting-owner') out.push(...ownerQuestions(c))
   }
   return out
 }
@@ -165,7 +166,7 @@ export const COORDINATOR =
   'build anything that changes where the work runs (cloud or this computer, a new service), get the owner\'s yes or no ' +
   'first. To match an existing look, read the real thing first (its files, a screenshot), list every difference and ' +
   'change them all in one pass, not one per release. Each thread ' +
-  'starts with its specialist: pick the role card from the workspace ROUTING.md and give the brief the lines ' +
+  'starts with its specialist: pick the role card from ROUTING.md (the workspace\'s, else the plugin\'s templates/ROUTING.md) and give the brief the lines ' +
   '"Role card: <role>", "Library: <notes, or none found for <terms>>" and "Ambition: <goal behind the goal> | judge: ' +
   '<outside judge>"; the thread follows the specialists skill. Anything that goes outside (a submission, a video, a ' +
   'text to a partner) passes the reviewer role before it reaches the owner.'
@@ -213,29 +214,15 @@ export const ago = (ms: number, now: number): string => {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const ran = await next(e)
-    await update($, here, () => e.cwd.split('/').filter(Boolean).pop() ?? 'chat')
+    await update($, here, () => e.cwd)
     const r = await findRoot($, e.cwd)
     if (r) await $.store.set('root', r)
-    await $.command.register({ name: 'projects', description: 'Show the workspace projects and open their chats', argumentHint: '[workspace folder]' })
-    await $.command.register({ name: 'threads', description: 'Make this chat a project coordinator: work runs in threads, shown in the Threads pane' })
-    const rel = r ? e.cwd.slice(r.length) : ''
-    if (r && /^\/central(\/|$)/.test(rel)) void $.ui.open({ id: PANE, title: 'Projects' })
-    const slug = rel.match(/^\/projects\/([^/]+)/)?.[1]
+    await $.command.register({ name: 'threads', description: 'Make this folder a project and this chat its coordinator: work runs in threads, shown in the Threads pane' })
+    // a new conversation at the root of a project folder carries on as its coordinator (not a thread it started)
+    const slug = r && r === e.cwd && (await isProject($, r)) ? (await isThread($) ? '' : base(r))
+      : (r ? e.cwd.slice(r.length) : '').match(/^\/projects\/([^/]+)/)?.[1]
     if (slug) { await update($, coord, () => slug); void $.ui.open({ id: THREADS, title: 'Threads' }) }
     return ran
-  })
-
-  on('command.run', { command: 'projects' }, async ($, e) => {
-    let arg = e.args.trim()
-    if (arg.startsWith('~')) arg = ((await $.env.get('HOME')) ?? '') + arg.slice(1)
-    if (arg) {
-      if (!arg.startsWith('/')) return { text: `Give the workspace folder as a full path, like ~/chief-of-staff.` }
-      const r = await findRoot($, arg)
-      if (!r) return { text: `No chief-of-staff workspace at ${arg}.` }
-      await $.store.set('root', r)
-    }
-    await $.ui.open({ id: PANE, title: 'Projects' })
-    return { text: 'Projects pane opened.' }
   })
 
   // An open with no ask behind it waits undrawn in a narrow window; the owner's message is an ask, so the
@@ -251,11 +238,52 @@ export const register: Register = on => {
   })
   // Any chat becomes a coordinator, as a claude.ai project chat is: the pane, the thread cards, and the rule
   // that long work runs in threads.
+  // /threads makes this conversation's folder a project (scripts/project.sh init: marker, board/, STATE.md,
+  // DECISIONS.md when new; registered in <plugin data>/projects) and the conversation its coordinator.
   on('command.run', { command: 'threads' }, async $ => {
-    if (!(await read($, coord))) { const h = await read($, here); await update($, coord, () => h || 'chat') }
+    const dir = await read($, here)
+    if (!dir) return { text: 'This chat has no folder to make a project. Open a chat in the project folder and run /threads there.' }
+    if (await isThread($)) return { text: 'This chat is a thread another chat started: run /threads in the project\'s own chat.' }
+    // inside a workspace of the older layout the folder belongs to it: the chat only becomes a coordinator
+    const ws = await findRoot($, dir)
+    if (ws && !(await isProject($, ws))) {
+      await $.store.set('root', ws)
+      await update($, coord, () => base(dir)); await update($, shut, () => false)
+      await $.ui.open({ id: THREADS, title: 'Threads' })
+      return { text: 'This chat is now the coordinator. Threads pane opened.', context: [COORDINATOR] }
+    }
+    const run = await $.process.run(['sh', `${$.plugin.root}/scripts/project.sh`, 'init', dir], { timeoutMs: 15000 })
+      .catch(x => ({ exitCode: 1, stdout: '', stderr: String((x as Error)?.message ?? x) }))
+    if (run.exitCode !== 0) return { text: `Couldn't make ${dir} a project: ${(run.stderr || run.stdout).trim().slice(0, 300) || 'project.sh failed'}. Fix that, then run /threads again.` }
+    const r = await findRoot($, dir)
+    if (r) await $.store.set('root', r)
+    await update($, coord, () => base(dir))
     await update($, shut, () => false)
     await $.ui.open({ id: THREADS, title: 'Threads' })
-    return { text: 'This chat is now the coordinator. Threads pane opened.', context: [COORDINATOR] }
+    return { text: `This chat is now the coordinator of ${base(dir)}. Threads pane opened.`, context: [COORDINATOR, panelAsk($.plugin.root, dir)] }
+  })
+
+  // In a project folder only the coordinator asks the owner or records the owner's OK; a thread it started runs in
+  // the same folder, so the hooks' folder check passes it, and this stops it
+  on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
+    const r = await root($)
+    if (r && (await isProject($, r)) && (await isThread($)))
+      return { deny: 'chief-of-staff: a thread does not ask the owner. Report the question to the coordinator, which asks the owner.' }
+    return next(e)
+  })
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const cmd = String((e as { command?: unknown }).command ?? '')
+    const r = await root($), dir = await read($, here)
+    if (r && ownerCommand(cmd) && (await isProject($, r)) && (await isThread($)))
+      return { deny: 'chief-of-staff: a thread does not record the owner\'s OK or register projects. Report it to the coordinator.' }
+    const ran = await next(e)
+    // new-project ends with project.sh init: the conversation at the new project's root becomes its coordinator
+    if (/project\.sh/.test(cmd) && dir && !(await read($, coord)) && (await findRoot($, dir)) === dir && (await isProject($, dir)) && !(await isThread($))) {
+      await $.store.set('root', dir)
+      await update($, coord, () => base(dir))
+      void $.ui.open({ id: THREADS, title: 'Threads' })
+    }
+    return ran
   })
 
   // A coordinator's thread brief carries its specialist's lines, as an Agent brief does (protocol.sh), and opens
@@ -263,9 +291,11 @@ export const register: Register = on => {
   on('tool.call', { tool: /start_session$/ }, async ($, e, next) => {
     const brief = (e as { prompt?: unknown }).prompt
     if (typeof brief !== 'string' || !brief.trim() || !(await read($, coord))) return next(e)
+    // the workspace's role cards, or the plugin's own (a project folder without specialists/)
     const r = await root($)
-    const cards = r && (await $.fs.exists(`${r}/specialists`))
-      ? (await $.fs.list(`${r}/specialists`)).filter(x => x.kind === 'file' && x.name.endsWith('.md')).map(x => x.name.slice(0, -3))
+    const sp = r && (await $.fs.exists(`${r}/specialists`)) ? `${r}/specialists` : `${$.plugin.root}/templates/specialists`
+    const cards = (await $.fs.exists(sp))
+      ? (await $.fs.list(sp)).filter(x => x.kind === 'file' && x.name.endsWith('.md')).map(x => x.name.slice(0, -3))
       : undefined
     const gap = briefGaps(brief, cards)
     if (gap) return { deny: `chief-of-staff: a thread starts with its specialist. Add to the brief ${gap}, then start it again.` }
@@ -284,7 +314,7 @@ export const register: Register = on => {
     const slug = await read($, coord), r = await root($)
     const [ts, asks, now] = await Promise.all([threads($).catch(() => [] as Thread[]), r && slug ? waitingOnOwner($, r, slug) : [], $.clock.now()])
     // under the threads, the project's memory and instructions, as the Projects side panel shows them
-    const p = r && slug ? (await projects($, r)).find(x => x.slug === slug) : undefined
+    const p = r && slug ? await project($, r, slug) : undefined
     const dc = p ? decisions(await $.fs.read(`${p.dir}/DECISIONS.md`).catch(() => '')).slice(-5) : []
     const instr = p ? (await $.fs.read(`${p.dir}/CLAUDE.md`).catch(() => '')).split('\n').slice(0, 30).join('\n') : ''
     const err = await read($, error)
@@ -369,88 +399,6 @@ export const register: Register = on => {
         </Box>
         {brief && <Text dimColor>{brief}</Text>}
         {id && <Button key={`open-${p.tool_use_id}`} plain onPress={() => void open()}>Open thread</Button>}
-      </Box>)
-  })
-
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Markdown } = $.ui.resolve(e)
-    const r = await root($)
-    if (!r) return (
-      <Box flexDirection="column"><Text bold>No workspace</Text>
-        <Text dimColor>Open a chat in your chief-of-staff folder once.</Text></Box>)
-    const list = await projects($, r)
-    const sel = await read($, view)
-    const p = list.find(x => x.slug === sel)
-    const b = await read($, busy), err = await read($, error)
-    const start = async (p: Project) => {
-      if (await read($, busy)) return
-      await update($, error, () => '')
-      await update($, busy, () => p.slug)
-      try {
-        const f = await $.prompt.fill({ text: newChatDraft(p) })
-        if (!f.isFilled) throw new Error('the prompt box is not available')
-      }
-      catch (x) { await update($, error, () => `Couldn't write the request: ${String((x as Error)?.message ?? x).slice(0, 160)}. Type it yourself: open a new chat in ${p.slug}.`) }
-      finally { await update($, busy, () => '') }
-    }
-
-    if (!p) {
-      const open = list.filter(x => !DONE.test(x.status)), done = list.filter(x => DONE.test(x.status))
-      // a project with no session in its own folder has no coordinator yet
-      let rows: any[] = []
-      try { rows = JSON.parse(text(await $.mcp.call('ccd_session_mgmt', 'list_sessions', { limit: 100 }))) } catch {}
-      const lone = open.filter(x => !rows.some(s => s.cwd === x.dir))
-      return (
-        <Box flexDirection="column" gap={1}>
-          {list.length === 0 && <Box flexDirection="column"><Text bold>No projects</Text><Text dimColor>Ask central for one.</Text></Box>}
-          {open.map(x => (
-            <Button key={`p-${x.slug}`} plain onPress={() => void update($, view, () => x.slug)}>
-              {x.slug} <Text dimColor>· {x.status}{x.next ? ` · next: ${x.next.slice(0, 80)}` : ''}</Text>
-            </Button>))}
-          {lone.length > 0 && <Box flexDirection="column">
-            <Text bold>No coordinator <Text dimColor>{lone.length}</Text></Text>
-            {lone.map(x => <Button key={`c-${x.slug}`} plain onPress={() => void start(x)}>{b === x.slug ? 'Writing…' : `Start ${x.slug}: chat`}</Button>)}
-            <Text dimColor>Writes the request below; press Enter to send it.</Text>
-          </Box>}
-          {err && <Text color="error">{err}</Text>}
-          {done.length > 0 && <Text dimColor>Done ({done.length}): {done.map(x => x.slug).join(', ')}</Text>}
-        </Box>)
-    }
-
-    const dc = decisions(await $.fs.read(`${p.dir}/DECISIONS.md`).catch(() => '')).slice(-5)
-    const cs = await chats($, p.dir, p.slug).catch(() => [] as Chat[])
-    const instr = (await $.fs.read(`${p.dir}/CLAUDE.md`).catch(() => '')).split('\n').slice(0, 30).join('\n')
-    // A chat opens in the main pane through the app's window tool, which serves only chats this
-    // conversation started (the ones New chat asked for here); any other is found in the sidebar group.
-    const show = async (c: Chat) => {
-      await update($, error, () => '')
-      try {
-        const r = await $.mcp.call('ccd_window', 'open_session_in', { session_id: c.id, target: 'focus' })
-        if (r.isError || /^Refused/.test(text(r))) throw new Error(text(r))
-      } catch (x) {
-        await update($, error, () => `Couldn't show "${c.title}" here: ${String((x as Error)?.message ?? x).slice(0, 120)}. Open it from the sidebar group ${p.slug}.`)
-      }
-    }
-    return (
-      <Box flexDirection="column" gap={1}>
-        <Box flexDirection="row" gap={1}>
-          <Button key="back" dimColor onPress={() => void update($, view, () => '')}>Back</Button>
-          <Text bold>{p.slug}</Text>
-        </Box>
-        {p.goal && <Text>{p.goal}</Text>}
-        <Button key="new" variant="primary" onPress={() => void start(p)}>{b ? 'Writing…' : 'New chat'}</Button>
-        <Text dimColor>Writes the request below; press Enter to send it.</Text>
-        {err && <Text color="error">{err}</Text>}
-        <Text bold>Memory</Text>
-        <Text dimColor>{p.status} · updated {p.updated || '-'}</Text>
-        {p.next && <Text>next: {p.next}</Text>}
-        {dc.map(d => <Text dimColor>- {d}</Text>)}
-        <Text bold>Chats</Text>
-        {cs.length === 0 && <Text dimColor>No chats yet</Text>}
-        {cs.map(c => (
-          <Button key={c.id} plain onPress={() => void show(c)}>{c.title} <Text dimColor>· {c.at}</Text></Button>))}
-        <Text bold>Instructions</Text>
-        <Markdown text={instr} />
       </Box>)
   })
 }

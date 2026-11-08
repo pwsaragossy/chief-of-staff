@@ -2,6 +2,6 @@ export type ProjectSlug = string
 
 declare module 'claude-code' {
   interface PluginState {
-    'chief-of-staff': { view: Shaped<ProjectSlug>; coord: Shaped<ProjectSlug>; busy: Shaped<ProjectSlug>; error: Shaped<string>; threadsShut: Shaped<boolean>; here: Shaped<string> }
+    'chief-of-staff': { coord: Shaped<ProjectSlug>; error: Shaped<string>; threadsShut: Shaped<boolean>; here: Shaped<string> }
   }
 }

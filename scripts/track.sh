@@ -13,7 +13,7 @@
 #   freezes them; the owner's delivery OK (track.sh ok <p> delivery, or an owner item in the delivery stage)
 #   runs the frozen check. verify <project_dir> runs it any time and keeps the result in .check-runs.
 # "| owner: ok" marks an item that closes only with the owner's OK, recorded in <project>/.owner-ok by
-#   track.sh ok <project_dir> <id> <the owner's words>   (central only; the hook asks the owner to approve it)
+#   track.sh ok <project_dir> <id> <the owner's words>   (the coordinator only; the hook asks the owner to approve it)
 # No TRACK.md: silent, exit 0 (old projects keep working).
 . "$(dirname "$0")/lib.sh"
 
@@ -240,12 +240,12 @@ check() {
     if [ -z "$tgt" ]; then echo "stage 1 is behind, but target: is empty in TRACK.md: write the number the work must reach, taken from the criteria, the metric or the raw material"
     elif [ -z "$chk" ]; then echo "check: is empty in TRACK.md: write the command that measures the target (exit 0 when met, the value on its last line), or 'none (why)'"
     else fz=$(frozen)
-      if [ -z "$fz" ]; then echo "target and check are not approved by the owner yet: put them on the project card in plain words (what is measured, the number, the command); central records the answer with track.sh ok <project> check"
+      if [ -z "$fz" ]; then echo "target and check are not approved by the owner yet: put them on the project card in plain words (what is measured, the number, the command); the coordinator records the answer with track.sh ok <project> check"
       elif [ "${fz%%"$TB"*}" != "$(tcsum)" ]; then echo "target or check changed since the owner approved them (${fz#*"$TB"}), or a file the check runs did: put the new ones on the project card for the owner"; fi
     fi
   fi
   if [ -n "$tcpending" ] && [ -z "$undelivered" ] && [ "$stages" -gt 0 ]; then
-    echo "the delivery is closed, but the owner's delivery OK with the check result is missing: put it on the project card; central records it with track.sh ok <project> delivery, which runs the check"
+    echo "the delivery is closed, but the owner's delivery OK with the check result is missing: put it on the project card; the coordinator records it with track.sh ok <project> delivery, which runs the check"
   fi
   # every stage needs a reviewer item, so no stage passes on the word of the agent that did the work
   printf '%s\n' "$rows" | awk -F "$US" '$1 == "S" { s[$2] = 1 } $1 == "I" && $5 == "reviewer" { r[$2] = 1 }
@@ -264,7 +264,7 @@ check() {
                 elif [ ! -s "$dir/$ev" ]; then echo "$id: evidence $ev is empty"; fi ;;
            esac; fi
            [ "$own" = ok ] && ! grep -q "^$id$(printf '\t')" "$OKF" 2>/dev/null &&
-             echo "$id closes only with the owner's OK: put the question on the project card; central records the answer with track.sh ok, which the owner approves"
+             echo "$id closes only with the owner's OK: put the question on the project card; the coordinator records the answer with track.sh ok, which the owner approves"
            for n in $(printf '%s' "$needs" | tr ',' ' '); do
              [ "$n" = - ] && continue
              case $(mark_of "$n") in
@@ -275,7 +275,7 @@ check() {
            done ;;
       -)   [ -n "$why" ] || echo "$id is marked not applicable without why: (the reason)"
            [ "$card" = reviewer ] && echo "$id is a reviewer item and cannot be marked not applicable: the independent reviewer closes it with a verdict file that judges every [-] of the stage"
-           [ "$own" = ok ] && echo "$id waits on the owner's OK and cannot be marked not applicable: only the owner drops it, through central" ;;
+           [ "$own" = ok ] && echo "$id waits on the owner's OK and cannot be marked not applicable: only the owner drops it, through the coordinator" ;;
       *)   echo "$id has the mark [$m]: use [ ] open, [x] done or [-] not applicable" ;;
     esac
   done
@@ -299,8 +299,13 @@ case $cmd in
         print "I\037" f[2] "\037" st "\037" f[4] "\037" f[5] "\037" f[6] "\037" desc[f[4]] } }' - "$t"
     ;;
   ok)
-    # the owner's OK on an item: only central records it, and the PreToolUse hook makes the owner approve the command
-    case ${CLAUDE_PROJECT_DIR:-$PWD} in */central|*/central/*) ;; *) echo "track.sh ok: only central records the owner's OK" >&2; exit 1 ;; esac
+    # the owner's OK on an item: only the coordinator records it (the session at the registered root of this very
+    # project folder; central in the older workspace layout), and the PreToolUse hook makes the owner approve it
+    _s=${CLAUDE_PROJECT_DIR:-$PWD}; _sr=$(cos_root "$_s"); _dr=$(cos_root "$dir")
+    if [ -n "$_sr" ] && cos_isproj "$_sr"; then
+      cos_owner "$_sr" "$_s" && [ "$(cd "$_sr" && pwd -P)" = "$(cd "$_dr" 2>/dev/null && pwd -P)" ] ||
+        { echo "track.sh ok: only the coordinator of this project (the owner's conversation at its folder's root) records the owner's OK" >&2; exit 1; }
+    else case $_s in */central|*/central/*) ;; *) echo "track.sh ok: only the coordinator records the owner's OK" >&2; exit 1 ;; esac; fi
     id=${3:-}; shift 3 2>/dev/null || { echo "usage: track.sh ok <project_dir> <item|check|delivery> <the owner's words>" >&2; exit 2; }
     case $id in
       check) [ -n "$has_tc" ] && [ -n "$tgt" ] && [ -n "$chk" ] || { echo "track.sh ok: write target: and check: in TRACK.md first" >&2; exit 1; } ;;
@@ -310,7 +315,7 @@ case $cmd in
     esac
     # a shared workspace: only the project's own member gives its OK
     case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) echo "track.sh ok: .owner-ok came from the team repo (git tracks it): remove it from git first (git rm --cached)" >&2; exit 1 ;; esac
-    mine || { echo "track.sh ok: this project is $(fm_get "$dir/STATE.md" member)'s; only their central records its OK" >&2; exit 1; }
+    mine || { echo "track.sh ok: this project is $(fm_get "$dir/STATE.md" member)'s; only their coordinator records its OK" >&2; exit 1; }
     w=$(printf '%s' "$*" | tr -d '\000-\037' | cut -c1-300); x=
     if [ "$id" = check ]; then x="${TB}freeze=$(tcsum)$({ wg merge-base HEAD '@{u}' || wg rev-parse -q --verify HEAD; } 2>/dev/null | head -n 1 | sed "s/^/$TB""head=/")"; _fl=$(tcfiles)
       echo "the owner approves the target '$tgt' and the command '$chk'${_fl:+, frozen with its files: $_fl}"
@@ -335,7 +340,7 @@ case $cmd in
     mine || { echo "verify: this project is $(fm_get "$dir/STATE.md" member)'s; only their own computer runs its check" >&2; exit 1; }
     # only a command the owner approved on this computer runs: .owner-ok never syncs, TRACK.md and STATE.md do
     fz=$(frozen); [ -n "$fz" ] && [ "${fz%%"$TB"*}" = "$(tcsum)" ] ||
-      { echo "verify: the owner has not approved this check on this computer, or it changed since: nothing runs until central records it with track.sh ok <project> check" >&2; exit 1; }
+      { echo "verify: the owner has not approved this check on this computer, or it changed since: nothing runs until the coordinator records it with track.sh ok <project> check" >&2; exit 1; }
     _s=$(teamsent) && { echo "verify: a teammate changed $_s in this project after the owner approved the check: nothing runs until the owner reads the change and approves again (track.sh ok <project> check)" >&2; exit 1; }
     runcheck; printf '%s\t%s\t%s\n' "$(date '+%F %H:%M')" "$rc" "$val" >> "$dir/.check-runs"
     echo "check: $res$([ "$rc" = 1 ] && echo " (target: $tgt)")"; [ "$rc" = 0 ] ;;
@@ -361,9 +366,9 @@ $rows
 EOF
     if [ -z "$undelivered" ]; then
       case $state in
-        delivered|done) if [ -n "$tcpending" ]; then echo "Not delivered yet: the delivery waits on the owner. Put the delivery OK on the project card; central runs the check (track.sh ok <project> delivery)."
+        delivered|done) if [ -n "$tcpending" ]; then echo "Not delivered yet: the delivery waits on the owner. Put the delivery OK on the project card; the coordinator runs the check (track.sh ok <project> delivery)."
           else echo "Delivered: the original request is done (DELIVERY.md, delivery line at stage $del). New work is a proposal on the project card unless the owner approved it."; fi ;;
-        *) echo "Delivery line reached (stage $del): before anything else, write DELIVERY.md and set STATE.md status: delivered.${tcpending:+ Then put the delivery OK of the owner on the project card: central runs the check (track.sh ok <project> delivery).}" ;;
+        *) echo "Delivery line reached (stage $del): before anything else, write DELIVERY.md and set STATE.md status: delivered.${tcpending:+ Then put the delivery OK of the owner on the project card: the coordinator runs the check (track.sh ok <project> delivery).}" ;;
       esac
       [ "$cur" -le "$del" ] && exit 0
     fi

@@ -11,11 +11,6 @@ Run it at the end of a session, and whenever the turn-end hook says the conversa
 context passed `rotate_tokens:` in `.chief-of-staff`, 140000 by default, or Claude Code compacted it). After
 a rotation, end the answer saying the work continues in a new session in this folder.
 
-**In central**, the steps below are replaced by one: rewrite `central/STATE.md` (`STATE-<member>.md` in a
-shared workspace; copy `${CLAUDE_PLUGIN_ROOT}/templates/central/STATE.md` when it is missing) as a snapshot
-of now: the work in flight and who has it, what was promised to the owner, the next action, and what was
-not verified. Set `updated:` and `next:`, and commit it. Project facts stay in each project's STATE.md.
-
 1. **Update `STATE.md` as a snapshot of now**, not a diary (history lives in git):
    - front matter: `updated` (now, `YYYY-MM-DD HH:MM`: the panel times the handoff from it, not from
      the file date a git pull resets), `next` (the next action in one line), `status`;
@@ -33,10 +28,10 @@ not verified. Set `updated:` and `next:`, and commit it. Project facts stay in e
    - `ready` only when the next action needs nobody (no owner decision, no money, no publishing,
      no irreversible step) and fits in one session;
    - `off` otherwise.
-3. **Update the card**: the file in `../../board/` whose front matter says `project: <this slug>`: `updated`, `status` (`waiting-owner` if any line waits on
+3. **Update the card**: the project's card in `board/` of the project folder (in the older workspace layout, the file in `../../board/` whose front matter says `project: <this slug>`): `updated`, `status` (`waiting-owner` if any line waits on
    the owner, else `in-progress`; a finished card is removed and its result goes in STATE.md).
    Keep each question's `(asked ...)` stamp as it is (the hook adds it; it times the oldest question)
-   and never rewrite `asked:`. Move done tasks and decided questions to `../../board/archive/` when the
+   and never rewrite `asked:`. Move done tasks and decided questions to `board/archive/` when the
    card passes ~60 lines. Record each decision taken this session with one command:
    `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" decide . "<decision>" "<who decided>"`. It appends the line; to
    replace or revoke a decision, edit `DECISIONS.md` by hand (that turn goes through the specialists).

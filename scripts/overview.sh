@@ -2,8 +2,14 @@
 # The whole picture as chat text, readable on a phone (Remote Control): what waits on the owner, what is due in 7
 # days, what changed in 24 hours, what is moving, and how much is stopped, across every board folder given.
 # Reads the cards' front matter in English or Portuguese (status/project/due/updated or status/projeto/prazo/
-# atualizado). Read-only. Usage: sh overview.sh <board folder>...
-[ $# -gt 0 ] || { echo "usage: sh overview.sh <board folder>..." >&2; exit 1; }
+# atualizado). Read-only. Usage: sh overview.sh <board folder>...   or   sh overview.sh --all (every registered project)
+if [ "${1:-}" = --all ]; then
+  # every registered project folder that still exists (project.sh list), one per line like the list itself
+  nl='
+'; set -f; IFS=$nl; set -- $(sh "$(dirname "$0")/project.sh" list | sed -n 's/^ok	\(.*\)$/\1\/board/p'); unset IFS; set +f
+  [ $# -gt 0 ] || { echo "No projects yet. Run /threads in a folder."; exit 0; }
+fi
+[ $# -gt 0 ] || { echo "usage: sh overview.sh <board folder>... | --all" >&2; exit 1; }
 now=$(date +%s); today=$(date +%F); soon=$(date -v+7d +%F 2>/dev/null || date -d '+7 days' +%F)
 for b in "$@"; do
   for f in "$b"/*.md; do [ -f "$f" ] || continue

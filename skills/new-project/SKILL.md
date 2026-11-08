@@ -1,12 +1,14 @@
 ---
 name: new-project
-description: Open a new project with the fixed playbook (opening questions, coherence check, registration, start with gates). Use in the central session when the owner says "new project", "I'm starting X", "what do we need for X?", or runs /chief-of-staff:new-project.
+description: Open a new project with the fixed playbook (opening questions, coherence check, registration, start with gates) in the folder of this conversation. Use when the owner says "new project", "I'm starting X", "what do we need for X?", or runs /chief-of-staff:new-project.
 ---
 
 # Open a new project (the playbook)
 
-Run this from `central/` only: central is the only session that
-creates projects.
+The project is the folder this conversation runs in (the owner opened it there, or asked for a new
+folder: create it and continue there). There is no hub folder above projects: this conversation becomes the
+project's coordinator at the end. `project.sh` is `${CLAUDE_PLUGIN_ROOT}/scripts/project.sh` (copy the
+literal path; the variable is not set in your shell).
 
 ## 0. Ambition first
 Run the `ambition` skill on the owner's request before asking anything: its final version answers
@@ -37,14 +39,16 @@ Write down whether the success criteria fit together and fit the investment (exa
 the owner to pick, in the same round of buttons if possible.
 
 ## 3. Registration
-1. Check for an existing project with the same subject or a similar name in `../projects/` and in
-   the central table. If one exists, stop and say so.
-2. Create `../projects/<slug>/` with `CLAUDE.md`, `STATE.md` and `DECISIONS.md` from
+1. Check for an existing project with the same subject or a similar name: `sh project.sh list`. If one
+   exists, stop and say so. If this folder already holds `.chief-of-staff`, it is a project already:
+   keep its files and fill only what is missing.
+2. In this folder, write `STATE.md` and `DECISIONS.md` (and `CLAUDE.md` only when the folder has none:
+   an existing `CLAUDE.md` is the owner's, never rewrite it) from
    `${CLAUDE_PLUGIN_ROOT}/templates/project/` (copy the literal path shown here), filling the
    `{{...}}` fields from the answers. Put the answers in STATE.md section 2.
-   Copy the chosen track to `../projects/<slug>/TRACK.md`. Set `delivery:` to the stage that
+   Copy the chosen track to `TRACK.md`. Set `delivery:` to the stage that
    delivers what the owner asked for (the success answer): that is the planned end. Then run
-   `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" baseline ../projects/<slug>` once, which records how
+   `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" baseline "$PWD"` once, which records how
    many items the map had at opening, so the panel shows how much was added later. When the project
    has a deadline, write it in TRACK.md as `deadline: YYYY-MM-DD HH:MM` in local time: the panel
    counts down, turns yellow under 6 hours and red under 2 hours while the delivery is open. With a
@@ -57,27 +61,26 @@ the owner to pick, in the same round of buttons if possible.
    `[-]` with `why:` instead of deleting it, so the reviewer sees it.
    Before the baseline, close the `blind-spots` item, so the owner sees what they do not know of each
    area while the plan is still cheap to change:
-   - Pick from `ROUTING.md` every role card whose area the project touches, the ones the owner never
+   - Pick from `ROUTING.md` (the folder's own, else `${CLAUDE_PLUGIN_ROOT}/templates/ROUTING.md`) every role card whose area the project touches, the ones the owner never
      mentioned included (law, money and security are the usual gaps); usually three to five.
    - Brief each as a specialist (`specialists` skill): "What does a senior in your area check at the
      opening of a project like this that the owner's answers do not cover? At most five items, each
      with what, why it matters for this project, the cost of skipping it, and the stage it lands in."
    - The reviewer merges the lists, drops duplicates and anything not tied to this project, and writes
-     `../projects/<slug>/OPENING.md`.
+     `OPENING.md`.
    - An item that the law, security or the owner's money makes mandatory goes straight onto TRACK.md.
      Ask the owner about the rest in one round of buttons (several choices allowed, the ones you
      recommend first): accepted ones go onto TRACK.md as items with their card, declined ones as one
      line each in DECISIONS.md (`declined at opening: <item>`), so nobody proposes them again.
    - Mark `blind-spots` `[x]` with `evidence: OPENING.md`.
-   For a team project, from its folder: `CLAUDE_PROJECT_DIR=<absolute path of ../projects/<slug>> sh
-   "${CLAUDE_PLUGIN_ROOT}/scripts/library.sh" use <team>` (the owner confirms; never write `.library` by hand).
-3. Create the card `../board/<Project name>.md` from `${CLAUDE_PLUGIN_ROOT}/templates/board/card.md`,
-   with `owner` set to the project session (for example `session-<slug>`), never the owner.
-   In a shared workspace (`shared: yes` in `.chief-of-staff`), set `member:` in the card and in
-   STATE.md to this person's name (`git config cos.member`), so the team board shows whose it is.
-4. Add one line to the project table in `central/CLAUDE.md` (not in a shared workspace: there the
-   briefing and the panel list every project, and a shared table would clash between teammates).
-5. Commit only these files.
+3. Make the folder a project: `sh project.sh init "$PWD"` (absolute path). It adds the marker,
+   `board/Inbox.md` and whatever of STATE.md and DECISIONS.md is still missing, and registers the
+   folder in the plugin's project list, so the global panel shows it. This conversation becomes the
+   coordinator: the Threads pane opens beside it.
+4. Create the card `board/<Project name>.md` from `${CLAUDE_PLUGIN_ROOT}/templates/board/card.md`,
+   with `owner` set to `coordinator`, never the owner. With `shared: yes` in `.chief-of-staff`, set
+   `member:` in the card and in STATE.md to this person's name (`git config cos.member`).
+5. If the folder is a git repository, commit only these files.
 
 ## 4. Start
 The stages and their minimum deliverables are in TRACK.md; a hook stops any session that moves
@@ -85,10 +88,5 @@ The stages and their minimum deliverables are in TRACK.md; a hook stops any sess
 proof file. Add project-specific deliverables to TRACK.md in the same format. At each gate the
 decision is one of: continue, stop, pause, redo.
 
-Then start the project's coordinator yourself; never send the owner to open a folder. One
-`start_session` call (`mcp__ccd_session__start_session`, loaded with ToolSearch if deferred):
-`initiation: "user_asked"` (the owner asked for the project), `context: "fresh"`, `cwd` the absolute
-path of `../projects/<slug>`, `use_worktree: false`, `title: "<slug>: chat"`, and a prompt that says it
-is the project's coordinator and that its first step is the arrival steps in its CLAUDE.md. Keep it
-linked (never detach it): the sidebar shows it under central, and its threads under it. Tell the owner
-in one line that the project's chat is open, with its link.
+Then open the project's web panel (the `panel` skill, in this folder) and tell the owner in one line
+that this conversation is the project's coordinator and the panel is open.

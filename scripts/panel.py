@@ -65,7 +65,7 @@ def rows(text):
 PROGRESS = re.compile(r"^\s*[-*] \**((\d{4}-\d{2}-\d{2})?\s*(\d{1,2}:\d{2})?)(?: ?[A-Z]{2,4})?(?: check)?\**\s*\(([^)]{1,80})\):\s*(.+)$")
 
 
-def progress(root, slug, keep=3):
+def progress(root, slug, keep=3, every=False):
     """The latest progress line of each open card of a project, newest card first, so the panel moves
     before a whole track item closes. ponytail: a line without a date counts as the card's updated: day."""
     out = []
@@ -77,7 +77,7 @@ def progress(root, slug, keep=3):
     for n in names:
         path = os.path.join(board, n)
         fm = front_matter(path)
-        if fm.get("project") != slug or fm.get("status", "") in ("done", "closed", "cancelled", "dropped"):
+        if (not every and fm.get("project") != slug) or fm.get("status", "") in ("done", "closed", "cancelled", "dropped"):
             continue
         try:
             with open(path, encoding="utf-8", errors="replace") as f:
@@ -142,7 +142,7 @@ def tasks(root):
 def libraries(root):
     """Every library (personal and each team's): name, folder, state, notes, last sync."""
     out = []
-    for line in rows(sh("library.sh", "libs", cwd=os.path.join(root, "central"))):
+    for line in rows(sh("library.sh", "libs", cwd=os.path.join(root, "central") if os.path.isdir(os.path.join(root, "central")) else root)):
         f = line.split("\t")
         if len(f) >= 5:
             out.append({"name": f[0], "path": f[1], "state": f[2], "notes": f[3], "sync": f[4],
@@ -241,12 +241,13 @@ CONTROL = {"STATE.md", "TRACK.md", "CLAUDE.md", "DELIVERY.md", "DECISIONS.md"}
 SKIPDIRS = {".git", "node_modules", "__pycache__", ".venv"}
 
 
-def files(root, view, slug, cap=200):
+def files(root, view, slug, cap=200, pdir=None):
     """The project's own files (control files and dotfiles left out), newest first, each with who changed it
     last, how long ago (seconds) and how many versions git holds. History comes from this computer's branch and
     the team's (HEAD and its upstream), never from other refs a teammate could push. A file git never saw has
     versions 0, no author and its modification time."""
-    pdir = os.path.join(view, "projects", slug)
+    own = pdir is not None   # a project folder: the folder itself, its git paths from its own top
+    pdir = pdir or os.path.join(view, "projects", slug)
     if os.path.islink(pdir) or not os.path.isdir(pdir):   # a linked project folder points outside the workspace
         return []
     found = []
@@ -259,15 +260,17 @@ def files(root, view, slug, cap=200):
                 found.append(rel)
         if len(found) >= 2000:   # a huge tree is not walked to the end on every refresh
             break
-    refs = ["HEAD"]
+    refs, pre = ["HEAD"], ""
     try:
         if subprocess.run(["git", "-C", root, "rev-parse", "-q", "--verify", "@{u}"], capture_output=True, timeout=5).returncode == 0:
             refs.append("@{u}")
         out = subprocess.run(["git", "-C", root, "log", "-z", "--name-only", "--format=\x1e%an\x1f%ct", *refs,
-                              "--", ":(literal)projects/" + slug], capture_output=True, timeout=10).stdout.decode("utf-8", "replace")
+                              "--", ":(literal)" + ("." if own else "projects/" + slug)], capture_output=True, timeout=10).stdout.decode("utf-8", "replace")
+        if own:   # git names paths from the repository's top, which may sit above the project folder
+            pre = subprocess.run(["git", "-C", root, "rev-parse", "--show-prefix"], capture_output=True, text=True, timeout=5).stdout.strip()
     except (subprocess.TimeoutExpired, OSError):
         out = ""
-    seen, pre = {}, "projects/" + slug + "/"
+    seen, pre = {}, (pre if own else "projects/" + slug + "/")
     for block in out.split("\x1e")[1:]:   # "<author>\x1f<time>\0\n<path>\0<path>\0..." per commit
         head, _, body = block.partition("\0")
         who, _, ts = head.partition("\x1f")
@@ -386,15 +389,31 @@ def sync_color(text):
     return "red" if ("conflict" in text or "failed" in text) else "yellow" if ("never" in text or "busy" in text) else "green"
 
 
-def snapshot(root, libname="personal", fetch=False):
+def is_project(root):
+    """A project folder: its marker says kind: project (project.sh init). Else the older workspace layout."""
+    try:
+        with open(os.path.join(root, ".chief-of-staff"), encoding="utf-8", errors="replace") as f:
+            return "kind: project" in f.read().split("\n")
+    except OSError:
+        return False
+
+
+def registered():
+    """Every project folder the owner registered (/threads, new-project): <plugin data>/projects, through project.sh."""
+    return [l.split("\t", 1)[1] for l in rows(sh("project.sh", "list")) if "\t" in l]
+
+
+def root_projects(root, fetch):
+    """The projects, cards and tasks of one root: a project folder (one project), or a workspace (projects/<slug>)."""
     view, source = team_view(root, fetch)   # projects, cards and tasks as the team sees them; library and log stay local
+    own = is_project(root)
     projects = []
     for line in rows(sh("health.sh", view)):
         f = (line.split(US) + [""] * 18)[:18]
         slug, color, reason, stage, stages, closed, total, delivery, delivered, baseline, baseline_delivery, deadline, member, target, check, runs, why, out = f
         # every reason, red first, each "red <text>" or "yellow <text>"; an older health.sh gives only the first
         reasons = [{"color": r.split(" ", 1)[0], "text": r.split(" ", 1)[1]} for r in why.split("\x1e") if r.split(" ", 1)[0] in ("red", "yellow") and " " in r]
-        pdir = os.path.join(view, "projects", slug)
+        pdir = view if own else os.path.join(view, "projects", slug)
         stage_names, items = [], []
         for row in rows(sh("track.sh", "items", pdir)):
             r = row.split(US)
@@ -412,35 +431,55 @@ def snapshot(root, libname="personal", fetch=False):
             "stage_names": stage_names, "items": items,
             "brief": " ".join(l for l in rows(sh("track.sh", "brief", pdir)) if not l.startswith("Target: ")).strip().split(" Waiting on prerequisites:")[0],
             "next": front_matter(os.path.join(pdir, "STATE.md")).get("next", ""),
-            "progress": progress(view, slug),
+            "progress": progress(view, slug, every=own),
             "reasons": reasons or ([{"color": color, "text": reason}] if color != "green" else []),
-            "outside": outside(out), "decisions": decisions(pdir), "files": files(root, view, slug),
+            "outside": outside(out), "decisions": decisions(pdir), "files": files(root, view, slug, pdir=pdir if own else None),
         })
-    libs = libraries(root)
-    if libname not in [x["name"] for x in libs]:
-        libname = "personal"
-    lib = library(root, libname)
-    lib["name"] = libname
-    rank = {"red": 2, "yellow": 1, "green": 0}
-    projects.sort(key=lambda p: -rank.get(p["color"], 0))   # worst first (stable): a red project is on the first screen
-    overall = max([p["color"] for p in projects] + [lib["color"]], key=lambda c: rank.get(c, 0))
-
-    todo = tasks(view)
     cards = []  # what waits on the owner, from health.sh (the one place that times and colors it)
     for line in rows(sh("health.sh", "cards", view)):
         f = (line.split(US) + [""] * 14)[:14]
         if f[0] == "C" and f[3] == "waiting-owner":
             qs, ages = f[10].split("\x1e"), f[13].split("\x1e")  # ages: minutes per question, empty when unstamped
-            cards.append({"title": f[1], "project": f[2], "member": f[4], "color": f[5], "waited": int(f[6] or 0),
+            cards.append({"title": f[1], "project": f[2] or (os.path.basename(root) if own else ""), "member": f[4], "color": f[5], "waited": int(f[6] or 0),
                           "limit": f[7], "questions": [q for q in qs if q], "deputy": f[11], "size": f[12],
                           "ages": [int(a) if i < len(ages) and (a := ages[i]).isdigit() else None for i, q in enumerate(qs) if q]})
+    return projects, cards, tasks(view), source
+
+
+def snapshot(roots, libname="personal", fetch=False):
+    """The panel's data for one root (a project folder, or an older workspace) or several (the global panel: every
+    registered project folder). A registered folder that is gone shows as a grey row, never breaks the rest."""
+    roots = [roots] if isinstance(roots, str) else list(dict.fromkeys(roots))
+    projects, cards, todo, source, here = [], [], [], None, []
+    for r in roots:
+        if not os.path.isdir(r) or not find_root(r):
+            projects.append({"slug": os.path.basename(r.rstrip("/")) or r, "color": "gray", "reason": "Folder not found", "path": r,
+                             "reasons": [], "items": [], "stage_names": [], "outside": [], "decisions": [], "files": [], "progress": [],
+                             "total": "", "next": "", "member": "", "target": "", "deadline": None, "delivered": False})
+            continue
+        r = find_root(r)
+        here.append(r)
+        p, c, t, src = root_projects(r, fetch)
+        projects += p; cards += c; todo += t; source = source or src
+    root = here[0] if here else None   # the library, the log and the team state come from the first folder that exists
+    libs = libraries(root) if root else []
+    if libname not in [x["name"] for x in libs]:
+        libname = "personal"
+    lib = library(root, libname) if root else {"state": "error", "path": "", "message": "No project yet, so no library to show.",
+                                              "color": "green", "nodes": [], "edges": [], "problems": [], "dangling": [], "stale": [], "pairs": []}
+    lib["name"] = libname
+    rank = {"red": 2, "yellow": 1, "green": 0, "gray": 0}
+    projects.sort(key=lambda p: -rank.get(p["color"], 0))   # worst first (stable): a red project is on the first screen
+    overall = max([p["color"] for p in projects] + [lib["color"]], key=lambda c: rank.get(c, 0))
 
     # the last 24 h of the protocol log, as three counts: turns, turns that broke the protocol, notes rejected
-    try:
-        with open(os.path.join(root, ".protocol.log"), encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()[-2000:]
-    except OSError:
-        lines = []
+    lines = []
+    for r in here:
+        try:
+            with open(os.path.join(r, ".protocol.log"), encoding="utf-8", errors="replace") as f:
+                lines += f.readlines()[-2000:]
+        except OSError:
+            pass
     last, since = {}, time.time() - 86400
     for line in lines:  # keep the last line of each turn (after any push)
         kv = dict(p.split("=", 1) for p in line.split() if "=" in p)
@@ -452,11 +491,11 @@ def snapshot(root, libname="personal", fetch=False):
     inbox = os.path.join(lib["path"], "inbox")
     n_inbox = len([n for n in os.listdir(inbox) if not n.startswith(".")]) if os.path.isdir(inbox) else 0
     n_notes = lib.get("total", 0)
-    sh_ws = shared(root)
+    sh_ws = shared(root) if root else None
     rank_c = [c["color"] for c in cards] + [x["sync_color"] for x in libs] + ([sh_ws["color"]] if sh_ws else [])
     overall = max([overall] + rank_c, key=lambda c: rank.get(c, 0))
     return {"library": lib, "libs": libs, "workspace": root, "overall": overall, "projects": projects, "cards": cards, "tasks": todo, "source": source,
-            "counts": counts, "shared": sh_ws, "held": held(root),
+            "counts": counts, "shared": sh_ws, "held": held(root) if root else [],
             "inbox": n_inbox, "notes": n_notes, "time": time.strftime("%H:%M:%S")}
 
 
@@ -481,7 +520,7 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 48px}
 h1{font-size:22px;margin:0}h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:28px 0 10px}
 .top{display:flex;align-items:center;gap:12px}.muted{color:var(--muted);font-size:13px}
 .dot{width:12px;height:12px;border-radius:50%;flex:none;display:inline-block}
-.green{background:var(--green)}.yellow{background:var(--yellow)}.red{background:var(--red)}
+.green{background:var(--green)}.yellow{background:var(--yellow)}.red{background:var(--red)}.gray{background:var(--edge)}
 .box{background:var(--card);border:1px solid var(--line);border-radius:12px}
 .row{display:flex;gap:12px;padding:14px 16px;border-top:1px solid var(--line);align-items:flex-start}.row:first-child{border-top:0}
 .row .dot{margin-top:5px}.grow{flex:1;min-width:0}.name{font-weight:600}
@@ -832,10 +871,10 @@ function render(){
     ws.append(" ",p)}
   document.getElementById("fetch").hidden=!d.source;
   const P=document.getElementById("projects");
-  if(!d.projects.length)empty(P,"No projects");else P.replaceChildren(...d.projects.map(p=>{
+  if(!d.projects.length)empty(P,"No projects yet. Run /threads in a folder.");else P.replaceChildren(...d.projects.map(p=>{
     const row=el("div","row"),body=el("div","grow");row.append(el("span","dot "+p.color),body);
     body.append(el("div","name",p.slug+(p.member?" · "+p.member:"")));
-    const rs=p.reasons||[];if(rs.length<2)body.append(el("div","",p.reason));
+    const rs=p.reasons||[];if(rs.length<2)body.append(el("div","",p.reason));if(p.path)body.append(el("div","muted",p.path));
     else{const li=r=>{const x=el("li");x.append(el("span","dot "+r.color),el("span","",r.text));return x},u=el("ul","why");  // every reason, worst first
       rs.slice(0,3).forEach(r=>u.append(li(r)));
       if(rs.length>3){const m=el("details"),w=el("ul","why");m.append(el("summary","",(rs.length-3)+" more reason(s)"));rs.slice(3).forEach(r=>w.append(li(r)));m.append(w);const lm=el("li");lm.append(m);u.append(lm)}
@@ -917,6 +956,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
     root = token = None
     timeout = 30  # a client that stalls mid-request frees its thread instead of holding it forever
 
+    def roots(self):
+        """One folder (a project, or an older workspace), or every registered project (the global panel), read anew
+        on each request so a project /threads adds shows without a restart."""
+        return [self.root] if self.root else registered()
+
     def log_message(self, *a):
         pass
 
@@ -958,7 +1002,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.reply("text/html; charset=utf-8", PAGE.replace("<style>", '<style nonce="%s">' % n, 1).replace("<script>", '<script nonce="%s">' % n, 1).encode(), n)
         elif path == "/api":
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            self.reply("application/json", json.dumps(snapshot(self.root, (q.get("lib") or ["personal"])[0])).encode())
+            self.reply("application/json", json.dumps(snapshot(self.roots(), (q.get("lib") or ["personal"])[0])).encode())
         else:
             self.deny(404, "Not found.")
 
@@ -967,7 +1011,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if urllib.parse.urlparse(self.path).path == "/fetch":
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            return self.reply("application/json", json.dumps(snapshot(self.root, (q.get("lib") or ["personal"])[0], fetch=True)).encode())
+            return self.reply("application/json", json.dumps(snapshot(self.roots(), (q.get("lib") or ["personal"])[0], fetch=True)).encode())
         if urllib.parse.urlparse(self.path).path != "/import":
             return self.deny(404, "Not found.")
         try:
@@ -988,7 +1032,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.deny(400, "Nothing to save: choose a file or paste a link.")
             data = ("---\nsource: %s\nreceived: %s\nvia: panel\n---\n" % (text.splitlines()[0][:300], time.strftime("%Y-%m-%d"))
                     + text + "\n").encode()
-        where = rows(sh("library.sh", "where", cwd=self.root))
+        base = next((r for r in self.roots() if os.path.isdir(r) and find_root(r)), None)
+        if not base:
+            return self.deny(503, "No project yet: run /threads in a folder first.")
+        where = rows(sh("library.sh", "where", cwd=base))
         if len(where) != 1:
             return self.deny(503, where[1] if len(where) > 1 else "The library is not reachable.")
         inbox = os.path.join(where[0], "inbox")
@@ -1004,10 +1051,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 def main():
     if len(sys.argv) < 2:
-        sys.exit("usage: python3 panel.py <workspace> [port]")
-    root = find_root(sys.argv[1])
-    if not root:
-        sys.exit("No chief-of-staff workspace at %s. Run /chief-of-staff:setup first." % sys.argv[1])
+        sys.exit("usage: python3 panel.py <project folder> | --all [port]")
+    root = None if sys.argv[1] == "--all" else find_root(sys.argv[1])
+    if sys.argv[1] != "--all" and not root:
+        sys.exit("No project at %s. Run /threads in that folder first." % sys.argv[1])
     Handler.root, Handler.token = root, secrets.token_urlsafe(18)
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[2]) if len(sys.argv) > 2 else 0), Handler)
     print("Panel: http://127.0.0.1:%d/?t=%s" % (srv.server_address[1], Handler.token), flush=True)

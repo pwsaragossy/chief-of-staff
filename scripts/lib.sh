@@ -25,6 +25,35 @@ cos_root() {
   done
   return 1
 }
+# cos_data -> the plugin's data folder: CLAUDE_PLUGIN_DATA in a hook; in a shell the model runs (where it is not set),
+# derived from where the plugin is installed (<claude>/plugins/cache/<marketplace>/<plugin>/<version>/scripts ->
+# <claude>/plugins/data/<plugin>-<marketplace>); else ~/.cache/chief-of-staff (a copy run from a checkout)
+cos_data() {
+  [ -n "${CLAUDE_PLUGIN_DATA:-}" ] && { printf '%s\n' "$CLAUDE_PLUGIN_DATA"; return; }
+  _h=$(cd "$(dirname "$0")" 2>/dev/null && pwd -P)
+  case $_h in */plugins/cache/?*/?*/?*/scripts) _v=${_h%/scripts}; _p=${_v%/*}; _m=${_p%/*}
+    printf '%s/data/%s-%s\n' "${_m%/cache/*}" "${_p##*/}" "${_m##*/}" ;;
+    *) printf '%s\n' "$HOME/.cache/chief-of-staff" ;; esac
+}
+# A project folder: the folder the owner creates, its own root, marker line "kind: project" (project.sh init).
+# The older layout, a workspace with central/ and projects/<slug>/, stays until its projects move out
+cos_isproj() { grep -qx 'kind: project' "$1/.chief-of-staff" 2>/dev/null; }
+# cos_pdirs ROOT -> the project folders of ROOT, one per line: ROOT itself, or each projects/<slug> with a STATE.md
+cos_pdirs() { if cos_isproj "$1"; then printf '%s\n' "$1"; else for _s in "$1"/projects/*/STATE.md; do [ -f "$_s" ] && printf '%s\n' "${_s%/STATE.md}"; done; fi; }
+# cos_pdir ROOT SLUG -> the folder of project SLUG of ROOT
+cos_pdir() { if cos_isproj "$1"; then printf '%s\n' "$1"; else printf '%s/projects/%s\n' "$1" "$(printf '%s' "$2" | tr -cd 'A-Za-z0-9._-')"; fi; }
+# cos_proj ROOT DIR -> "slug<TAB>folder" of the project a session in DIR works in; nothing outside a project
+cos_proj() {
+  if cos_isproj "$1"; then printf '%s\t%s\n' "${1##*/}" "$1"; return; fi
+  _r=${2#"$1"}; _r=${_r#/}
+  case $_r in projects/?*) _r=${_r#projects/}; _r=${_r%%/*}; printf '%s\t%s/projects/%s\n' "$_r" "$1" "$_r" ;; esac
+}
+# cos_registered DIR -> true when DIR (its real path) is in <plugin data>/projects, the list project.sh init keeps
+cos_registered() { _d=$(cd "$1" 2>/dev/null && pwd -P) && grep -Fxq "$_d" "$(cos_data)/projects" 2>/dev/null; }
+# cos_owner ROOT DIR -> true when a session in DIR is a project's coordinator, the one that asks the owner and records
+# the owner's OK: DIR is the root of a project folder, and that folder is registered. A subfolder, a worktree that
+# carries its own marker, or a marker planted anywhere else is not. (Threads in the same folder: hooks/projects.tsx)
+cos_owner() { [ "$1" = "$2" ] && cos_isproj "$1" && cos_registered "$1"; }
 # cos_anyshared DIR -> true when any workspace marker above DIR says shared: yes. The owner-OK guards use it, not the
 # root's marker alone: a marker planted inside a project (a hand pull) would otherwise read as an unshared workspace
 cos_anyshared() {
@@ -70,6 +99,8 @@ fm_set() {
 # 3 when the line is not one absolute path.
 cos_lib() {
   _l=$(sed -n 's/^library: *//p' "$1/.chief-of-staff" 2>/dev/null | head -n 1)
+  # a project folder uses the owner's one library, <plugin data>/library (project.sh library); none set: offline
+  [ -n "$_l" ] || ! cos_isproj "$1" || { _l=$(head -n 1 "$(cos_data)/library" 2>/dev/null); [ -n "$_l" ] || { printf '%s\n' "$1/knowledge"; return 1; }; }
   [ -n "$_l" ] || { printf '%s\n' "$1/knowledge"; return 0; }
   printf '%s\n' "$_l"
   case $_l in /*) ;; *) return 3 ;; esac

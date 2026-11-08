@@ -17,7 +17,7 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
   claude.ai. Ask the owner's decisions here (scope, money, names, public or private, turning automation
   on): buttons, all at once, recommendation first. A decision that waits while the owner is away (a thread
   or an unattended run hit it) is one line on this project's card in `../../board/` with
-  `status: waiting-owner`; the Threads pane shows it under Waiting on you, and central asks it too.
+  `status: waiting-owner`; the Threads pane shows it under Waiting on you, and the coordinator asks it.
 - **Threads, as a project on claude.ai runs them.** Decide per message:
   - A quick question or one small edit: answer here.
   - New work that runs long, in parallel, or needs its own context (a build, a spike, a review, a piece of

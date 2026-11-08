@@ -53,7 +53,7 @@ clean() { tr -d '\000-\037' | cut -c1-200; }
 cards() {
   # one pass over the board (cos_board); values come back without control characters, at most 200 characters
   cos_board "$root" | while IFS=$US read -r c cm cp cs ca dr nq nu sp nl nb lg q qs; do
-    t="$root/projects/$(printf '%s' "$cp" | tr -cd 'A-Za-z0-9._-')/TRACK.md"
+    t="$(cos_pdir "$root" "$cp")/TRACK.md"
     lim=$(fm_get "$t" owner_wait_minutes); case $lim in ''|*[!0-9]*) lim=60 ;; esac
     col=green; w=; esc=
     if [ "$cs" = waiting-owner ]; then
@@ -84,7 +84,10 @@ EOS
 [ $mode = cards ] && { cards; exit 0; }
 allcards=$(cards)
 
-for s in "$root"/projects/*/STATE.md; do
+# a project folder is one project; a workspace has one per projects/<slug>. Its cards: every card of a project
+# folder's own board, or those whose project: names it
+pall=; if cos_isproj "$root"; then set -- "$root/STATE.md"; pall=1; else set -- "$root"/projects/*/STATE.md; fi
+for s in "$@"; do
   [ -f "$s" ] || continue
   d=$(dirname "$s"); p=$(basename "$d")
   color=; reason=; reds=; yels=; outside=
@@ -128,7 +131,7 @@ for s in "$root"/projects/*/STATE.md; do
     [ "${fr%%	*}" = 0 ] && yellow "target met on the first run: not a hard target, raise it with the owner"
   fi
   while IFS=$US read -r k cn cp cs cm cc cw cl cd cdl cq cesc cbig _ages; do
-    [ "$k" = C ] && [ "$cp" = "$p" ] || continue
+    [ "$k" = C ] && { [ -n "$pall" ] || [ "$cp" = "$p" ]; } || continue
     if [ "$cs" = waiting-owner ]; then
       if [ -n "$cesc" ]; then red "a question has waited $(cos_ago "$cw") with the deadline under 3 h: escalate it to the deputy, $cesc: $cn"
       elif [ "$cc" = red ]; then red "a question has waited on the owner for $(cos_ago "$cw") (limit $cl min): $cn"

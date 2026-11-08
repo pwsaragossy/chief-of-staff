@@ -2,7 +2,7 @@
 # The setup skill's two steps, as a script so they are tested.
 #   setup.sh detect
 #       where the company library could live on this computer, best first. One line per place:
-#       "<label><TAB><folder><TAB><why>"; the folder "(workspace)/knowledge" means inside the workspace.
+#       "<label><TAB><folder><TAB><why>"; every folder is absolute (project.sh library takes it as is).
 #   setup.sh create <workspace> [--library <folder>] [--join <git-url>] [--backup]
 #       creates the workspace; --library puts the personal library in that folder instead of
 #       <workspace>/knowledge; --join connects a team library (library.sh join: an empty repo starts one);
@@ -25,7 +25,7 @@ detect)
     find "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents" -maxdepth 2 -type d -name .obsidian 2>/dev/null; } |
     while IFS= read -r o; do v=$(dirname "$o")
       printf 'Obsidian vault "%s"\t%s/Company library\tyou already read your notes there\n' "$(basename "$v")" "$v"; done)
-  inside=$(printf 'Inside the workspace\t(workspace)/knowledge\tone folder and one git repo: the simplest backup')
+  inside=$(printf 'On this computer\t%s/Company library\tone plain folder in your home; back it up with git or Time Machine' "$HOME")
   if [ "$(printf '%s' "$vaults" | grep -c .)" = 1 ]; then printf '%s\n%s\n' "$vaults" "$inside"
   else printf '%s\n' "$inside"; [ -n "$vaults" ] && printf '%s\n' "$vaults"; fi
   d="$HOME/Library/Mobile Documents/com~apple~CloudDocs"

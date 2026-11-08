@@ -33,6 +33,8 @@ case $in in *'"hook_event_name":"PostToolUse"'*)
         case $_m in library:*) _p=${_m#library:} ;; "team: "*) _p=${_m#team: }; _p=${_p#* } ;; *) continue ;; esac
         while :; do case $_p in " "*) _p=${_p# } ;; *) break ;; esac; done
         case $_p in /?*) case $in in *"$_p"*) hit=1 ;; esac ;; esac; done < "$root/.chief-of-staff"
+      # a project folder's library is the owner's one library, named in <plugin data>/library
+      [ -z "$hit" ] && cos_isproj "$root" && _p=$(head -n 1 "$DATA/library" 2>/dev/null) && case $_p in /?*) case $in in *"$_p"*) hit=1 ;; esac ;; esac
       [ -n "$hit" ] || exit 0 ;; esac ;; esac ;; esac
 rel=${CLAUDE_PROJECT_DIR:-$PWD}; rel=${rel#"$root"}; rel=${rel#/}
 # the session's library (its project's, or personal) and its state; lst != 0: offline or misconfigured (library.sh where)
@@ -76,7 +78,12 @@ realp() { d=$1 r=; k=0
   while [ -L "$d" ] && [ $k -lt 20 ]; do t=$(readlink "$d"); case $t in /*) d=$t ;; *) d=${d%/*}/$t ;; esac; k=$((k+1)); done   # a symlinked file
   while [ ! -d "$d" ]; do r="/${d##*/}$r"; d=${d%/*}; [ -n "$d" ] || d=/; done
   case $r in */..|*/../*|*/.|*/./*) return 0 ;; esac; printf '%s%s' "$(cd "$d" && pwd -P)" "$r"; }
-case $rel in projects/?*) project=${rel#projects/}; project=${project%%/*} ;; *) project= ;; esac
+# the project this session works in (lib.sh cos_proj): the project folder itself, or projects/<slug> of a workspace
+project=; pdir=; _pp=$(cos_proj "$root" "${CLAUDE_PROJECT_DIR:-$PWD}"); [ -n "$_pp" ] && { project=${_pp%%"$TAB"*}; pdir=${_pp#*"$TAB"}; }
+# the role cards: the workspace's own, or the plugin's (a project folder without specialists/, or a folder listed in everywhere)
+SPEC=$root/specialists; [ -d "$SPEC" ] || SPEC=$(cd "$(dirname "$0")/../templates/specialists" && pwd -P)
+# who records the owner's OK: the coordinator of a project folder, or central in the older workspace layout
+isowner() { if cos_isproj "$root"; then cos_owner "$root" "${CLAUDE_PROJECT_DIR:-$PWD}"; else case $rel in central|central/*) return 0 ;; esac; return 1; fi; }
 
 # Flat JSON field (hook input is compact JSON); good enough for ids, names and booleans.
 jget() { printf '%s' "$in" | sed -n "s/.*\"$1\" *: *\"\{0,1\}\([^\",}]*\).*/\1/p" | head -n 1; }
@@ -84,7 +91,7 @@ jget() { printf '%s' "$in" | sed -n "s/.*\"$1\" *: *\"\{0,1\}\([^\",}]*\).*/\1/p
 # the subagent reads itself (pasting 8-12 KB cards into every brief crowded out the task). A path elsewhere names no card
 # A path may hold spaces (a folder in "My Drive"): it runs up to /specialists/<role>.md
 roleof() { _r=$(printf '%s' "$in" | grep -o 'Role card: */[^"\\]*/specialists/[a-z-]*\.md' | head -n 1 | sed 's/^Role card: *//')
-  if [ -n "$_r" ]; then case $_r in "$root/specialists/"*) _r=${_r#"$root/specialists/"}; _r=${_r%.md} ;; *) _r= ;; esac
+  if [ -n "$_r" ]; then case $_r in "$SPEC/"*) _r=${_r#"$SPEC/"}; _r=${_r%.md} ;; *) _r= ;; esac
   else _r=$(printf '%s' "$in" | grep -o 'Role card: *[^ "\\]*' | head -n 1 | sed 's/^Role card: *//'); case $_r in */*) _r= ;; esac; fi
   printf '%s' "$_r" | sed 's/[^a-z-].*//'; }
 
@@ -187,6 +194,7 @@ $p"; fi ;;
           1:"$root/knowledge/"*) [ "$pers" = "$root/knowledge" ] || nope "the library moved to $pers; $root/knowledge is not read. Write the note in $pers/notes/ and delete $fp" ;;
           *) case $in in
           *.md\"*|*.html\"*|*.pptx\"*|*.docx\"*|*.pdf\"*) case $in in *STATE.md\"*|*"/board/"*) ;; *) ctl=; fp=$(jget file_path); r=${fp#"$root/projects/"}
+              cos_isproj "$root" && case $fp in "$root/TRACK.md"|"$root/DELIVERY.md") ctl=1 ;; esac
               # only a project's own TRACK.md / DELIVERY.md (projects/<slug>/FILE) is a control file; the path comes from file_path, not from the content
               # jget stops at , } or a quote: trust fp only if the raw input closes the string right after it
               case $in in *"\"file_path\":\"$fp\""*|*"\"file_path\": \"$fp\""*)
@@ -211,7 +219,7 @@ $p"; fi ;;
       Agent)
         role=$(roleof)
         [ "$role" = utility ] && exit 0
-        if [ -n "$role" ] && [ -f "$root/specialists/$role.md" ]; then
+        if [ -n "$role" ] && [ -f "$SPEC/$role.md" ]; then
           [ -n "$lite" ] || case $in in *"Library:"*) ;; *)
             echo "Blocked by chief-of-staff: the brief must carry what the library already knows. Add a line 'Library: [[id]] [[id]] ...' with the notes from library.sh search, or 'Library: none found for <terms>'." >&2
             exit 2 ;; esac
@@ -220,8 +228,8 @@ $p"; fi ;;
           echo "Blocked by chief-of-staff: a specialist works to the goal behind the request, judged from outside (ambition skill). Add a line 'Ambition: <the goal behind the goal> | judge: <what measures THAT goal: a command that runs, a rule with its source, the arithmetic, or real numbers>'. At most 4 versions; scope beyond the request is a question for the owner, never work." >&2
           exit 2
         fi
-        cards=$(ls "$root/specialists" 2>/dev/null | sed -n 's/\.md$//p' | tr '\n' ' ')
-        echo "Blocked by chief-of-staff: every subagent brief names its role card. Add the line 'Role card: <role>' (the role name is enough, for example 'Role card: researcher'), and tell the subagent to read $root/specialists/<role>.md itself; do not paste the card. Cards: ${cards:-none found}. For a search or file-reading helper, write 'Role card: utility'." >&2
+        cards=$(ls "$SPEC" 2>/dev/null | sed -n 's/\.md$//p' | tr '\n' ' ')
+        echo "Blocked by chief-of-staff: every subagent brief names its role card. Add the line 'Role card: <role>' (the role name is enough, for example 'Role card: researcher'), and tell the subagent to read $SPEC/<role>.md itself; do not paste the card. Cards: ${cards:-none found}. For a search or file-reading helper, write 'Role card: utility'." >&2
         exit 2 ;;
       WebSearch|WebFetch)
         [ -n "$lite" ] && exit 0
@@ -245,7 +253,7 @@ $p"; fi ;;
             uq=$(printf '%s' "$cq" | tr -d "\"'\\\\")
             # the names, or a glob or brace that could spell them (.[c]hief, .l*, ?library, {.,x}library)
             # ponytail: a name built in a variable (a=.chi; ...${a}ef) is not seen; the files are read-only on disk
-            LIT='\.chief|\.library|cos-foreign|cos-cfg|owner-ok|owner-items'   # not "chief-of-staff": the plugin's own folder has that name
+            LIT='\.chief|\.library|cos-foreign|cos-cfg|owner-ok|owner-items|plugins/data'   # not "chief-of-staff": the plugin's own folder has that name; plugins/data holds the project list and the library setting
             # a glob at the start of a path or right after a redirect (a regex .* inside a word, foo.*bar or (.*?), is
             # not one), a glob after a piece of a name (.ch*, .l?brary, .own?r-ok), or a glob before one (?library, *-ok)
             GLOB='(^|[ /=]|(^|[^a-z_:-])[0-9]*>+ *)\.[][?*]|(^|[^a-z0-9_.-])\.(c(h(i(e(f)?)?)?)?|l(i(b(r(a(r(y)?)?)?)?)?)?|o(w(n(e(r(-(o(k)?|i(t(e(m(s)?)?)?)?)?)?)?)?)?)?)[][?*]|[][?*](l?ibrary|c?hief)|[][?*][a-z]*-(ok|items)([^a-z0-9_-]|$)'
@@ -365,7 +373,7 @@ WS
               # the owner's OK on a project step, and any script run with ok first (a renamed copy of track.sh)
               if printf '%s\n' "$nq" | grep -Eq "track\\.sh +($DYN|ok([^a-z0-9_.-]|\$))|[^ ]\\.sh +ok([^a-z0-9_.-]|\$)|track\\.sh$FEED|<+ *[^ ;&|]*track\\.sh|${FROM}track\\.sh *([)\`;&|]|\$)"; then
                 # the session's own folder comes from Claude Code, not from the shell: a cd cannot fake central
-                case $rel in central|central/*) ;; *) echo "Blocked by chief-of-staff: only the central session records the owner's OK. Write the request on the project's card; central asks the owner. (To read track.sh, use the Read or Grep tool.)" >&2; exit 2 ;; esac
+                isowner || { echo "Blocked by chief-of-staff: only the project's coordinator (the owner's conversation at the root of the project folder) records the owner's OK. Write the request on the project's card; the coordinator asks the owner. (To read track.sh, use the Read or Grep tool.)" >&2; exit 2; }
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this records YOUR OK on a project step (scope freeze, submission, or the target and check, which approves and later runs the check command shown in its output). Only approve if you gave that OK."}}'; exit 0
               fi
               # a script called with a list of words (subprocess.run([sh,track.sh,ok]), spawn(sh,[library.sh,use])):
@@ -375,7 +383,7 @@ WS
               segs=$(printf '%s\n' "$nq" | tr ';&|' '\n\n\n')
               case $nq in *--filter*|*--pre*) ;; *) segs=$(printf '%s\n' "$segs" | grep -Ev '^[ (]*([^ ]*/)?[ef]?grep [^$`(){}<>]*$') ;; esac
               if printf '%s\n' "$segs" | grep -Eq 'track\.sh[^ a-z0-9_.-](.*[^a-z0-9_.-])?ok([^a-z0-9_.-]|$)'; then
-                case $rel in central|central/*) ;; *) echo "Blocked by chief-of-staff: only the central session records the owner's OK. Write the request on the project's card; central asks the owner. (To read track.sh, use the Read or Grep tool.)" >&2; exit 2 ;; esac
+                isowner || { echo "Blocked by chief-of-staff: only the project's coordinator (the owner's conversation at the root of the project folder) records the owner's OK. Write the request on the project's card; the coordinator asks the owner. (To read track.sh, use the Read or Grep tool.)" >&2; exit 2; }
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this may record YOUR OK on a project step. Only approve if you gave that OK."}}'; exit 0
               fi
               w=$(printf '%s\n' "$segs" | grep -E 'library\.sh[^ a-z0-9_.-](.*[^a-z0-9_-])?(use|join|leave|trust|offload)([^a-z0-9_-]|$)')
@@ -386,10 +394,14 @@ WS
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this moves the whole library (and may push it to a git remote). Only approve if you asked for it."}}'
               elif printf '%s\n' "$nq" | grep -Eq "library\\.sh +((use|join|leave|trust)([^a-z0-9_-]|\$)|$DYN|--lib[^;&|]*([^a-z0-9_-](use|join|leave|trust)([^a-z0-9_-]|\$)|[][\$\`{?*]))|library\\.sh$FEED|<+ *[^ ;&|]*library\\.sh|${FROM}library\\.sh *([)\`;&|]|\$)"; then
                 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this changes which library a project uses, or connects or disconnects a team library: what is shared with whom. Only approve if you asked for it."}}'
+              # registering a project folder makes its root session a coordinator, and setting the library chooses
+              # where every note goes: the owner approves each run (/threads registers through the module, not Bash)
+              elif printf '%s\n' "$nq" | grep -Eq "project\\.sh +((init|library)([^a-z0-9_-]|\$)|$DYN)|project\\.sh$FEED|<+ *[^ ;&|]*project\\.sh|${FROM}project\\.sh *([)\`;&|]|\$)"; then
+                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this registers a project folder (its root conversation becomes the coordinator that asks you) or sets your library. Only approve if you asked for it."}}'
               # a push whose commits change a term that a decision in force guards ("guard: <term>" in the project's
               # DECISIONS.md) asks first: a teammate's later change must not undo a decision without anyone seeing it
-              elif [ -n "$project" ] && [ -f "$root/projects/$project/DECISIONS.md" ] && printf '%s\n' "$nq" | grep -Eq '(^|[^a-z0-9_.-])git .*push([^a-z0-9_-]|$)'; then
-                gt=$(cos_decisions "$root/projects/$project/DECISIONS.md" | cut -f2 | sed -n 's/.*guard: *\([^;|)]*\).*/\1/p' | sed 's/ *$//' | grep .)
+              elif [ -n "$project" ] && [ -f "$pdir/DECISIONS.md" ] && printf '%s\n' "$nq" | grep -Eq '(^|[^a-z0-9_.-])git .*push([^a-z0-9_-]|$)'; then
+                gt=$(cos_decisions "$pdir/DECISIONS.md" | cut -f2 | sed -n 's/.*guard: *\([^;|)]*\).*/\1/p' | sed 's/ *$//' | grep .)
                 if [ -n "$gt" ]; then
                   # what the push sends: past the branch's upstream, else past the same branch on origin, else past
                   # origin's default branch (a new branch, push -u). With none of them it cannot be told: ask (fail closed)
@@ -417,9 +429,11 @@ WS
              if [ -n "$o" ] && [ "$o" != "$lname" ]; then
                echo "Blocked by chief-of-staff: $fp is in the library '$o', and this session works in '$lname'. A session writes only its own library, so nothing personal or from another team leaks into a shared one. Write the note in $lib/notes/." >&2; exit 2
              fi
-             case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.library|*/.chief-of-staff/*|*/.owner-ok|*/.owner-items) ;; *) exit 0 ;; esac ;;
+             # the project list and the library setting (project.sh writes them, from /threads, new-project and setup)
+             case $rp in "$(real "$DATA")/projects"|"$(real "$DATA")/library"|*/plugins/data/*/projects|*/plugins/data/*/library) rp=blocked ;; esac
+             [ "$rp" = blocked ] || case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.library|*/.chief-of-staff/*|*/.owner-ok|*/.owner-items) ;; *) exit 0 ;; esac ;;
         esac
-        echo "Blocked by chief-of-staff: .chief-of-staff (where the libraries live), .library-id, a project's .library (which library it shares with) .owner-ok (the owner's OKs) and .owner-items are changed only through library.sh offload, join, leave or use and track.sh ok, which the owner confirms.$([ "$(jget tool_name)" = Bash ] && printf ' If the command only mentions one of these names (a commit message, an echo), rephrase it without the name.')" >&2
+        echo "Blocked by chief-of-staff: .chief-of-staff (where the libraries live), .library-id, a project's .library (which library it shares with) .owner-ok (the owner's OKs), .owner-items and the plugin's data folder (the project list, the library setting) are changed only through library.sh offload, join, leave or use, track.sh ok and project.sh, which the owner confirms.$([ "$(jget tool_name)" = Bash ] && printf ' If the command only mentions one of these names (a commit message, an echo), rephrase it without the name.')" >&2
         exit 2 ;;
     esac
     ;;
@@ -612,18 +626,18 @@ $lgaps
 Fix each note (format: $lib/templates/note.md). When a new note is better than an old one, or merges several, retire the old: sh \"$L\" retire <old-id> <new-id> \"<why it lost>\". Valid alternatives stay: write [[id]] coexists (reason)."
     gaps=
     if [ -n "$project" ]; then
-      gaps=$(cos_limit 1.5 sh "$(dirname "$0")/track.sh" check "$root/projects/$project") || [ $? != 124 ] ||
-        { gaps=; slow "track.sh check did not finish in time (slow disk): run sh \"$(dirname "$0")/track.sh\" check $root/projects/$project and close what it lists."; }
+      gaps=$(cos_limit 1.5 sh "$(dirname "$0")/track.sh" check "$pdir") || [ $? != 124 ] ||
+        { gaps=; slow "track.sh check did not finish in time (slow disk): run sh \"$(dirname "$0")/track.sh\" check $pdir and close what it lists."; }
       gaps=$(printf '%s\n' "$gaps" | head -n 20 | grep .)
     fi
-    [ -n "$gaps" ] && reason="${reason:+$reason }Track gate (projects/$project/TRACK.md) not met:
+    [ -n "$gaps" ] && reason="${reason:+$reason }Track gate (${pdir#"$root/"}/TRACK.md) not met:
 $gaps
 Close each item with its proof file (evidence: path relative to the project folder), mark it [-] with why: when it does not apply, or move stage: back. A stage passes only when every item is closed."
     # Rotation: a conversation past rotate_tokens of context (the last usage the transcript records), or one Claude
     # Code compacted, has lost or is about to lose detail. Due from then until STATE.md (central's own, or the
     # project's) is written again; after that, due again only 40k tokens later. Subagents start clean: not here.
     # in a shared workspace each member's central keeps its own file (the folder is shared, the conversation is not)
-    sf=; case $rel in central|central/*) sf=$root/central/STATE${me:+-$(printf %s "$me" | tr -c A-Za-z0-9_- -)}.md ;; *) [ -n "$project" ] && sf=$root/projects/$project/STATE.md ;; esac
+    sf=; case $rel in central|central/*) sf=$root/central/STATE${me:+-$(printf %s "$me" | tr -c A-Za-z0-9_- -)}.md ;; *) [ -n "$project" ] && sf=$pdir/STATE.md ;; esac
     if [ -n "$sf" ]; then
       tp=$(jget transcript_path); tok=0
       [ -f "$tp" ] && tok=$(tail -c 400000 "$tp" | grep '"type":"assistant"' | grep -v '"isSidechain":true' | grep -o '"usage":{[^}]*}' | tail -n 1 | LC_ALL=C awk -F '[:,}]' '{ for (i = 1; i < NF; i++) if ($i ~ /"(input_tokens|cache_creation_input_tokens|cache_read_input_tokens)"$/) n += $(i + 1) } END { print n + 0 }')
