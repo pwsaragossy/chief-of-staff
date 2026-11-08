@@ -30,6 +30,14 @@ Perguntas de abertura, checagem de coerência e escolha da trilha (como hoje), g
 Escolhe onde fica a biblioteca (pergunta única, em botões) e grava em `<plugin data>/library`; no fim roda o
 fluxo 2. Não cria pasta central nem `projects/`.
 
+## Fluxo 4: nova conversa numa pasta que já é projeto
+1. Pedro abre outra conversa na mesma pasta (o marcador já existe).
+2. Nada é recriado nem perguntado de novo: o que o setup, o new-project e as coordenadoras anteriores gravaram
+   (`STATE.md`, `DECISIONS.md`, `TRACK.md`, cards do `board/`) continua valendo.
+3. O briefing de início mostra onde parou (STATE), as decisões em vigor, a trilha e os cards que esperam o dono.
+4. A conversa já nasce coordenadora: o painel Threads abre sozinho, como hoje numa sessão em `projects/<slug>`;
+   não precisa rodar `/threads` de novo.
+
 ## Painel web (`/chief-of-staff:panel`, `panel.py`)
 - **Do projeto**: aberto pelo `/threads` ou pelo `/chief-of-staff:panel` dentro de uma pasta de projeto; mostra só ela.
 - **Global**: `/chief-of-staff:panel` fora de um projeto; lê `<plugin data>/projects` e mostra todos, pior primeiro
