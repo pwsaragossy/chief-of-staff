@@ -72,10 +72,16 @@ async function project($: EngineInterface, r: string, slug: string): Promise<Pro
 // does not tell them apart; the app's own record does. Unknown (the app does not answer): not a thread, and the
 // hooks' folder and registration checks still hold (scripts/ask-guard.sh, protocol.sh)
 export async function isThread($: EngineInterface): Promise<boolean> {
+  return (await hasParent($)) === true
+}
+
+// true: a thread; false: the app says this chat has no parent; undefined: the app did not answer
+async function hasParent($: EngineInterface): Promise<boolean | undefined> {
   try {
     const s = JSON.parse(text(await $.mcp.call('ccd_session_mgmt', 'get_session', { session_id: 'self' })))
+    if (!s || typeof s !== 'object' || !s.sessionId) return undefined
     return !!s.parentSessionId && !s.detached
-  } catch { return false }
+  } catch { return undefined }
 }
 
 // what a thread may not run in a project folder: the owner's OK (track.sh ok) and project.sh (registers a
@@ -221,8 +227,9 @@ export const register: Register = on => {
     const r = await findRoot($, e.cwd)
     if (r) await $.store.set('root', r)
     await $.command.register({ name: 'threads', description: 'Make this folder a project and this chat its coordinator: work runs in threads, shown in the Threads pane' })
-    // a new conversation at the root of a project folder carries on as its coordinator (not a thread it started)
-    const slug = r && r === e.cwd && (await isProject($, r)) ? (await isThread($) ? '' : base(r))
+    // a new conversation at the root of a project folder carries on as its coordinator: only when the app says it
+    // has no parent. A thread, or a chat the app cannot place yet, is not (/threads makes the owner's chat one)
+    const slug = r && r === e.cwd && (await isProject($, r)) ? ((await hasParent($)) === false ? base(r) : '')
       : (r ? e.cwd.slice(r.length) : '').match(/^\/projects\/([^/]+)/)?.[1]
     if (slug) { await update($, coord, () => slug); void $.ui.open({ id: THREADS, title: 'Threads' }) }
     return ran

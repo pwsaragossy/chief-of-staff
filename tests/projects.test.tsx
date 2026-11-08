@@ -125,7 +125,7 @@ test('the coordinator pane comes up with the owner message', async ($, on) => {
 })
 
 // a project folder at /p/Alpha: marker kind: project, its own board and STATE.md
-function folder(on: any, opts: { thread?: boolean; marker?: boolean; runs?: { argv: readonly string[] }[]; initFails?: boolean; registered?: string[]; opened?: string[] } = {}) {
+function folder(on: any, opts: { thread?: boolean; appDown?: boolean; marker?: boolean; runs?: { argv: readonly string[] }[]; initFails?: boolean; registered?: string[]; opened?: string[] } = {}) {
   let marker = opts.marker ?? true
   const files = (): Record<string, string> => ({
     ...(marker ? { '/p/Alpha/.chief-of-staff': 'chief-of-staff project v0.1\nkind: project\n' } : {}),
@@ -149,6 +149,7 @@ function folder(on: any, opts: { thread?: boolean; marker?: boolean; runs?: { ar
   })
   on('mcp.call', (_: any, e: any) => {
     const t = (text: string) => ({ value: { content: [{ type: 'text', text }], isError: false } })
+    if (e.tool === 'get_session' && opts.appDown) return { deny: 'ccd_session_mgmt is not connected yet' }
     if (e.tool === 'get_session') return t(JSON.stringify(opts.thread ? { sessionId: 'local_t', parentSessionId: 'local_me', detached: false } : { sessionId: 'local_me' }))
     return t('[]')
   })
@@ -208,6 +209,15 @@ test('a new chat at a project root carries on as its coordinator; a thread there
   folder(on, { opened })
   await $.session.start({ cwd: '/p/Alpha', surface: 'desktop', isInteractive: true })
   expect(opened).toEqual(['cos-threads'])
+})
+
+// the app's session tools may not answer yet when a chat starts: a sub-conversation then looked like the owner's
+// new chat and became a second coordinator. Unknown is not the owner's chat: only /threads makes it one.
+test('a chat whose parent the app cannot tell at start does not become a coordinator', async ($, on) => {
+  const opened: string[] = []
+  folder(on, { appDown: true, opened })
+  await $.session.start({ cwd: '/p/Alpha', surface: 'desktop', isInteractive: true })
+  expect(opened).toEqual([])
 })
 
 test('a thread in a project folder does not ask the owner nor record the owner OK', async ($, on) => {
