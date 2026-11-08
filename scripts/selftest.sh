@@ -1265,4 +1265,21 @@ ov=$(sh "$here/overview.sh" "$OB/a" "$OB/b")
 check "overview: waiting, late, changed, moving and stopped across two boards; closed cards left out" 'printf "%s\n" "$ov" | grep -qx "Waiting on you: 1" && printf "%s\n" "$ov" | grep -qx "\- Sign the lease (x)" && printf "%s\n" "$ov" | grep -q "2000-01-01 LATE Sign the lease" && printf "%s\n" "$ov" | grep -qx "Changed in 24 hours: 3" && printf "%s\n" "$ov" | grep -qx "\- Ship the app (y, in-progress)" && printf "%s\n" "$ov" | grep -qx "Stopped: y 1" && ! printf "%s\n" "$ov" | grep -q "Done thing"'
 rm -rf "$OB"
 
+
+# knowledge bases: at session start, in any folder, the briefing offers the bases knowledge-mcp found that were never
+# offered (its discover remembers each answer); silent without the server's path, or with nothing new
+K="$W.km"; mkdir -p "$K/anywhere"
+printf '%s\n' 'import sys, os' 'if sys.argv[1:] == ["discover"]:' '    open(os.environ["KM_LOG"], "w").write(os.getcwd())' '    print("{\"path\": \"/x/Livros\", \"label\": \"Livros\", \"kind\": \"courses / books (needs an index first)\", \"files\": 41}")' '    print("{\"path\": \"/x/Notas\", \"label\": \"Notas\", \"kind\": \"notes\", \"files\": 20}")' > "$K/server.py"
+kb() { printf '{"session_id":"kb1","source":"%s"}' "${2:-startup}" | KM_LOG="$K/cwd" CLAUDE_PROJECT_DIR="$1" sh "$here/briefing.sh" 2>&1; }
+check "knowledge bases: without the server's path the briefing stays silent outside a workspace" '[ -z "$(kb "$K/anywhere")" ]'
+mkdir -p "$CLAUDE_PLUGIN_DATA"; printf '%s\n' "$K/server.py" > "$CLAUDE_PLUGIN_DATA/knowledge-mcp"
+o=$(kb "$K/anywhere")
+check "knowledge bases: a session anywhere is told the new base and how to record the owner's answer" 'printf "%s" "$o" | grep -q "^- Livros (courses / books (needs an index first), 41 files): /x/Livros$" && printf "%s" "$o" | grep -q "^- Notas (notes, 20 files): /x/Notas$" && printf "%s" "$o" | grep -q "AskUserQuestion" && printf "%s" "$o" | grep -q "server.py\" add <path>" && printf "%s" "$o" | grep -q "decline <path>"'
+check "knowledge bases: discover runs from the session's folder (its two-brain scope)" '[ "$(cat "$K/cwd")" = "$K/anywhere" ] || [ "$(cat "$K/cwd")" = "$(cd "$K/anywhere" && pwd -P)" ]'
+check "knowledge bases: a resume or a compaction does not ask again" '[ -z "$(kb "$K/anywhere" resume)" ] && [ -z "$(kb "$K/anywhere" compact)" ]'
+check "knowledge bases: inside a workspace the offer comes with the briefing" 'kb "$W/central" | grep -q "^- Livros"'
+printf '%s\n' 'print("", end="")' > "$K/server.py"
+check "knowledge bases: nothing new, nothing said" '[ -z "$(kb "$K/anywhere")" ]'
+rm -rf "$K" "$CLAUDE_PLUGIN_DATA/knowledge-mcp"
+
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }
