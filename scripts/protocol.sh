@@ -429,11 +429,11 @@ WS
              if [ -n "$o" ] && [ "$o" != "$lname" ]; then
                echo "Blocked by chief-of-staff: $fp is in the library '$o', and this session works in '$lname'. A session writes only its own library, so nothing personal or from another team leaks into a shared one. Write the note in $lib/notes/." >&2; exit 2
              fi
-             # the project list and the library setting (project.sh writes them, from new-project and setup)
-             case $rp in "$(real "$DATA")/projects"|"$(real "$DATA")/library"|*/plugins/data/*/projects|*/plugins/data/*/library) rp=blocked ;; esac
+             # the project list, the library setting and the board list of the global panel (project.sh writes them)
+             case $rp in "$(real "$DATA")/projects"|"$(real "$DATA")/library"|"$(real "$DATA")/boards"|*/plugins/data/*/projects|*/plugins/data/*/library|*/plugins/data/*/boards) rp=blocked ;; esac
              [ "$rp" = blocked ] || case $(printf '%s' "$lc" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1) in */.chief-of-staff|*/.library-id|*/.library|*/.chief-of-staff/*|*/.owner-ok|*/.owner-items) ;; *) exit 0 ;; esac ;;
         esac
-        echo "Blocked by chief-of-staff: .chief-of-staff (where the libraries live), .library-id, a project's .library (which library it shares with) .owner-ok (the owner's OKs), .owner-items and the plugin's data folder (the project list, the library setting) are changed only through library.sh offload, join, leave or use, track.sh ok and project.sh, which the owner confirms.$([ "$(jget tool_name)" = Bash ] && printf ' If the command only mentions one of these names (a commit message, an echo), rephrase it without the name.')" >&2
+        echo "Blocked by chief-of-staff: .chief-of-staff (where the libraries live), .library-id, a project's .library (which library it shares with) .owner-ok (the owner's OKs), .owner-items and the plugin's data folder (the project list, the library setting, the board list) are changed only through library.sh offload, join, leave or use, track.sh ok and project.sh, which the owner confirms.$([ "$(jget tool_name)" = Bash ] && printf ' If the command only mentions one of these names (a commit message, an echo), rephrase it without the name.')" >&2
         exit 2 ;;
     esac
     ;;
