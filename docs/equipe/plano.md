@@ -1,4 +1,13 @@
 # Plano — Equipe no formato de pasta de projeto
+> **09/11, mudança de escopo do Pedro: a equipe vira um plugin separado.** Este plano vale só para a fase 1, com
+> três mudanças: (1) a "Decisão de arquitetura" abaixo não vale mais, porque nada de equipe muda de casa: `sync.sh`,
+> `cos.member`, a biblioteca do projeto compartilhado, o envio do fim do turno e os ramos `forged`/`teamsent` de
+> `track.sh` saem; (2) as tabelas "Travas que o PRD lista", "Biblioteca de equipe" e "Projeto compartilhado" passam
+> para "Saem com a peça que testam": os testes delas saem junto com o código, sem mutação, porque não sobra trava
+> para proteger; (3) a seção "Fase 2" fica como nota para o plugin de sync (resumo em [prd.md](prd.md)).
+> As travas da fase 1 que ficam e ganham teste novo com mutação: guarda da pergunta ao dono (`ask-guard.sh`, só a
+> coordenadora), briefing de pasta de formato antigo, dispatcher de uma pasta, registro de projeto (`project.sh
+> trust`) e o crédito do hand-back de agente em segundo plano (bug achado nesta etapa).
 
 Contrato: [prd.md](prd.md) e [design.md](design.md). Duas fases, cada uma uma versão publicada sozinha
 (0.12.0 e 0.13.0), cada push com o OK do Pedro.

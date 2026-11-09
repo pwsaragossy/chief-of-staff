@@ -1,5 +1,9 @@
 # Design — Equipe no formato de pasta de projeto
 
+> 09/11, Pedro: a equipe vira um plugin separado. Neste plugin vale só a seção 1 (fase 1), sem a última frase dela
+> (o código de equipe sai inteiro). As seções 0 e 2-9 ficam como notas para o plugin de sync; o resumo está em
+> [prd.md](prd.md), seção "Fase 2 → plugin separado".
+
 Contrato sem tela: comandos, arquivos, linhas que o dono e o agente leem, e o texto exato de cada erro. O texto
 que o plugin escreve fica em inglês (o plugin é público); o agente traduz para o dono. Cada item do "Entra" do
 PRD tem o seu fluxo aqui (tabela no fim).
