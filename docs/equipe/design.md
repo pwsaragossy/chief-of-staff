@@ -14,6 +14,9 @@ PRD tem o seu fluxo aqui (tabela no fim).
   pasta de saída `messages/<membro>/`.
 - **Coordenadora:** a conversa do dono na raiz da pasta registrada (`cos_owner`, como hoje). Só ela recebe e
   responde mensagens.
+- **Biblioteca do projeto:** num projeto compartilhado, `knowledge/` é uma biblioteca no formato de sempre
+  (`.library-id`, `notes/<id>.md`), criada pelo `share`. A sessão do projeto salva nela, não na pessoal; a pessoal
+  ela só lê (`library.sh search --all`). As travas são as da antiga biblioteca de equipe (plano.md).
 
 ## 1. Fase 1 — o que muda para quem usa
 
