@@ -403,6 +403,39 @@ def registered():
     return [l.split("\t", 1)[1] for l in rows(sh("project.sh", "list")) if "\t" in l]
 
 
+def boards():
+    """Every board folder recorded for the global panel (project.sh board): an existing system's own cards."""
+    return [l.split("\t", 1)[1] for l in rows(sh("project.sh", "boards")) if "\t" in l]
+
+
+def board_view(b):
+    """One recorded board folder as a panel row (its counts) and its cards waiting on the owner. The cards are
+    classed by overview.sh --rows, the same reading the chat overview prints, so the two never disagree."""
+    b = b.rstrip("/")
+    name = os.path.basename(os.path.dirname(b)) if os.path.basename(b) == "board" else os.path.basename(b)
+    row = {"slug": name or b, "path": b, "reasons": [], "items": [], "stage_names": [], "outside": [], "decisions": [], "files": [],
+           "progress": [], "total": "", "next": "", "member": "", "target": "", "deadline": None, "delivered": False}
+    if not os.path.isdir(b):
+        return dict(row, color="gray", reason="Folder not found"), []
+    soon, today, now = time.strftime("%Y-%m-%d", time.localtime(time.time() + 7 * 86400)), time.strftime("%Y-%m-%d"), time.time()
+    n, cards = {"w": 0, "m": 0, "s": 0, "d": 0}, []
+    try:
+        out = sh("overview.sh", "--rows", b, strict=True)
+    except TimeoutError:   # an empty answer would look like a healthy board
+        return dict(row, color="gray", reason="Could not read the board in 20 s"), []
+    for line in rows(out):
+        f = (line.split("\t") + [""] * 5)[:5]
+        n[f[0]] = n.get(f[0], 0) + 1
+        late = re.fullmatch(r"\d{4}-\d{2}-\d{2}", f[3]) and f[3] < today
+        n["d"] += bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", f[3]) and f[3] <= soon)
+        if f[0] == "w":
+            cards.append({"title": f[1] + (" · due " + f[3] + (" (late)" if late else "") if f[3] else ""), "project": f[2] if f[2] not in ("", "-") else name, "member": "", "color": "yellow",
+                          "waited": int((now - int(f[4])) / 60) if f[4].isdigit() else 0, "limit": "",
+                          "questions": [], "deputy": "", "size": "", "ages": []})
+    reason = "%d waiting on you · %d due in 7 days · %d moving · %d stopped" % (n["w"], n["d"], n["m"], n["s"])
+    return dict(row, color="yellow" if n["w"] or n["d"] else "green", reason=reason), cards
+
+
 def root_projects(root, fetch):
     """The projects, cards and tasks of one root: a project folder (one project), or a workspace (projects/<slug>)."""
     view, source = team_view(root, fetch)   # projects, cards and tasks as the team sees them; library and log stay local
@@ -446,7 +479,7 @@ def root_projects(root, fetch):
     return projects, cards, tasks(view), source
 
 
-def snapshot(roots, libname="personal", fetch=False):
+def snapshot(roots, libname="personal", fetch=False, boards=()):
     """The panel's data for one root (a project folder, or an older workspace) or several (the global panel: every
     registered project folder). A registered folder that is gone shows as a grey row, never breaks the rest."""
     roots = [roots] if isinstance(roots, str) else list(dict.fromkeys(roots))
@@ -461,6 +494,12 @@ def snapshot(roots, libname="personal", fetch=False):
         here.append(r)
         p, c, t, src = root_projects(r, fetch)
         projects += p; cards += c; todo += t; source = source or src
+    read = {os.path.realpath(os.path.join(r, "board")) for r in here}   # a project's own board/ is read once
+    for b in dict.fromkeys(boards):
+        if os.path.realpath(b) in read:
+            continue
+        p, c = board_view(b)
+        projects.append(p); cards += c
     root = here[0] if here else None   # the library, the log and the team state come from the first folder that exists
     libs = libraries(root) if root else []
     if libname not in [x["name"] for x in libs]:
@@ -961,6 +1000,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         on each request so a project /threads adds shows without a restart."""
         return [self.root] if self.root else registered()
 
+    def boards(self):
+        """The recorded board folders, on the global panel only (a project's own panel stays its folder)."""
+        return [] if self.root else boards()
+
     def log_message(self, *a):
         pass
 
@@ -1002,7 +1045,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.reply("text/html; charset=utf-8", PAGE.replace("<style>", '<style nonce="%s">' % n, 1).replace("<script>", '<script nonce="%s">' % n, 1).encode(), n)
         elif path == "/api":
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            self.reply("application/json", json.dumps(snapshot(self.roots(), (q.get("lib") or ["personal"])[0])).encode())
+            self.reply("application/json", json.dumps(snapshot(self.roots(), (q.get("lib") or ["personal"])[0], boards=self.boards())).encode())
         else:
             self.deny(404, "Not found.")
 
@@ -1011,7 +1054,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if urllib.parse.urlparse(self.path).path == "/fetch":
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            return self.reply("application/json", json.dumps(snapshot(self.roots(), (q.get("lib") or ["personal"])[0], fetch=True)).encode())
+            return self.reply("application/json", json.dumps(snapshot(self.roots(), (q.get("lib") or ["personal"])[0], fetch=True, boards=self.boards())).encode())
         if urllib.parse.urlparse(self.path).path != "/import":
             return self.deny(404, "Not found.")
         try:

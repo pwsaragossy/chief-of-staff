@@ -1336,6 +1336,22 @@ assert panel.registered() == []
 assert \"No projects yet. Run /chief-of-staff:new-project in a folder.\" in panel.PAGE
 " "$here"'
 fi
+# board folders the global panel also reads (an existing system's own boards, such as a second brain): project.sh board
+mkdir -p "$PF/brain/board"; printf -- '---\nstatus: aguardando-pedro\nprojeto: z\n---\n\n# Pay the tax\n' > "$PF/brain/board/t.md"
+check "pf: project.sh board records a board folder once; overview --all reads it with the projects" 'PJ board "$PF/brain/board" >/dev/null && PJ board "$PF/brain/board" >/dev/null && [ "$(PJ boards)" = "$(printf "ok\t%s" "$(cd "$PF/brain/board" && pwd -P)")" ] && o=$(sh "$here/overview.sh" --all) && printf "%s\n" "$o" | grep -qx "\- Pay the tax (z)" && printf "%s\n" "$o" | grep -q "Q (-)"'
+check "pf: project.sh board refuses a relative path or a missing folder" '! PJ board brain/board 2>/dev/null && ! PJ board "$PF/nope" 2>/dev/null'
+if command -v python3 >/dev/null; then
+  check "pf: the global panel shows each board as a row with its waiting cards; a board that is gone is grey" 'python3 -c "
+import sys; sys.path.insert(0, sys.argv[1]); import panel
+s = panel.snapshot(panel.registered(), boards=panel.boards() + [sys.argv[2] + \"/lost/board\", sys.argv[2] + \"/beta/board\"])
+assert [p[\"slug\"] for p in s[\"projects\"]].count(\"beta\") == 1, s[\"projects\"]
+row = [p for p in s[\"projects\"] if p[\"slug\"] == \"brain\"]
+assert row and row[0][\"color\"] == \"yellow\" and row[0][\"reason\"].startswith(\"1 waiting\"), row
+assert \"Pay the tax\" in [c[\"title\"] for c in s[\"cards\"]] and \"Q\" in [c[\"title\"] for c in s[\"cards\"]], s[\"cards\"]
+assert [p[\"color\"] for p in s[\"projects\"] if p[\"slug\"] == \"lost\"] == [\"gray\"], s[\"projects\"]
+" "$here" "$PF"'
+fi
+rm -f "$CLAUDE_PLUGIN_DATA/boards" 2>/dev/null; chmod u+w "$CLAUDE_PLUGIN_DATA/boards" 2>/dev/null; rm -f "$CLAUDE_PLUGIN_DATA/boards"
 # the library a project folder uses: <plugin data>/library, set by project.sh library (setup)
 check "pf: project.sh library starts a library in an empty folder and records it" 'PJ library "$PF/Lib" >/dev/null && [ -f "$PF/Lib/.library-id" ] && [ -d "$PF/Lib/notes" ] && [ "$(cat "$CLAUDE_PLUGIN_DATA/library")" = "$PF/Lib" ] && [ "$(cd "$PB" && CLAUDE_PROJECT_DIR="$PB" sh "$here/library.sh" where)" = "$PF/Lib" ]'
 check "pf: project.sh library refuses a non-empty folder that is no library" 'mkdir -p "$PF/junk"; touch "$PF/junk/x"; ! PJ library "$PF/junk" 2>/dev/null && [ "$(cat "$CLAUDE_PLUGIN_DATA/library")" = "$PF/Lib" ]'

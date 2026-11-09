@@ -5,6 +5,9 @@
 #   project.sh library <dir>    the owner's one library: an existing library, or a new one in an empty folder;
 #                               recorded in <plugin data>/library (setup asks the owner where)
 #   project.sh list             each registered folder, "ok<TAB>path" or "missing<TAB>path"
+#   project.sh board <dir>      a board folder the global panel also reads (an existing system's own cards, such as a
+#                               second brain's board/), recorded once in <plugin data>/boards; nothing is written in <dir>
+#   project.sh boards           each recorded board folder, "ok<TAB>path" or "missing<TAB>path"
 # The list and the library setting are read-only on disk and protected by the hooks: only this script writes them,
 # from new-project and setup (/threads makes a coordinator, never a project). A thread never runs it (hooks/projects.tsx).
 set -u
@@ -51,9 +54,16 @@ case ${1:-} in
     fi
     printf '%s\n' "$l" | put library || die "cannot write $D/library"
     ;;
-  list)
-    awk '!seen[$0]++' "$D/projects" 2>/dev/null | while IFS= read -r p; do
+  board)
+    [ $# = 2 ] || die "usage: project.sh board <folder>"
+    d=$(abs "$2") || exit 1
+    grep -Fxq "$d" "$D/boards" 2>/dev/null || { { cat "$D/boards" 2>/dev/null; printf '%s\n' "$d"; } | put boards; } || die "cannot write $D/boards"
+    echo "Board: $d"
+    ;;
+  list|boards)
+    [ "$1" = list ] && f=projects || f=boards
+    awk '!seen[$0]++' "$D/$f" 2>/dev/null | while IFS= read -r p; do
       [ -n "$p" ] || continue; if [ -d "$p" ]; then printf 'ok\t%s\n' "$p"; else printf 'missing\t%s\n' "$p"; fi; done
     ;;
-  *) die "usage: project.sh init <folder> | library <folder> | list" ;;
+  *) die "usage: project.sh init <folder> | library <folder> | list | board <folder> | boards" ;;
 esac

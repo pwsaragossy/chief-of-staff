@@ -9,7 +9,8 @@ The panel is `${CLAUDE_PLUGIN_ROOT}/scripts/panel.py` (copy that literal path; t
 set in your shell). It needs `python3` (standard library only) and runs on this computer only.
 
 0. The owner on a phone (Remote Control): the chat is the panel, since the web panel listens on this
-   computer only. Run `sh "<plugin>/scripts/overview.sh" --all` (every registered project), or with
+   computer only. Run `sh "<plugin>/scripts/overview.sh" --all` (every registered project and every board
+   folder recorded with `project.sh board`, such as a second brain's `board/`), or with
    board folders as arguments when a folder's `CLAUDE.md` names boards of its own (folders of cards with
    `status:` front matter). Give its lines in the owner's language, in the same order, nothing added:
    waiting on the owner, due in 7 days, changed in 24 hours, moving, stopped. Then stop.
