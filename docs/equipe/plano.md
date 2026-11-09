@@ -5,9 +5,15 @@
 > `track.sh` saem; (2) as tabelas "Travas que o PRD lista", "Biblioteca de equipe" e "Projeto compartilhado" passam
 > para "Saem com a peça que testam": os testes delas saem junto com o código, sem mutação, porque não sobra trava
 > para proteger; (3) a seção "Fase 2" fica como nota para o plugin de sync (resumo em [prd.md](prd.md)).
-> As travas da fase 1 que ficam e ganham teste novo com mutação: guarda da pergunta ao dono (`ask-guard.sh`, só a
-> coordenadora), briefing de pasta de formato antigo, dispatcher de uma pasta, registro de projeto (`project.sh
-> trust`) e o crédito do hand-back de agente em segundo plano (bug achado nesta etapa).
+> As travas da fase 1 que ficam e ganham teste novo com mutação (cada uma fora de qualquer teste de equipe):
+> guarda da pergunta ao dono (`ask-guard.sh`, só a coordenadora); `track.sh ok` só na coordenadora; bloqueio de
+> escrita em `.owner-ok`/`.owner-items` (com globs e o conselho de reescrever o comando); `.owner-ok` em grafia que o
+> disco confunde (`track.sh`, laço `folded`, vale em qualquer projeto: hoje o teste mistura clone de equipe e
+> projeto solo, e a parte solo vira teste próprio); briefing de pasta de formato antigo; dispatcher de uma pasta;
+> registro de projeto (`project.sh trust`); crédito do hand-back de agente em segundo plano (bug achado nesta etapa).
+> Saem como só de equipe (conferido no código pela revisão de 09/11): o bloco `forged` de `track.sh`, o bloqueio de
+> escrita em `.git/cos-*` (e a menção a `cos-own|cos-resolved` no regex `LIT` e no texto de bloqueio de
+> `protocol.sh`), e as recusas de `.claude/`, `.mcp.json`, `.gitattributes` na lista do envio do fim do turno.
 
 Contrato: [prd.md](prd.md) e [design.md](design.md). Duas fases, cada uma uma versão publicada sozinha
 (0.12.0 e 0.13.0), cada push com o OK do Pedro.

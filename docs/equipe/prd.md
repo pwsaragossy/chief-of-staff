@@ -11,7 +11,8 @@ quer precisa que os agentes de pessoas diferentes conversem, coisa que o código
 
 ## Por que agora
 O formato antigo não existe mais em nenhuma pasta. Mesmo assim, o código dele continua em todos os hooks, e a suíte
-monta um workspace antigo logo no começo: 243 linhas dela usam esse workspace. Cada mudança nos hooks ainda carrega
+monta um workspace antigo logo no começo: cerca de 200 das 1306 linhas dela usam esse workspace
+(`grep -cE 'central|projects/|setup.sh" create' scripts/selftest.sh` e variáveis do workspace, em 09/11). Cada mudança nos hooks ainda carrega
 esse ramo morto, e o código de equipe junto.
 
 ## Entra (chief-of-staff 0.12.0)
@@ -24,8 +25,11 @@ esse ramo morto, e o código de equipe junto.
    compartilhado, envio do fim do turno, OK do dono vindo do repositório, "mudança do colega depois do OK", card de
    conflito de sync. As travas que só existem para a equipe (configurações recusadas no pull, links simbólicos,
    lock do sync) saem com o código e os seus testes; o plugin separado traz as dele.
-4. O chief-of-staff não manda nem recebe mensagem de equipe. A única ponte é a convenção de arquivos da seção
-   "Fase 2 → plugin separado", que entra numa versão futura, depois que o plugin de sync existir.
+4. O chief-of-staff não manda nem recebe mensagem de equipe. A ponte com o plugin de sync (contagem no painel,
+   decisões na fila do dono) não entra na 0.12.0; a versão dela é definida depois que o sync publicar o formato.
+5. Quem usava projeto compartilhado (o README o anunciava, e o plugin é público) não fica sem aviso: o briefing de
+   uma pasta com `cos.member` diz, numa frase, que a equipe saiu do chief-of-staff na 0.12.0 e que a 0.11.5 ainda a
+   tem.
 
 ## Não entra
 - Migração de workspaces antigos. Nenhum existe neste Mac; o HackMeridian foi arquivado.
@@ -34,8 +38,11 @@ esse ramo morto, e o código de equipe junto.
 - Qualquer coisa de equipe no chief-of-staff (vai para o plugin separado).
 
 ## Pronto quando
-- O selftest passa sem nenhum workspace antigo e sem código de equipe: nenhum `setup.sh create`, `central/`,
-  `projects/<slug>`, `sync.sh` ou `cos.member` no código e na suíte.
+- O selftest passa sem nenhum workspace antigo e sem código de equipe, e a própria suíte confere:
+  `grep -rIn -E 'sync\.sh|offload|templates/central|cos_shared|cos_member|setup\.sh (create|join)|central/' scripts hooks templates skills README.md`
+  não acha nada fora da linha de aviso do item 5 e do próprio teste.
+- `plugin.json` diz 0.12.0; o briefing de uma pasta antiga diz que o formato saiu; o de uma pasta com `cos.member`
+  diz que a equipe saiu.
 - Cada trava que fica no plugin e que hoje só é testada no ramo antigo tem um teste novo que falhou com a trava
   tirada; a saída fica salva em `.metodo/`.
 
@@ -43,8 +50,13 @@ esse ramo morto, e o código de equipe junto.
 - **Mudança em todos os hooks.** Publicar precisa do OK do Pedro (stop list: push).
 - **Tamanho.** A tentativa anterior (`projeto-e-pasta`) quebrou na reescrita da suíte. Por isso cada teste novo
   prova que falha sem a trava antes de o antigo sair.
-- **Quem usava equipe.** Ninguém usa hoje (o único caso, HackMeridian, foi arquivado). Até o plugin de sync sair,
-  não há equipe; o caminho de volta é a 0.11.5.
+- **Quem usava equipe.** Só o Mac do Pedro foi verificado: nele ninguém usa. Outros usuários do plugin público
+  perdem o sync na 0.12.0 até o plugin de sync existir (mitigação: item 5). A única config de membro que resta é `cos.member=pedro` no repositório
+  arquivado `~/Workspace/deprecated/HackMeridian (2026)`; a 0.12.0 a ignora. Até o plugin de sync sair, não há
+  equipe; quem precisar dela volta à 0.11.5.
+- **Travas que ficam.** Nem tudo que mora perto do código de equipe é de equipe: a trava contra `.owner-ok` em
+  grafia que o disco confunde (`track.sh`, laço `folded`) vale em qualquer projeto e fica, com teste próprio fora
+  dos testes de equipe.
 
 ## Fase 2 → plugin separado
 
@@ -69,7 +81,13 @@ ignora a pasta.
 
 **O que o sync não faz.** Board, decisões e conhecimento compartilhado viajam pelo git do próprio repositório.
 
-**Notas de desenho que valem reaproveitar:**
+**A definir na sessão do plugin novo:** nome e repositório; como o dono aprova quando só o sync está instalado
+(sem a fila do chief-of-staff); a interface com o chief-of-staff, que hoje seria um card em `board/` com
+`status: waiting-owner`, o formato que a fila do dono já lê. O desenho completo está em `docs/equipe/design.md`
+(seções 0 e 2-9) e `docs/equipe/plano.md` (seção "Fase 2"), que vão para o main com a 0.12.0.
+
+**Notas de desenho que valem reaproveitar** (propostas do design de 08/11, não decididas pelo Pedro; o plugin de sync
+pode mudar. Decisão do Pedro são só os dois parágrafos "O que é" e "O que é do próprio sync"):
 - Arquivo: `messages/<de>/<AAAAMMDD-HHMMSS>-<4 hex>.md`, um por mensagem, nunca editado depois de enviado. Front
   matter `id`, `from`, `to` (membro ou `all`), `conversation` (id da primeira), `reply_to` (id ou `-`), `kind`
   (question, answer, note), `sent`; corpo texto puro até 4000 caracteres. Cada membro só escreve na própria pasta,
@@ -90,4 +108,5 @@ ignora a pasta.
   merge silencioso; `GIT_TERMINAL_PROMPT=0` para nunca pedir senha num hook.
 - Pronto quando (herdado): um teste com repo bare local e duas cópias em que a resposta chega em até 2 turnos de cada
   lado; o mesmo com dois `claude -p` reais; uma mensagem que pede "apague X", "faça push" ou "grave o OK do dono"
-  deixa tudo no lugar e a pergunta aparece ao dono com o texto e o remetente.
+  deixa tudo no lugar e a pergunta aparece ao dono com o texto e o remetente; uma resposta automática a uma
+  mensagem que pede o conteúdo de um arquivo não traz texto de arquivo.
