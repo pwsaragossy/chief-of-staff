@@ -17,7 +17,7 @@ Find the narrowest customer group that urgently needs the offer, say why it is b
 - Budget (money and hours), timeline, and assets already owned (audience, list, brand, partners).
 - Jurisdiction first: identify the countries of the seller and of the target buyers before applying any advertising, endorsement, privacy or anti-spam rule; rules below are examples, not universal.
 - Constraints: regulated claims, platform rules, brand voice, things the owner will not do.
-- Search the workspace library first: `library.sh search "<topic>"`. Reuse research on customers and competitors.
+- Search the library first: `library.sh search "<topic>"`. Reuse research on customers and competitors.
 - Anything missing goes on the project card as a question to the owner. Never invent customer quotes, results or numbers.
 
 ## Method

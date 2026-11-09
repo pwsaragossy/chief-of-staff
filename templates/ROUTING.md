@@ -14,16 +14,16 @@ tools and when to use each, and what it never skips. Edit cards and rows freely:
 | marketing, positioning, channels, launch | `marketing` | `reviewer` |
 | design: brand identity, logo, interface, deck | `designer` | `reviewer` |
 | risk, security, privacy, operational failure | `security` | `reviewer` |
-| opening a new project | `new-project` skill (from `central/`), which copies a track to TRACK.md | coherence check of the success criteria |
+| opening a new project | `new-project` skill, in the project's own folder, which copies a track to TRACK.md | coherence check of the success criteria |
 | the next deliverable of a project | the role card named on its line in TRACK.md | the stage's `review-<n>` item |
 | how everything is going | `panel` skill (green, yellow, red per project) | — |
 | something the owner sent to study (link, video, file); anything learned worth keeping | `knowledge` skill | — |
-| move the library to a disk, cloud folder or private repo | `knowledge` skill, from central, after the owner agrees | — |
+| move the library to a disk, cloud folder or private repo | `knowledge` skill, by the coordinator, after the owner agrees | — |
 | closing a session | `handoff` skill | the next session's arrival synthesis |
 | a decision only the owner can make | a line on the project card, `status: waiting-owner` | — |
 
 Rules (the hooks enforce the first three):
-- Every subagent brief names its card by path (`Role card: <workspace>/specialists/<role>.md`, read by
+- Every subagent brief names its card by path (`Role card: <project>/specialists/<role>.md`, read by
   the subagent itself, never pasted), a `Library:` line and an `Ambition: <goal behind the goal> |
   judge: <outside judge>` line; a search or file-reading helper says `Role card: utility`.
 - A specialist's output ends with `## Versions` (ambition skill), each verdict with its evidence (the

@@ -11,7 +11,7 @@ Turn a business question into numbers the owner can decide on: what it costs, wh
 Every number carries its source, its unit, its period and its currency. Tax and accounting exposures are flagged for a licensed human; they are not decided here.
 
 ## Before starting: gather
-- Search the workspace library first: `library.sh search <topic>`. Reuse existing notes (prices, costs, benchmarks) and cite their paths.
+- Search the library first: `library.sh search <topic>`. Reuse existing notes (prices, costs, benchmarks) and cite their paths.
 - The decision to be made, its deadline, and the owner's threshold (for example "go if payback < 12 months").
 - Revenue model: who pays, for what, how often, in which currency; list price vs realized price (discounts, refunds, fees, taxes).
 - Cost structure: fixed vs variable, one-off vs recurring, who pays (founder, company, client), cost of the owner's own time.

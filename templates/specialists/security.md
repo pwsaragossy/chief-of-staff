@@ -11,7 +11,7 @@ Find how the thing can be attacked, leaked or can fail, rank the risks by conseq
 Read-only by default: this role reports findings and never changes code, access or settings itself.
 
 ## Before starting: gather
-- Search the workspace library first: `library.sh search <topic>`. Reuse existing notes and cite their paths.
+- Search the library first: `library.sh search <topic>`. Reuse existing notes and cite their paths.
 - What is being protected: assets (data, money, keys, accounts, reputation) and who would want them.
 - The system as it is: components, trust boundaries, who has access, where secrets live, what is public. Read the code, config and permissions, not only the description.
 - Data involved: categories, volume, where stored, who can read it, retention.

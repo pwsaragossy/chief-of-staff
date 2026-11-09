@@ -19,19 +19,19 @@
 #          no handoff (STATE.md updated:) for longer than stale_hours, status paused, the last check run failed,
 #          the target met on the very first run (not a hard target), a card too long to read,
 #          a public_urls link closed to a logged-out visitor, production not serving the prod_ref commit,
-#          a delivery that points at a file outside the workspace
+#          a delivery that points at a file outside the project folder
 # green  = none of the above
 #   health.sh text [dir]   the same, for a person: "slug: color - reason" per project, then each question waiting on the owner
 . "$(dirname "$0")/lib.sh"
 
 if [ "${1:-}" = text ]; then shift
-  r=$(cos_root "${1:-$PWD}") || { echo "health.sh: no chief-of-staff workspace at ${1:-$PWD}" >&2; exit 2; }
-  US=$(printf '\037'); me=; cos_shared "$r" && me=$(cos_member "$r")
-  # a verdict first, then one line per project, then this person's questions (a teammate's central asks theirs)
-  { sh "$0" "$@"; sh "$0" cards "$@"; } | me=$me awk -F "$US" '
+  r=$(cos_root "${1:-$PWD}") || { echo "health.sh: no chief-of-staff project at ${1:-$PWD}" >&2; exit 2; }
+  US=$(printf '\037')
+  # a verdict first, then one line per project, then the owner's questions
+  { sh "$0" "$@"; sh "$0" cards "$@"; } | awk -F "$US" '
     function ago(m) { return m < 60 ? m " min" : m < 1440 ? int(m / 60) " h " m % 60 " min" : int(m / 1440) " d" }
     $1 != "C" { P[++np] = $1 ": " $2 " - " $3; c[$2]++; next }
-    $4 != "waiting-owner" || (ENVIRON["me"] != "" && $5 != "" && $5 != ENVIRON["me"]) { next }
+    $4 != "waiting-owner" { next }
     { n = split($11, q, "\036"); split($14, a, "\036")
       if (!n) Q[++nq] = "- " $2 " (" $3 "): open the card"
       for (i = 1; i <= n; i++) Q[++nq] = "- " $2 " (" $3 "): " q[i] " - asked " ago(a[i] != "" ? a[i] : $7) " ago" }
@@ -45,7 +45,7 @@ if [ "${1:-}" = text ]; then shift
   exit 0
 fi
 mode=projects; [ "${1:-}" = cards ] && { mode=cards; shift; }
-root=$(cos_root "${1:-$PWD}") || { echo "health.sh: no chief-of-staff workspace at ${1:-$PWD}" >&2; exit 2; }
+root=$(cos_root "${1:-$PWD}") || { echo "health.sh: no chief-of-staff project at ${1:-$PWD}" >&2; exit 2; }
 US=$(printf '\037'); RS=$(printf '\036')
 now=$(date +%s)
 clean() { tr -d '\000-\037' | cut -c1-200; }
@@ -53,7 +53,7 @@ clean() { tr -d '\000-\037' | cut -c1-200; }
 cards() {
   # one pass over the board (cos_board); values come back without control characters, at most 200 characters
   cos_board "$root" | while IFS=$US read -r c cm cp cs ca dr nq nu sp nl nb lg q qs; do
-    t="$(cos_pdir "$root" "$cp")/TRACK.md"
+    t="$root/TRACK.md"
     lim=$(fm_get "$t" owner_wait_minutes); case $lim in ''|*[!0-9]*) lim=60 ;; esac
     col=green; w=; esc=
     if [ "$cs" = waiting-owner ]; then
@@ -84,9 +84,8 @@ EOS
 [ $mode = cards ] && { cards; exit 0; }
 allcards=$(cards)
 
-# a project folder is one project; a workspace has one per projects/<slug>. Its cards: every card of a project
-# folder's own board, or those whose project: names it
-pall=; if cos_isproj "$root"; then set -- "$root/STATE.md"; pall=1; else set -- "$root"/projects/*/STATE.md; fi
+# a project folder is one project, and every card on its board is its card
+set -- "$root/STATE.md"
 for s in "$@"; do
   [ -f "$s" ] || continue
   d=$(dirname "$s"); p=$(basename "$d")
@@ -131,7 +130,7 @@ for s in "$@"; do
     [ "${fr%%	*}" = 0 ] && yellow "target met on the first run: not a hard target, raise it with the owner"
   fi
   while IFS=$US read -r k cn cp cs cm cc cw cl cd cdl cq cesc cbig _ages; do
-    [ "$k" = C ] && { [ -n "$pall" ] || [ "$cp" = "$p" ]; } || continue
+    [ "$k" = C ] || continue
     if [ "$cs" = waiting-owner ]; then
       if [ -n "$cesc" ]; then red "a question has waited $(cos_ago "$cw") with the deadline under 3 h: escalate it to the deputy, $cesc: $cn"
       elif [ "$cc" = red ]; then red "a question has waited on the owner for $(cos_ago "$cw") (limit $cl min): $cn"
@@ -172,10 +171,10 @@ EOC
       else seen "prod $1 $pc ok"; fi
     fi
   fi
-  # a delivery that points at a file outside the workspace: teammates and the reviewer cannot open it
+  # a delivery that points at a file outside the project folder: teammates and the reviewer cannot open it
   xo=$( { cat "$d/DELIVERY.md"; awk 'NR == 1 && /^---/ { f = 1; next } f && /^---/ { f = 0; next } !f' "$d/TRACK.md"; } 2>/dev/null | grep -oE '(^|[ (`"'"'"'])(~|/[A-Za-z0-9._-]+)(/[A-Za-z0-9._-]+)+' |
     sed 's/^[ (`"'"'"']//' | while IFS= read -r x; do case $x in ("$root"/*|/usr/*|/bin/*|/dev/*|/etc/*|/opt/*) ;; (*) printf '%s\n' "$x" ;; esac; done | head -n 1)
-  [ -n "$xo" ] && yellow "the delivery points outside the workspace ($xo): copy the file into the project folder"
+  [ -n "$xo" ] && yellow "the delivery points outside the project folder ($xo): copy the file into the project folder"
   if [ -n "$quiet" ]; then on="delivered: the original request is done"; else on="on track"; fi
   [ -n "$color" ] || { color=green; reason=$on; }
   printf '%s\037%s\037%s\037%s\037%s\037%s\n' "$p" "$color" "$(printf '%s' "$reason" | clean)" "$st" "$dle" "$(fm_get "$s" member | clean)$US$tg$US$ck$US$runs$US$reds${reds:+${yels:+$RS}}$yels$US$(printf '%s' "$outside" | tr -d '\000-\035\037')"

@@ -15,7 +15,7 @@ Establish that a specific user has a specific, frequent, costly problem, then de
 - Current alternative the user uses today (including "nothing" and spreadsheets) and its cost in time or money.
 - Constraints: deadline, team size, platform, legal limits, existing design system or components to reuse.
 - The success metric and its current baseline. If none exists, the first deliverable is how to measure one.
-- Search the workspace library first: `library.sh search "<topic>"`. Existing research and prior decisions come before new work.
+- Search the library first: `library.sh search "<topic>"`. Existing research and prior decisions come before new work.
 - Anything missing goes on the project card as a question to the owner. Never invent a user, a metric or a quote.
 
 ## Method

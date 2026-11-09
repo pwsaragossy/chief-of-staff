@@ -17,7 +17,7 @@
 # No TRACK.md: silent, exit 0 (old projects keep working).
 . "$(dirname "$0")/lib.sh"
 
-cmd=$1; dir=$2; [ -d "$dir" ] && dir=$(cd "$dir" && pwd)   # absolute: the guards find the workspace from it
+cmd=$1; dir=$2; [ -d "$dir" ] && dir=$(cd "$dir" && pwd)   # absolute: the guards find the project from it
 t="$dir/TRACK.md"
 # decide <project_dir> <decision> <who>: append one new decision to DECISIONS.md (the handoff's way to record one).
 # It only appends a fresh line that replaces nothing: a revocation or a replacement is a hand edit of DECISIONS.md,
@@ -73,26 +73,28 @@ undelivered=$(printf '%s\n' "$rows" | awk -F "$US" -v d="$del" '$1 == "I" && $2 
 # Once the project opened with the key (a mark in .owner-items) or the owner approved a check, deleting the key
 # does not switch the gate off.
 TB=$(printf '\t')
-# a shared workspace: an owner file that git tracks, in any letter case, came from the team repo (a clone, a
-# hand commit), not from this computer's owner (the plugin never commits them: protocol.sh push skip). It is
-# moved aside at once, so untracking it later does not make its content trusted.
+# an owner file that git tracks, in any letter case, came through git (a clone, a pull, a teammate's commit), not
+# from this computer's owner: the owner's OKs are local to this computer. It is moved aside at once, so untracking it
+# later does not make its content trusted.
 OKF="$dir/.owner-ok"; OIF="$dir/.owner-items"; forged=
-# git reads the workspace's own repository, named outright: a folder of the project laid out like a repository
-# (a teammate can commit one) is never taken for it. If git cannot answer, nothing of the owner's is trusted
-wroot=$(cos_root "$dir"); wg() { git --git-dir="$wroot/.git" --work-tree="$wroot" -C "$dir" "$@"; }
-if cos_anyshared "$dir"; then
+# git reads the repository that holds the project, named outright: the nearest .git at the project root or above it
+# (a project can be a subfolder of a bigger repository), never a folder inside the project laid out like a repository
+# (a teammate can commit one). If git cannot answer, nothing of the owner's is trusted
+wroot=$(cos_root "$dir"); while [ -n "$wroot" ] && [ ! -e "$wroot/.git" ]; do wroot=${wroot%/*}; done
+wg() { git --git-dir="$wroot/.git" --work-tree="$wroot" -C "$dir" "$@"; }
+if [ -n "$wroot" ]; then
   _l=$(wg ls-files -- ':(icase).owner-ok' ':(icase).owner-items' 2>/dev/null) || { OKF=/nonexistent/.owner-ok; OIF=/nonexistent/.owner-items; }
   for _f in $_l; do
-    forged="$forged $_f"; [ -e "$dir/$_f" ] && { [ -L "$dir/$_f" ] || chmod u+w "$dir/$_f"; mv -f "$dir/$_f" "$dir/$_f.from-team"; } 2>/dev/null
+    forged="$forged $_f"; [ -e "$dir/$_f" ] && { [ -L "$dir/$_f" ] || chmod u+w "$dir/$_f"; mv -f "$dir/$_f" "$dir/$_f.from-git"; } 2>/dev/null
   done
   case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) OKF=/nonexistent/.owner-ok ;; esac
   case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-items*) OIF=/nonexistent/.owner-items ;; esac
 fi
 # a file the disk only reads as an owner file (macOS: .owner-oK with a Kelvin sign, .owner-itemſ with a long s) is not
-# the owner's: git and the guards never see it under that name. Moved aside the same way, in any workspace
+# the owner's: git and the guards never see it under that name. Moved aside the same way, in any project
 # (find compares bytes, and a name with a line break cannot pose as the real one); one that stays is not read
 folded=; for _b in .owner-ok .owner-items; do [ -e "$dir/$_b" ] && [ -z "$(find -H "$dir" -mindepth 1 -maxdepth 1 -name "$_b" 2>/dev/null)" ] || continue
-  for _x in "$dir"/.[!.]*; do [ "$_x" -ef "$dir/$_b" ] && { [ -L "$_x" ] || chmod u+w "$_x"; mv -f "$_x" "$_x.from-team"; folded="$folded ${_x##*/}"; }; done 2>/dev/null
+  for _x in "$dir"/.[!.]*; do [ "$_x" -ef "$dir/$_b" ] && { [ -L "$_x" ] || chmod u+w "$_x"; mv -f "$_x" "$_x.from-disk"; folded="$folded ${_x##*/}"; }; done 2>/dev/null
   [ -e "$dir/$_b" ] && case $_b in .owner-ok) OKF=/nonexistent/.owner-ok ;; *) OIF=/nonexistent/.owner-items ;; esac
 done
 has_tc=; awk 'NR == 1 && /^---/ { f = 1; next } f && /^---/ { exit } f && /^target:/ { h = 1 } END { exit !h }' "$t" && has_tc=1
@@ -116,18 +118,6 @@ hsum() { if command -v shasum > /dev/null 2>&1; then shasum -a 256 | cut -c1-64
 # the frozen sum covers the target, the command and the files above
 tcsum() { { printf '%s\n%s\n' "$tgt" "$chk"; set -f; for _f in $(tcfiles); do printf '%s\n' "$_f"; cat "$dir/$_f"; done; set +f; } 2>/dev/null | hsum; }
 frozen() { awk -F '\t' '$1 == "check" { for (i = 4; i <= NF; i++) if ($i ~ /^freeze=/) { f = substr($i, 8); d = $2 } } END { if (f != "") print f "\t" d }' "$OKF" 2>/dev/null; }
-# teamsent: a file of this project (any letter case) changed by a commit after the owner approved the check that
-# this computer did not make (sync.sh lists its own in cos-own): a pull, by sync.sh or by hand. The approval keeps
-# the commit shared with the team repo then (head=), which a push never rewrites; local commits after it are
-# folded by sync.sh push, and the folded one is listed as this computer's own
-teamsent() { cos_anyshared "$dir" || return 1
-  _g=$(wg rev-parse --absolute-git-dir 2>/dev/null) || { echo "its history (git cannot read this project)"; return 0; }; _p=$(wg rev-parse --show-prefix 2>/dev/null)
-  _h=$(awk -F '\t' '$1 == "check" { h = ""; for (i = 4; i <= NF; i++) if ($i ~ /^head=/) h = substr($i, 6) } END { print h }' "$OKF" 2>/dev/null)
-  [ -n "$_h" ] && wg merge-base --is-ancestor "$_h" HEAD 2>/dev/null || { echo "the history since the approval (its commit is gone)"; return 0; }
-  for _c in $(wg rev-list "$_h..HEAD" -- ":(top,icase)$_p" 2>/dev/null); do
-    grep -qx "$_c" "$_g/cos-own" 2>/dev/null && continue
-    wg diff-tree --no-commit-id --name-only -r "$_c" -- ":(top,icase)$_p" | head -n 1; return 0
-  done; return 1; }
 # runcheck: rc (0 met, 1 not met, 124 timed out, other could not run) and val (the last output line)
 runcheck() {
   _o=$(mktemp); _lim=${COS_CHECK_TIMEOUT:-120}; case $_lim in ''|*[!0-9]*) _lim=120 ;; esac
@@ -150,27 +140,14 @@ if [ -n "$has_tc" ]; then fzs=$(frozen); fzs=${fzs%%"$TB"*}
   if [ -z "$fzs" ] || [ "$fzs" != "$(tcsum)" ]; then tcpending=1
   elif [ -n "$runnable" ] && ! awk -F '\t' -v s="freeze=$fzs" '$1 != "check" { c = 0; z = 0; for (i = 4; i <= NF; i++) { if ($i ~ /^check=(pass|waived)/) c = 1; if ($i == s) z = 1 } if (c && z) f = 1 } END { exit !f }' "$OKF" 2>/dev/null; then tcpending=1; fi
 fi
-mine() { # a shared workspace: a project's check runs only on its own member's computer
-  _r=$(cos_root "$dir"); _m=
-  if [ -n "$_r" ] && cos_shared "$_r"; then _m=$(cos_member "$_r")
-    [ -n "$_m" ] && [ "$(fm_get "$dir/STATE.md" member)" = "$_m" ] || return 1
-  fi
-}
-
 # cites FILE [PREFIX]: each [[id]] in FILE must be a note of the project's library that is not retired.
-# A personal project may also cite a team's note; a team project cites only its own library (no leak).
 cites() {
   _r=$(cos_root "$dir") || return 0
   _ln=$(cos_libname "$_r" "$dir"); _l=$(cos_libpath "$_r" "$_ln") || {
     [ "$_ln" = personal ] && return 0   # offline personal library: the briefing says so; nothing to compare against
-    echo "${2:-}$(basename "$1"): its sources cannot be checked, the team library '$_ln' is not reachable (library.sh where)"; return 0; }
+    echo "${2:-}$(basename "$1"): its sources cannot be checked, the project's library (knowledge/) is not reachable (library.sh where)"; return 0; }
   grep -o '\[\[[^]|#]*' "$1" 2>/dev/null | sed 's/^\[\[//' | sort -u | while IFS= read -r _i; do
     _n="$_l/notes/$_i.md"; _o=
-    [ -f "$_n" ] || _o=$(cos_libs "$_r" | while IFS="$(printf '\t')" read -r _a _p; do [ -f "$_p/notes/$_i.md" ] && { printf '%s\t%s\n' "$_a" "$_p"; break; }; done)
-    if [ -n "$_o" ] && [ "$_ln" != personal ]; then
-      echo "${2:-}$(basename "$1") cites [[$_i]] from the library '${_o%%	*}': this project shares with the team library '$_ln', so its work cannot rest on another library's note. Use a note of '$_ln', or the owner agrees to rewrite the fact there"; continue
-    fi
-    [ -n "$_o" ] && _n="${_o#*	}/notes/$_i.md"
     if [ ! -f "$_n" ]; then echo "${2:-}$(basename "$1") cites [[$_i]], which is not a note in the library ($_l/notes)"
     elif [ "$(fm_get "$_n" status)" = retired ]; then _s=$(fm_get "$_n" superseded_by)
       echo "${2:-}$(basename "$1") cites [[$_i]], which is retired${_s:+: cite [[$_s]] instead}"
@@ -209,8 +186,8 @@ check() {
   # an item that needed the owner's OK at opening still needs it: removing the mark does not skip the owner
   # (.owner-items, read-only and written once by baseline: TRACK.md itself is the agent's to edit)
   # a project opened with a baseline always has the list: without it the owner gate would be off (fail closed)
-  for _f in $folded; do echo "$_f is not named exactly like the owner's file, though this disk reads it as one, so this computer does not trust it; it was moved aside to $_f.from-team: have the owner give their OKs again"; done
-  for _f in $forged; do echo "$_f came from the team repo (git tracks it), so this computer does not trust it; it was moved aside to $_f.from-team: remove it from git (git rm --cached $_f) and have the owner give their OKs again"; done
+  for _f in $folded; do echo "$_f is not named exactly like the owner's file, though this disk reads it as one, so this computer does not trust it; it was moved aside to $_f.from-disk: have the owner give their OKs again"; done
+  for _f in $forged; do echo "$_f is tracked by git, so it came through git and not from this computer's owner; it was moved aside to $_f.from-git: remove it from git (git rm --cached $_f) and have the owner give their OKs again"; done
   [ -n "$(fm_get "$t" baseline)" ] && [ ! -r "$OIF" ] &&
     echo "the list of owner items is missing (.owner-items, written when the project opened): restore it from git or ask the owner"
   for b in $(cat "$OIF" 2>/dev/null); do [ "$b" = target: ] && continue
@@ -300,12 +277,10 @@ case $cmd in
     ;;
   ok)
     # the owner's OK on an item: only the coordinator records it (the session at the registered root of this very
-    # project folder; central in the older workspace layout), and the PreToolUse hook makes the owner approve it
+    # project folder), and the PreToolUse hook makes the owner approve it
     _s=${CLAUDE_PROJECT_DIR:-$PWD}; _sr=$(cos_root "$_s"); _dr=$(cos_root "$dir")
-    if [ -n "$_sr" ] && cos_isproj "$_sr"; then
-      cos_owner "$_sr" "$_s" && [ "$(cd "$_sr" && pwd -P)" = "$(cd "$_dr" 2>/dev/null && pwd -P)" ] ||
-        { echo "track.sh ok: only the coordinator of this project (the owner's conversation at its folder's root) records the owner's OK" >&2; exit 1; }
-    else case $_s in */central|*/central/*) ;; *) echo "track.sh ok: only the coordinator records the owner's OK" >&2; exit 1 ;; esac; fi
+    [ -n "$_sr" ] && cos_owner "$_sr" "$_s" && [ "$(cd "$_sr" && pwd -P)" = "$(cd "$_dr" 2>/dev/null && pwd -P)" ] ||
+      { echo "track.sh ok: only the coordinator of this project (the owner's conversation at its folder's root) records the owner's OK" >&2; exit 1; }
     id=${3:-}; shift 3 2>/dev/null || { echo "usage: track.sh ok <project_dir> <item|check|delivery> <the owner's words>" >&2; exit 2; }
     case $id in
       check) [ -n "$has_tc" ] && [ -n "$tgt" ] && [ -n "$chk" ] || { echo "track.sh ok: write target: and check: in TRACK.md first" >&2; exit 1; } ;;
@@ -313,18 +288,15 @@ case $cmd in
       *) printf '%s\n' "$rows" | awk -F "$US" -v i="$id" '$1 == "I" && $4 == i && $9 == "ok" { f = 1 } END { exit !f }' ||
            { echo "track.sh ok: $id is not an item of this track marked owner: ok" >&2; exit 1; } ;;
     esac
-    # a shared workspace: only the project's own member gives its OK
-    case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) echo "track.sh ok: .owner-ok came from the team repo (git tracks it): remove it from git first (git rm --cached)" >&2; exit 1 ;; esac
-    mine || { echo "track.sh ok: this project is $(fm_get "$dir/STATE.md" member)'s; only their coordinator records its OK" >&2; exit 1; }
+    case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) echo "track.sh ok: .owner-ok is tracked by git, so it is not this computer's owner's: remove it from git first (git rm --cached .owner-ok)" >&2; exit 1 ;; esac
     w=$(printf '%s' "$*" | tr -d '\000-\037' | cut -c1-300); x=
-    if [ "$id" = check ]; then x="${TB}freeze=$(tcsum)$({ wg merge-base HEAD '@{u}' || wg rev-parse -q --verify HEAD; } 2>/dev/null | head -n 1 | sed "s/^/$TB""head=/")"; _fl=$(tcfiles)
+    if [ "$id" = check ]; then x="${TB}freeze=$(tcsum)"; _fl=$(tcfiles)
       echo "the owner approves the target '$tgt' and the command '$chk'${_fl:+, frozen with its files: $_fl}"
     elif [ -n "$runnable" ] && { [ "$id" = delivery ] || [ "$(printf '%s\n' "$rows" | awk -F "$US" -v i="$id" '$1 == "I" && $4 == i { print $2 }')" -ge "$del" ]; }; then
       # the delivery OK: the frozen check runs now, in front of the owner; a failing one needs the owner's waiver
       fz=$(frozen)
       [ -n "$fz" ] || { echo "track.sh ok: the owner never approved target and check: record track.sh ok <project> check first" >&2; exit 1; }
       [ "${fz%%"$TB"*}" = "$(tcsum)" ] || { echo "track.sh ok: target or check changed since the owner approved them: approve the new ones first (track.sh ok <project> check)" >&2; exit 1; }
-      _s=$(teamsent) && { echo "track.sh ok: a teammate changed $_s in this project after the owner approved the check: the owner reads the change and approves again (track.sh ok <project> check)" >&2; exit 1; }
       runcheck; printf '%s\t%s\t%s\n' "$(date '+%F %H:%M')" "$rc" "$val" >> "$dir/.check-runs"
       if [ "$rc" = 0 ]; then x="${TB}check=$res${TB}freeze=${fz%%"$TB"*}"
       else case $(printf '%s' "$w" | tr 'A-Z' 'a-z') in
@@ -333,15 +305,13 @@ case $cmd in
       fi
     fi
     o="$dir/.owner-ok"; [ -f "$o" ] && chmod u+w "$o"
-    printf '%s\t%s\t%s%s%s\n' "$id" "$(date '+%F %H:%M')" "${_m:+$_m: }" "$w" "$x" >> "$o"; chmod 444 "$o"
+    printf '%s\t%s\t%s%s%s\n' "$id" "$(date '+%F %H:%M')" "" "$w" "$x" >> "$o"; chmod 444 "$o"
     echo "recorded the owner's OK on $id${x:+ (${x#"$TB"})}" ;;
   verify)
     [ -n "$runnable" ] || { echo "check: nothing to run (TRACK.md check: ${chk:-empty})"; exit 0; }
-    mine || { echo "verify: this project is $(fm_get "$dir/STATE.md" member)'s; only their own computer runs its check" >&2; exit 1; }
     # only a command the owner approved on this computer runs: .owner-ok never syncs, TRACK.md and STATE.md do
     fz=$(frozen); [ -n "$fz" ] && [ "${fz%%"$TB"*}" = "$(tcsum)" ] ||
       { echo "verify: the owner has not approved this check on this computer, or it changed since: nothing runs until the coordinator records it with track.sh ok <project> check" >&2; exit 1; }
-    _s=$(teamsent) && { echo "verify: a teammate changed $_s in this project after the owner approved the check: nothing runs until the owner reads the change and approves again (track.sh ok <project> check)" >&2; exit 1; }
     runcheck; printf '%s\t%s\t%s\n' "$(date '+%F %H:%M')" "$rc" "$val" >> "$dir/.check-runs"
     echo "check: $res$([ "$rc" = 1 ] && echo " (target: $tgt)")"; [ "$rc" = 0 ] ;;
   baseline)

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Local panel for a chief-of-staff workspace: health per project, track progress, cards waiting on
+"""Local panel for a chief-of-staff project folder: health per project, track progress, cards waiting on
 the owner, the last 24 hours in three counts (turns, protocol breaks, rejected notes), and an import box that drops files or links into
 knowledge/inbox/. Standard library only. Listens on 127.0.0.1; every request needs the token in the URL.
 
-Usage: python3 panel.py <workspace> [port]     (port 0 or omitted = a free port)
+Usage: python3 panel.py <project folder> | --all [port]     (port 0 or omitted = a free port)
 """
-import hashlib, http.server, io, json, os, re, secrets, shutil, subprocess, sys, tarfile, threading, time, urllib.parse
+import http.server, json, os, re, secrets, subprocess, sys, time, urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAX_UPLOAD = 50 * 1024 * 1024
@@ -65,7 +65,7 @@ def rows(text):
 PROGRESS = re.compile(r"^\s*[-*] \**((\d{4}-\d{2}-\d{2})?\s*(\d{1,2}:\d{2})?)(?: ?[A-Z]{2,4})?(?: check)?\**\s*\(([^)]{1,80})\):\s*(.+)$")
 
 
-def progress(root, slug, keep=3, every=False):
+def progress(root, keep=3):
     """The latest progress line of each open card of a project, newest card first, so the panel moves
     before a whole track item closes. ponytail: a line without a date counts as the card's updated: day."""
     out = []
@@ -77,7 +77,7 @@ def progress(root, slug, keep=3, every=False):
     for n in names:
         path = os.path.join(board, n)
         fm = front_matter(path)
-        if (not every and fm.get("project") != slug) or fm.get("status", "") in ("done", "closed", "cancelled", "dropped"):
+        if fm.get("status", "") in ("done", "closed", "cancelled", "dropped"):
             continue
         try:
             with open(path, encoding="utf-8", errors="replace") as f:
@@ -140,13 +140,12 @@ def tasks(root):
 
 
 def libraries(root):
-    """Every library (personal and each team's): name, folder, state, notes, last sync."""
+    """Every library (today only the personal one): name, folder, state, notes."""
     out = []
-    for line in rows(sh("library.sh", "libs", cwd=os.path.join(root, "central") if os.path.isdir(os.path.join(root, "central")) else root)):
+    for line in rows(sh("library.sh", "libs", cwd=root)):
         f = line.split("\t")
         if len(f) >= 5:
-            out.append({"name": f[0], "path": f[1], "state": f[2], "notes": f[3], "sync": f[4],
-                        "sync_color": "green" if f[0] == "personal" else sync_color(f[4])})
+            out.append({"name": f[0], "path": f[1], "state": f[2], "notes": f[3]})
     return out
 
 
@@ -193,36 +192,6 @@ def library(root, name="personal"):
             "origins": sorted({n["origin"] for n in nodes if n["origin"]})}
 
 
-def shared(root):
-    """In a shared workspace: this person's name and the last sync of the workspace with the team."""
-    try:
-        with open(os.path.join(root, ".chief-of-staff"), encoding="utf-8") as f:
-            if "shared: yes" not in f.read().splitlines():
-                return None
-    except OSError:
-        return None
-    try:
-        with open(os.path.join(root, ".git", "cos-sync"), encoding="utf-8", errors="replace") as f:
-            sync = f.readline().strip()[:160]
-    except OSError:
-        sync = ""
-    me = subprocess.run(["git", "-C", root, "config", "cos.member"], capture_output=True, text=True).stdout.strip()[:60]
-    return {"member": me, "sync": sync or "never", "color": sync_color(sync or "never"), **data_age(sync[:19])}
-
-
-LATE_MINUTES = 15  # teammates' data older than this gets an "as of sync HH:MM" label
-
-
-def data_age(stamp):
-    """Age of the team's data from a sync line's "YYYY-MM-DD HH:MM:SS": as_of HH:MM, minutes, late."""
-    try:
-        t = time.mktime(time.strptime(stamp, "%Y-%m-%d %H:%M:%S"))
-    except ValueError:
-        return {"as_of": "", "age": None, "late": True}
-    age = max(0, int((time.time() - t) // 60))
-    return {"as_of": stamp[11:16], "age": age, "late": age > LATE_MINUTES}
-
-
 def decisions(pdir, keep=5):
     """The decisions in force in the project's DECISIONS.md (lib.sh cos_decisions), newest first."""
     path = os.path.join(pdir, "DECISIONS.md")
@@ -241,14 +210,12 @@ CONTROL = {"STATE.md", "TRACK.md", "CLAUDE.md", "DELIVERY.md", "DECISIONS.md"}
 SKIPDIRS = {".git", "node_modules", "__pycache__", ".venv"}
 
 
-def files(root, view, slug, cap=200, pdir=None):
+def files(root, pdir, cap=200):
     """The project's own files (control files and dotfiles left out), newest first, each with who changed it
     last, how long ago (seconds) and how many versions git holds. History comes from this computer's branch and
     the team's (HEAD and its upstream), never from other refs a teammate could push. A file git never saw has
     versions 0, no author and its modification time."""
-    own = pdir is not None   # a project folder: the folder itself, its git paths from its own top
-    pdir = pdir or os.path.join(view, "projects", slug)
-    if os.path.islink(pdir) or not os.path.isdir(pdir):   # a linked project folder points outside the workspace
+    if not os.path.isdir(pdir):
         return []
     found = []
     for top, dirs, names in os.walk(pdir):
@@ -265,12 +232,12 @@ def files(root, view, slug, cap=200, pdir=None):
         if subprocess.run(["git", "-C", root, "rev-parse", "-q", "--verify", "@{u}"], capture_output=True, timeout=5).returncode == 0:
             refs.append("@{u}")
         out = subprocess.run(["git", "-C", root, "log", "-z", "--name-only", "--format=\x1e%an\x1f%ct", *refs,
-                              "--", ":(literal)" + ("." if own else "projects/" + slug)], capture_output=True, timeout=10).stdout.decode("utf-8", "replace")
-        if own:   # git names paths from the repository's top, which may sit above the project folder
-            pre = subprocess.run(["git", "-C", root, "rev-parse", "--show-prefix"], capture_output=True, text=True, timeout=5).stdout.strip()
+                              "--", ":(literal)."], capture_output=True, timeout=10).stdout.decode("utf-8", "replace")
+        # git names paths from the repository's top, which may sit above the project folder
+        pre = subprocess.run(["git", "-C", root, "rev-parse", "--show-prefix"], capture_output=True, text=True, timeout=5).stdout.strip()
     except (subprocess.TimeoutExpired, OSError):
         out = ""
-    seen, pre = {}, (pre if own else "projects/" + slug + "/")
+    seen = {}
     for block in out.split("\x1e")[1:]:   # "<author>\x1f<time>\0\n<path>\0<path>\0..." per commit
         head, _, body = block.partition("\0")
         who, _, ts = head.partition("\x1f")
@@ -296,15 +263,6 @@ def files(root, view, slug, cap=200, pdir=None):
     return got[:cap]
 
 
-def held(root, keep=10):
-    """What the last turn end kept off the team repo (protocol.sh writes .git/cos-held), one line per file."""
-    try:
-        with open(os.path.join(root, ".git", "cos-held"), encoding="utf-8", errors="replace") as f:
-            return [re.sub(r"[\x00-\x1f]", "", l).strip()[:300] for l in f.read().split("\n") if l.strip()][:keep]
-    except OSError:
-        return []
-
-
 def outside(field):
     """health.sh's public_urls and prod_ref results: "public <url> <code> ok|closed", "prod <url> <commit> ok|down|other"."""
     out = []
@@ -315,82 +273,8 @@ def outside(field):
     return out
 
 
-VIEW = {"at": 0, "commit": "", "dir": "", "error": ""}
-VIEW_LOCK = threading.Lock()
-
-
-def team_view(root, fetch=False):
-    """In a shared workspace, the projects, cards and tasks as GitHub has them, so every member sees the
-    same state: fetch the upstream when the owner presses Fetch (and once at start), export that commit
-    to a cache folder and read from there. The working folder and its branch are never touched. Without an upstream: the local folder."""
-    if not shared(root):
-        return root, None
-    git = ["git", "-C", root]
-    env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
-    with VIEW_LOCK:
-        if fetch or not VIEW["dir"]:
-            VIEW["at"] = time.time()
-            try:
-                up = subprocess.run(git + ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-                                    capture_output=True, text=True, timeout=10).stdout.strip()
-                if not up:
-                    return root, None
-                f = subprocess.run(git + ["fetch", "--quiet", up.split("/")[0]], capture_output=True, text=True, timeout=20, env=env)
-                VIEW["error"] = "" if f.returncode == 0 else "GitHub fetch failed, showing the last state fetched"
-                commit = subprocess.run(git + ["rev-parse", up], capture_output=True, text=True, timeout=10).stdout.strip()
-                if commit and commit != VIEW["commit"]:
-                    base = os.path.join(os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.expanduser("~/.cache/chief-of-staff"),
-                                        "team-view-" + hashlib.sha1(root.encode()).hexdigest()[:10])
-                    new = os.path.join(base, commit)
-                    if not os.path.isdir(new):
-                        tar = subprocess.run(git + ["archive", "--format=tar", commit], capture_output=True, timeout=30).stdout
-                        tmp = new + ".tmp"
-                        shutil.rmtree(tmp, ignore_errors=True)
-                        # links are dropped: the export is the team's content and is never followed out
-                        with tarfile.open(fileobj=io.BytesIO(tar)) as t:
-                            t.extractall(tmp, filter=lambda m, path: None if (m.issym() or m.islnk()) else tarfile.data_filter(m, path))
-                        os.replace(tmp, new)
-                    for old in os.listdir(base):  # keep only the commit shown
-                        if old != commit:
-                            shutil.rmtree(os.path.join(base, old), ignore_errors=True)
-                    VIEW.update(commit=commit, dir=new)
-                VIEW["stamp"] = time.strftime("%Y-%m-%d %H:%M:%S")
-            except (subprocess.TimeoutExpired, OSError, tarfile.TarError, TypeError) as e:
-                VIEW["error"] = "GitHub view failed (%s), showing the last state fetched" % type(e).__name__
-            VIEW["fetched"] = time.strftime("%H:%M:%S")
-        if not VIEW["dir"] or not os.path.isfile(os.path.join(VIEW["dir"], ".chief-of-staff")):
-            return root, {"error": VIEW["error"] or "No GitHub state yet, showing this computer's copy"}
-        # the owner's OKs never leave this computer (the sync skips them), so the export has none: bring this
-        # computer's copies, read fresh each time, or every track with owner items reads as tampered
-        for slug in os.listdir(os.path.join(root, "projects")) if os.path.isdir(os.path.join(root, "projects")) else []:
-            dst = os.path.join(VIEW["dir"], "projects", slug)
-            # the export is the team's content: never follow a link a teammate committed in it
-            if os.path.islink(dst) or not os.path.isdir(dst) or \
-                    not os.path.realpath(dst).startswith(os.path.realpath(VIEW["dir"]) + os.sep):
-                continue
-            for name in (".owner-ok", ".owner-items", ".check-runs"):
-                src, target = os.path.join(root, "projects", slug, name), os.path.join(dst, name)
-                try:
-                    if os.path.lexists(target):
-                        os.unlink(target)
-                    if os.path.isfile(src):
-                        with open(src, "rb") as f:
-                            data = f.read()
-                        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-                        with os.fdopen(fd, "wb") as f:
-                            f.write(data)
-                except OSError:
-                    pass
-        return VIEW["dir"], {"commit": VIEW["commit"][:7], "fetched": VIEW.get("fetched", ""), "error": VIEW["error"],
-                             **data_age(VIEW.get("stamp", ""))}
-
-
-def sync_color(text):
-    return "red" if ("conflict" in text or "failed" in text) else "yellow" if ("never" in text or "busy" in text) else "green"
-
-
 def is_project(root):
-    """A project folder: its marker says kind: project (project.sh init). Else the older workspace layout."""
+    """A project folder: its marker says kind: project (project.sh init)."""
     try:
         with open(os.path.join(root, ".chief-of-staff"), encoding="utf-8", errors="replace") as f:
             return "kind: project" in f.read().split("\n")
@@ -436,17 +320,18 @@ def board_view(b):
     return dict(row, color="yellow" if n["w"] or n["d"] else "green", reason=reason), cards
 
 
-def root_projects(root, fetch):
-    """The projects, cards and tasks of one root: a project folder (one project), or a workspace (projects/<slug>)."""
-    view, source = team_view(root, fetch)   # projects, cards and tasks as the team sees them; library and log stay local
-    own = is_project(root)
+
+
+def root_projects(root):
+    """The project, cards and tasks of one project folder."""
+    view = root
     projects = []
     for line in rows(sh("health.sh", view)):
         f = (line.split(US) + [""] * 18)[:18]
         slug, color, reason, stage, stages, closed, total, delivery, delivered, baseline, baseline_delivery, deadline, member, target, check, runs, why, out = f
         # every reason, red first, each "red <text>" or "yellow <text>"; an older health.sh gives only the first
         reasons = [{"color": r.split(" ", 1)[0], "text": r.split(" ", 1)[1]} for r in why.split("\x1e") if r.split(" ", 1)[0] in ("red", "yellow") and " " in r]
-        pdir = view if own else os.path.join(view, "projects", slug)
+        pdir = view
         stage_names, items = [], []
         for row in rows(sh("track.sh", "items", pdir)):
             r = row.split(US)
@@ -464,36 +349,36 @@ def root_projects(root, fetch):
             "stage_names": stage_names, "items": items,
             "brief": " ".join(l for l in rows(sh("track.sh", "brief", pdir)) if not l.startswith("Target: ")).strip().split(" Waiting on prerequisites:")[0],
             "next": front_matter(os.path.join(pdir, "STATE.md")).get("next", ""),
-            "progress": progress(view, slug, every=own),
+            "progress": progress(view),
             "reasons": reasons or ([{"color": color, "text": reason}] if color != "green" else []),
-            "outside": outside(out), "decisions": decisions(pdir), "files": files(root, view, slug, pdir=pdir if own else None),
+            "outside": outside(out), "decisions": decisions(pdir), "files": files(root, root),
         })
     cards = []  # what waits on the owner, from health.sh (the one place that times and colors it)
     for line in rows(sh("health.sh", "cards", view)):
         f = (line.split(US) + [""] * 14)[:14]
         if f[0] == "C" and f[3] == "waiting-owner":
             qs, ages = f[10].split("\x1e"), f[13].split("\x1e")  # ages: minutes per question, empty when unstamped
-            cards.append({"title": f[1], "project": f[2] or (os.path.basename(root) if own else ""), "member": f[4], "color": f[5], "waited": int(f[6] or 0),
+            cards.append({"title": f[1], "project": f[2] or os.path.basename(root), "member": f[4], "color": f[5], "waited": int(f[6] or 0),
                           "limit": f[7], "questions": [q for q in qs if q], "deputy": f[11], "size": f[12],
                           "ages": [int(a) if i < len(ages) and (a := ages[i]).isdigit() else None for i, q in enumerate(qs) if q]})
-    return projects, cards, tasks(view), source
+    return projects, cards, tasks(view)
 
 
-def snapshot(roots, libname="personal", fetch=False, boards=()):
-    """The panel's data for one root (a project folder, or an older workspace) or several (the global panel: every
+def snapshot(roots, libname="personal", boards=()):
+    """The panel's data for one project folder or several (the global panel: every
     registered project folder). A registered folder that is gone shows as a grey row, never breaks the rest."""
     roots = [roots] if isinstance(roots, str) else list(dict.fromkeys(roots))
-    projects, cards, todo, source, here = [], [], [], None, []
+    projects, cards, todo, here = [], [], [], []
     for r in roots:
-        if not os.path.isdir(r) or not find_root(r):
+        if not os.path.isdir(r) or not find_root(r) or not is_project(find_root(r)):
             projects.append({"slug": os.path.basename(r.rstrip("/")) or r, "color": "gray", "reason": "Folder not found", "path": r,
                              "reasons": [], "items": [], "stage_names": [], "outside": [], "decisions": [], "files": [], "progress": [],
                              "total": "", "next": "", "member": "", "target": "", "deadline": None, "delivered": False})
             continue
         r = find_root(r)
         here.append(r)
-        p, c, t, src = root_projects(r, fetch)
-        projects += p; cards += c; todo += t; source = source or src
+        p, c, t = root_projects(r)
+        projects += p; cards += c; todo += t
     read = {os.path.realpath(os.path.join(r, "board")) for r in here}   # a project's own board/ is read once
     for b in dict.fromkeys(boards):
         if os.path.realpath(b) in read:
@@ -530,11 +415,10 @@ def snapshot(roots, libname="personal", fetch=False, boards=()):
     inbox = os.path.join(lib["path"], "inbox")
     n_inbox = len([n for n in os.listdir(inbox) if not n.startswith(".")]) if os.path.isdir(inbox) else 0
     n_notes = lib.get("total", 0)
-    sh_ws = shared(root) if root else None
-    rank_c = [c["color"] for c in cards] + [x["sync_color"] for x in libs] + ([sh_ws["color"]] if sh_ws else [])
+    rank_c = [c["color"] for c in cards]
     overall = max([overall] + rank_c, key=lambda c: rank.get(c, 0))
-    return {"library": lib, "libs": libs, "workspace": root, "overall": overall, "projects": projects, "cards": cards, "tasks": todo, "source": source,
-            "counts": counts, "shared": sh_ws, "held": held(root) if root else [],
+    return {"library": lib, "libs": libs, "workspace": root, "overall": overall, "projects": projects, "cards": cards, "tasks": todo,
+            "counts": counts,
             "inbox": n_inbox, "notes": n_notes, "time": time.strftime("%H:%M:%S")}
 
 
@@ -628,10 +512,9 @@ svg.edges path.ok{stroke:var(--green);opacity:.6}svg.edges path.hot{stroke:var(-
 select{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);margin-left:8px}
 </style></head><body><main>
 <div class="top"><span id="overall" class="dot"></span><h1>Chief of staff</h1><span class="grow"></span><span id="time" class="muted"></span></div>
-<div id="ws" class="muted"></div><button id="fetch" class="toggle" hidden>Fetch</button>
+<div id="ws" class="muted"></div>
 <h2>Waits on you</h2><div id="cards" class="box"></div>
 <h2>Projects</h2><div id="projects" class="box"></div>
-<div id="held" class="box" hidden></div>
 <h2>Tasks</h2><div id="tasks" class="box"></div>
 <h2>Import knowledge</h2>
 <div id="drop" class="box">Drop files here or click to choose<input id="file" type="file" multiple hidden></div>
@@ -901,14 +784,7 @@ function render(){
   document.getElementById("overall").className="dot "+d.overall;
   document.getElementById("time").textContent="Updated "+d.time;
   const ws=document.getElementById("ws");
-  ws.textContent=d.workspace+(d.shared?" · shared, you are "+(d.shared.member||"unnamed")+" · last sync "+d.shared.sync:"");
-  if(d.source)ws.textContent+=d.source.commit?" · showing GitHub at "+d.source.commit+", fetched "+d.source.fetched+(d.source.error?" ("+d.source.error+")":""):" · "+d.source.error;
-  // teammates' data past a few minutes old: say how old, in a label that keeps the text contrast
-  const lag=d.source&&d.source.commit?d.source:d.shared;
-  if(lag&&(lag.late||(d.shared&&d.shared.color!=="green"))){const p=el("span","pill"+(d.shared&&d.shared.color==="red"?" red":""));
-    p.append(el("span","dot "+(d.shared&&d.shared.color==="red"?"red":"yellow")),lag.as_of?"Teammate data as of sync "+lag.as_of+(lag.age!=null?" ("+ago(lag.age)+" old)":""):"Teammate data: no sync yet");
-    ws.append(" ",p)}
-  document.getElementById("fetch").hidden=!d.source;
+  ws.textContent=d.workspace;
   const P=document.getElementById("projects");
   if(!d.projects.length)empty(P,"No projects yet. Run /chief-of-staff:new-project in a folder.");else P.replaceChildren(...d.projects.map(p=>{
     const row=el("div","row"),body=el("div","grow");row.append(el("span","dot "+p.color),body);
@@ -940,9 +816,6 @@ function render(){
       if(p.files.length>6){const m=el("details"),w=el("ul");m.append(el("summary","",(p.files.length-6)+" more"));p.files.slice(6).forEach(x=>w.append(li(x)));m.append(w);f.append(m)}
       body.append(f)}
     return row}));
-  const H=document.getElementById("held");H.hidden=!(d.held||[]).length;
-  if((d.held||[]).length){const r=el("div","row"),b=el("div","grow"),u=el("ul","q");r.append(el("span","dot yellow"),b);b.append(el("div","name","Kept on this computer"));
-    d.held.forEach(x=>u.append(el("li","",x)));b.append(u);H.replaceChildren(r)}
   const C=document.getElementById("cards");
   if(!d.cards.length)empty(C,"Nothing waiting");else C.replaceChildren(...d.cards.map(c=>{
     const row=el("div","row"),b=el("div","grow");row.append(el("span","dot "+c.color),b);
@@ -958,9 +831,9 @@ function render(){
     const u=el("ul","q");g.items.forEach(x=>u.append(el("li","",x.task+" · "+x.card)));b.append(u);return row}));
   document.getElementById("lib").textContent=d.inbox+" item(s) in the inbox, "+d.notes+" note(s) in the library.";
   const B=document.getElementById("library"),L=d.library,head=el("div","row"),hb=el("div","grow");head.append(el("span","dot "+L.color),hb);
-  if(d.libs.length>1){const s=el("select");s.setAttribute("aria-label","Library");d.libs.forEach(x=>{const o=el("option","",x.name+(x.name==="personal"?"":" (team)")+", "+x.notes+" notes");o.value=x.name;if(x.name===L.name)o.selected=true;s.append(o)});
-    s.onchange=()=>{libName=s.value;origin="";G.sel=null;load()};hb.append(s);const cur=d.libs.find(x=>x.name===L.name);
-    if(cur&&cur.sync!=="-"){const y=el("div","","Last sync: "+cur.sync);y.style.color=cur.sync_color==="green"?"var(--muted)":"var(--"+cur.sync_color+"-t)";hb.append(y)}}
+  if(d.libs.length>1){const s=el("select");s.setAttribute("aria-label","Library");d.libs.forEach(x=>{const o=el("option","",x.name+", "+x.notes+" notes");o.value=x.name;if(x.name===L.name)o.selected=true;s.append(o)});
+    s.onchange=()=>{libName=s.value;origin="";G.sel=null;load()};hb.append(s);
+    }
   // the graph element is never detached, so focus, camera, selection and positions survive the refresh
   if(!B.lslots){B.lslots=[el("div"),graphEl(),el("div"),el("div")];B.replaceChildren(...B.lslots)}
   const[hs,gr,more,lsl]=B.lslots;hs.replaceChildren(head);
@@ -978,7 +851,7 @@ function render(){
 async function send(body,name,kind){
   const m=document.getElementById("msg");m.textContent="Saving…";
   const r=await fetch("import?t="+encodeURIComponent(T),{method:"POST",body,headers:{"X-Name":encodeURIComponent(name),"X-Kind":kind}});
-  const t=await r.text();m.textContent=r.ok?"Saved to the inbox. Ask central to process it."+t.slice(5):t;load()}
+  const t=await r.text();m.textContent=r.ok?"Saved to the inbox. Ask the coordinator to process it."+t.slice(5):t;load()}
 const drop=document.getElementById("drop"),file=document.getElementById("file");
 drop.onclick=()=>file.click();file.onchange=()=>[...file.files].forEach(f=>send(f,f.name,"file"));
 drop.ondragover=e=>{e.preventDefault();drop.classList.add("over")};drop.ondragleave=()=>drop.classList.remove("over");
@@ -986,8 +859,6 @@ drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");[...e.dataTrans
 document.getElementById("linkform").onsubmit=e=>{e.preventDefault();const v=document.getElementById("link").value.trim();
   if(v){send(v,"link.md","text");document.getElementById("link").value=""}};
 load();setInterval(load,30000);
-document.getElementById("fetch").onclick=async e=>{const b=e.target;b.disabled=true;b.textContent="Fetching…";
-  try{const r=await fetch("fetch?t="+encodeURIComponent(T)+"&lib="+encodeURIComponent(libName),{method:"POST"});if(r.ok)await load()}finally{b.disabled=false;b.textContent="Fetch"}};
 </script></body></html>"""
 
 
@@ -996,7 +867,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     timeout = 30  # a client that stalls mid-request frees its thread instead of holding it forever
 
     def roots(self):
-        """One folder (a project, or an older workspace), or every registered project (the global panel), read anew
+        """One project folder, or every registered project (the global panel), read anew
         on each request so a project /threads adds shows without a restart."""
         return [self.root] if self.root else registered()
 
@@ -1052,9 +923,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.allowed():
             return
-        if urllib.parse.urlparse(self.path).path == "/fetch":
-            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            return self.reply("application/json", json.dumps(snapshot(self.roots(), (q.get("lib") or ["personal"])[0], fetch=True, boards=self.boards())).encode())
         if urllib.parse.urlparse(self.path).path != "/import":
             return self.deny(404, "Not found.")
         try:

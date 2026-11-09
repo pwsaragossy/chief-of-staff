@@ -16,7 +16,7 @@ Gate: the question is answerable, the decision it unlocks is named, and the stan
 - [ ] question | Research question stated so that evidence could prove it wrong, with scope, time window and geography | card: researcher | needs: - | evidence:
 - [ ] decision | The decision this research unlocks, who decides, by when, and which answers would change it | card: product | needs: - | evidence:
 - [ ] answer-standard | Standard for a sufficient answer: required evidence types, minimum number of independent sources, acceptable confidence | card: researcher | needs: question, decision | evidence:
-- [ ] prior-work | Library and workspace searched for existing findings, with results listed or none found | card: researcher | needs: question | evidence:
+- [ ] prior-work | Library and project folder searched for existing findings, with results listed or none found | card: researcher | needs: question | evidence:
 - [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: blind-spots, question, decision, answer-standard, prior-work | evidence:
 ## Stage 2: Sources
 Gate: sources are chosen to disagree with each other if the hypothesis is wrong, and each is graded.

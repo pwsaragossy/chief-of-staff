@@ -2,8 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 // A project is the folder the owner creates (marker kind: project, scripts/project.sh); its coordinator is the
-// owner's conversation at the folder's root and gets the Threads pane: the sessions it started. The older layout
-// (a workspace with central/ and projects/<slug>/) works the same until its projects move out.
+// owner's conversation at the folder's root and gets the Threads pane: the sessions it started.
 const error = atom({ plugin: 'chief-of-staff', key: 'error' } as const, '', { shape: 'error-1' })
 const THREADS = 'cos-threads'
 const coord = atom({ plugin: 'chief-of-staff', key: 'coord' } as const, '', { shape: 'coord-1' })
@@ -60,9 +59,9 @@ async function isProject($: EngineInterface, r: string): Promise<boolean> {
   return /^kind: project$/m.test(await $.fs.read(`${r}/.chief-of-staff`).catch(() => ''))
 }
 
-// the coordinator's project: the folder itself, or projects/<slug> in the older layout
+// the coordinator's project: the folder itself
 async function project($: EngineInterface, r: string, slug: string): Promise<Project | undefined> {
-  const dir = (await isProject($, r)) ? r : `${r}/projects/${slug}`
+  const dir = r
   const s = await $.fs.read(`${dir}/STATE.md`).catch(() => null)
   if (s === null) return undefined
   const c = await $.fs.read(`${dir}/CLAUDE.md`).catch(() => '')
@@ -111,11 +110,11 @@ export const ownerQuestions = (card: string): string[] => {
 }
 
 async function waitingOnOwner($: EngineInterface, r: string, slug: string): Promise<string[]> {
-  const out: string[] = [], all = await isProject($, r)   // a project folder's board is all its own
+  const out: string[] = []   // a project folder's board is all its own
   for (const e of await $.fs.list(`${r}/board`).catch(() => [])) {
     if (e.kind !== 'file' || !e.name.endsWith('.md')) continue
     const c = await $.fs.read(`${r}/board/${e.name}`).catch(() => '')
-    if ((all || fm(c, 'project') === slug) && fm(c, 'status') === 'waiting-owner') out.push(...ownerQuestions(c))
+    if (fm(c, 'status') === 'waiting-owner') out.push(...ownerQuestions(c))
   }
   return out
 }
@@ -177,7 +176,7 @@ export const COORDINATOR =
   'build anything that changes where the work runs (cloud or this computer, a new service), get the owner\'s yes or no ' +
   'first. To match an existing look, read the real thing first (its files, a screenshot), list every difference and ' +
   'change them all in one pass, not one per release. Each thread ' +
-  'starts with its specialist: pick the role card from ROUTING.md (the workspace\'s, else the plugin\'s templates/ROUTING.md) and give the brief the lines ' +
+  'starts with its specialist: pick the role card from ROUTING.md (the project\'s, else the plugin\'s templates/ROUTING.md) and give the brief the lines ' +
   '"Role card: <role>", "Library: <notes, or none found for <terms>>" and "Ambition: <goal behind the goal> | judge: ' +
   '<outside judge>"; the thread follows the specialists skill. Anything that goes outside (a submission, a video, a ' +
   'text to a partner) passes the reviewer role before it reaches the owner.'
@@ -192,7 +191,7 @@ export const THREAD_RULES =
 
 const AMBITION = /Ambition: [^|\n]{12,}\| *judge: [^\n]{8,}/
 // what a coordinator's thread brief lacks, as protocol.sh checks an Agent brief: '' when it is complete.
-// A role is a name or a card path; with the workspace's cards known, the role must be one of them.
+// A role is a name or a card path; with the project's cards known, the role must be one of them.
 export const briefGaps = (brief: string, cards?: string[]): string => {
   const m = brief.match(/Role card: *(?:[^\n]*\/specialists\/([a-z-]+)\.md|([a-z-]+))/)
   const role = m?.[1] ?? m?.[2] ?? ''
@@ -263,11 +262,11 @@ export const register: Register = on => {
       await $.ui.open({ id: THREADS, title: 'Threads' })
       return { text: `This chat is now the coordinator of ${base(r)}. Threads pane opened.`, context: [COORDINATOR, panelAsk($.plugin.root, r)] }
     }
-    // inside a workspace of the older layout, or a folder that is not a project: a coordinator, nothing created
+    // a folder that is not a project (or a workspace of the layout removed in 0.12.0): a coordinator, nothing created
     await update($, coord, () => base(dir))
     await $.ui.open({ id: THREADS, title: 'Threads' })
     return {
-      text: r ? 'This chat is now the coordinator. Threads pane opened.'
+      text: r ? 'This chat is now the coordinator. Threads pane opened. This folder uses the old workspace layout (central/, projects/<slug>), removed in 0.12.0: run /chief-of-staff:new-project in each project\'s own folder.'
         : 'This chat is now the coordinator. Threads pane opened. This folder is not a project: /chief-of-staff:new-project makes it one.',
       context: [COORDINATOR],
     }
@@ -301,7 +300,7 @@ export const register: Register = on => {
   on('tool.call', { tool: /start_session$/ }, async ($, e, next) => {
     const brief = (e as { prompt?: unknown }).prompt
     if (typeof brief !== 'string' || !brief.trim() || !(await read($, coord))) return next(e)
-    // the workspace's role cards, or the plugin's own (a project folder without specialists/)
+    // the project's role cards, or the plugin's own (a project folder without specialists/)
     const r = await root($)
     const sp = r && (await $.fs.exists(`${r}/specialists`)) ? `${r}/specialists` : `${$.plugin.root}/templates/specialists`
     const cards = (await $.fs.exists(sp))

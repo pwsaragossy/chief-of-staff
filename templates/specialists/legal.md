@@ -11,7 +11,7 @@ Spot the legal issues early, rank them by consequence, and prepare drafts and ch
 The output states the jurisdiction and the date of every rule, separates what the law says from what is likely, and never presents a draft as legal advice.
 
 ## Before starting: gather
-- Search the workspace library first: `library.sh search <topic>`. Reuse existing notes and cite their paths.
+- Search the library first: `library.sh search <topic>`. Reuse existing notes and cite their paths.
 - The facts: parties, roles, countries, activity, what is being sold or shared, money flows, timeline.
 - The documents: contracts, terms, policies, correspondence, licences. Read the whole document, not a summary.
 - Identify the applicable jurisdiction(s) first, before any rule is applied. GDPR, LGPD and similar regimes below apply only with a territorial link (establishment, or offering to / monitoring people there); other regimes (e.g. UK GDPR, US state laws) need their own check.

@@ -4,6 +4,7 @@
 #                               only when it has no marker yet; then register it in <plugin data>/projects (once)
 #   project.sh library <dir>    the owner's one library: an existing library, or a new one in an empty folder;
 #                               recorded in <plugin data>/library (setup asks the owner where)
+#   project.sh trust <dir>      the owner read <dir>/.chief-of-staff and confirms its settings as they are now
 #   project.sh list             each registered folder, "ok<TAB>path" or "missing<TAB>path"
 #   project.sh board <dir>      a board folder the global panel also reads (an existing system's own cards, such as a
 #                               second brain's board/), recorded once in <plugin data>/boards; nothing is written in <dir>
@@ -34,7 +35,7 @@ case ${1:-} in
       printf 'chief-of-staff project v0.1\nkind: project\n' > "$d/.chief-of-staff"; chmod 444 "$d/.chief-of-staff"   # last: a failed run can be repeated
       echo "Project: $d (new)"
     else
-      cos_isproj "$d" || die "$d is a chief-of-staff workspace, not a project folder"
+      cos_isproj "$d" || die "$d is a workspace of the old layout (central/, projects/<slug>), removed in 0.12.0: make each project's own folder a project instead"
       echo "Project: $d"
     fi
     # ponytail: two inits at the same instant can both append; readers (panel, overview) drop repeated lines
@@ -54,6 +55,12 @@ case ${1:-} in
     fi
     printf '%s\n' "$l" | put library || die "cannot write $D/library"
     ;;
+  trust)
+    [ $# = 2 ] || die "usage: project.sh trust <project folder>"
+    d=$(abs "$2") || exit 1
+    cos_isproj "$d" || die "$d is not a project folder"
+    cos_cfgsave "$d" && echo "Recorded the settings of $d as they are now."
+    ;;
   board)
     [ $# = 2 ] || die "usage: project.sh board <folder>"
     d=$(abs "$2") || exit 1
@@ -65,5 +72,5 @@ case ${1:-} in
     awk '!seen[$0]++' "$D/$f" 2>/dev/null | while IFS= read -r p; do
       [ -n "$p" ] || continue; if [ -d "$p" ]; then printf 'ok\t%s\n' "$p"; else printf 'missing\t%s\n' "$p"; fi; done
     ;;
-  *) die "usage: project.sh init <folder> | library <folder> | list | board <folder> | boards" ;;
+  *) die "usage: project.sh init <folder> | library <folder> | trust <folder> | list | board <folder> | boards" ;;
 esac

@@ -1,7 +1,7 @@
 # chief-of-staff
 
 An AI chief of staff for [Claude Code](https://code.claude.com): a small company of agents that
-works for one owner, or for a team.
+works for one owner.
 
 What it gives you:
 
@@ -35,7 +35,7 @@ What it gives you:
   security, reviewer) say what each senior specialist gathers first, its method, its toolbox and when to use
   each tool, what it never skips, its evidence standard and output format. A substantive turn
   cannot end without at least one specialist and the reviewer. In hackathon pace (`pace: fast` in
-  the workspace's `.chief-of-staff`, set by the owner) internal work needs one specialist, and the
+  the project's `.chief-of-staff`, set by the owner) internal work needs one specialist, and the
   reviewer runs only on what goes outside: the submission, the video, the README, messages to judges.
 - **A company library (second brain), enforced by hooks.** One note per file in `knowledge/notes/`,
   readable in Obsidian: findings, decisions, how-tos and formats, options, topics. Each note carries
@@ -45,25 +45,9 @@ What it gives you:
   data). When a new note meets a similar one it must say how: the worse is retired, the two are
   merged, or they coexist as valid options. Every prompt brings the notes that bear on it, briefs
   carry a `Library:` line, web search waits for a library search, and DELIVERY.md cites its sources.
-  The library can live on an external disk, a cloud folder or a private repo (`library.sh offload`).
-- **Team libraries, kept apart from yours.** Join a team's library by its git link, at setup or later
-  from central (`library.sh join <link>`; an empty private repo starts one); leave it with
-  `library.sh leave`. Each project picks one library (`library.sh use <team>`, asked in
-  `new-project`); central and the other projects use your personal library. A session searches and
-  writes only its own library (`search --all` shows the others, labelled); a team note cannot link
-  a personal note or another team's, and a personal note that links a team note gets a warning.
-  Team notes are pulled at session start and pushed after a turn whose notes pass the checks; a
-  conflict with a teammate becomes a card for that project's session. Join, leave and use ask you
-  first; settings changed any other way stop the turn until you confirm them (`library.sh trust`).
-- **One board for the whole team.** A workspace can be shared: one teammate creates it on an empty
-  private git repo (`setup.sh create <folder> --share <link> --member <name>`), the others join it
-  (`setup.sh join <folder> <link> --member <name>`). Every turn end sends the board, the projects and
-  the library notes that passed the checks to the team, as one commit that names the cards and folders
-  it changed; every session start brings the teammates' changes first (waiting 2 s at most, else the
-  briefing says how old the team's data is). Long cards are flagged: move what is done to `board/archive/`.
-  Each card and project says whose it is (`member:`), each person's central asks only their
-  own questions, each dispatcher runs only its own projects, and the panel shows everyone's work.
-  Files that look like they hold a key or token stay on the computer, and the turn says so.
+  The library can live on an external disk, a cloud folder or a private repo (`project.sh library <folder>`).
+- **Team sync is a separate plugin.** chief-of-staff works for one owner. Team sync left in 0.12.0 and will
+  come back as its own plugin; 0.11.5 still has the old shared workspace.
 - **Built for deadlines.** A project's `TRACK.md` can carry `deadline: YYYY-MM-DD HH:MM`: the panel
   counts down, yellow under 6 hours, red under 2 hours while the delivery is open. A question waiting
   on the owner turns red after `owner_wait_minutes` (60 by default, 20 in the hackathon track), with
@@ -81,7 +65,7 @@ What it gives you:
   without its `## Versions`. Scope beyond the request is a question for the owner, never work.
   In our test (same vague task, haiku as the worker, a timing check it never saw): 1 pass in 8 runs
   as asked; 0 in 5 when the worker ran the loop alone (it picked a judge its first draft passed);
-  3 in 3 when a central on sonnet wrote the brief and the judge first.
+  3 in 3 when a coordinator on sonnet wrote the brief and the judge first.
 - **A hard target and a judge that is not the model.** Every track carries `target:` (a number, taken
   from the criteria, the metric or the raw material) and `check:` (a command that measures it: exit 0
   when met, the value on its last line; or `none (why)`). A project cannot leave stage 1 until both are
@@ -104,12 +88,12 @@ What it gives you:
 - **What goes outside, seen as a stranger.** Optional `public_urls:` (opened without credentials) and
   `prod_ref: <url> <commit>` (production serves that commit) in TRACK.md are checked by `health.sh` and the
   panel, never by a hook, at most every 10 minutes; a DELIVERY.md or TRACK.md that points at a file
-  outside the workspace is flagged too.
+  outside the project folder is flagged too.
 - **A routing table** (`ROUTING.md`) so nobody has to remember whom to call.
 - **A local panel**: green, yellow or red per project with the reason, a live map of each track
   (stages, deliverables by state, prerequisites, the delivery line, items added since opening), decisions
   waiting on the owner with their questions and how long they have waited, the deadline countdown, the
-  last 24 hours in three counts (turns, protocol breaks, rejected notes), the sync state, and a box to
+  last 24 hours in three counts (turns, protocol breaks, rejected notes), and a box to
   drop files or links into the knowledge inbox.
 - **An optional dispatcher** that starts the next session on its own. Off by default.
 
@@ -139,12 +123,13 @@ Drive, OneDrive or an external disk). A project folder then holds:
 ```
 
 The plugin's data folder keeps `projects` (one registered folder per line) and `library` (the library's
-path). Workspaces of the older layout (`central/`, `projects/<slug>/`) keep working until their projects
-move to folders of their own.
+path). The older workspace layout (`central/`, `projects/<slug>/`) was removed in 0.12.0: the briefing of
+such a folder says so, and `/chief-of-staff:new-project` in each project's own folder starts it again
+(copy its STATE.md, TRACK.md and board card across).
 
 ## Upgrading from 0.4.x
 
-Nothing to migrate by hand; existing workspaces keep working:
+Nothing to migrate by hand for project folders:
 
 - Cards with the old single `asked:` keep their age: at the first turn end, their open questions are
   stamped with that `asked:` time, and new ones with their own time.
@@ -166,12 +151,12 @@ Skills: `setup`, `new-project`, `ambition`, `handoff`, `specialists`, `knowledge
 
 ## Panel
 
-On a phone, or with no workspace, `scripts/overview.sh <board folder>...` prints the whole picture as chat
+On a phone, or with no project, `scripts/overview.sh <board folder>...` prints the whole picture as chat
 text: what waits on you, due in 7 days, changed in 24 hours, moving, stopped (English or Portuguese card fields).
 
 `/chief-of-staff:panel` starts `scripts/panel.py` (needs `python3`, standard library only) and opens
 a link like `http://127.0.0.1:<port>/?t=<token>`. It listens on this computer only and refuses any
-request without the token. Colors come from `scripts/health.sh`; `health.sh text <workspace>` prints them
+request without the token. Colors come from `scripts/health.sh`; `health.sh text <project folder>` prints them
 without the panel: a verdict first ("All fine" or how many questions wait on you), one line per project,
 then your questions with their age:
 
@@ -183,14 +168,13 @@ then your questions with their age:
   6 hours away, no handoff (STATE.md `updated:`, not the file date) for longer than the track's
   `stale_hours` (3 h for a hackathon, 48 h otherwise), paused, the last check run failed, the target met on
   the very first run, a card over ~60 lines or 15 KB, a `public_urls:` link closed to a logged-out visitor,
-  production not serving the `prod_ref:` commit, or a delivery that points outside the workspace;
+  production not serving the `prod_ref:` commit, or a delivery that points outside the project folder;
 - **green**: none of these.
 
 Each project lists every reason, red ones first (more than 3 fold under "more reasons"), the
 `public_urls:` and `prod_ref:` results as a logged-out visitor sees them, and the last 5 decisions in
 force from `DECISIONS.md`. Each question waiting on the owner shows how long ago it was asked, a card
 past its limit near the deadline names the `deputy:` who decides, and a card too long to read says so.
-In a shared workspace, teammates' data older than 15 minutes carries "Teammate data as of sync HH:MM".
 
 Files or links dropped in the import box land in the library's `inbox/` (the panel warns when one
 looks like it holds a key or token); the coordinator turns them into library notes with the `knowledge`
@@ -211,7 +195,7 @@ the same stage shows as "↳ id", and pointing at an item outlines what it needs
 
 ## Hooks
 
-Every hook does nothing outside a workspace, so the plugin does not affect your other projects.
+Every hook does nothing outside a project folder, so the plugin does not affect your other projects.
 Opt-in for the rest of your folders: list them in `everywhere` inside the plugin's data folder
 (`~/.claude/plugins/data/chief-of-staff-chief-of-staff/everywhere`, one absolute path per line, `/` for all).
 There the specialists and ambition gate runs with the plugin's own role cards; no library, board, track or
@@ -226,21 +210,21 @@ asks the owner once which to add (each answer is recorded by its id, a no too, a
 - `PreToolUse` on `Bash` approves by itself the plugin's own read-only commands, the ones the hooks already
   run on their own: one call of `library.sh` (`search`, `similar`, `check`, `gate`, `doctor`, `backlinks`,
   `brief`, `where`, `libs`) or `track.sh` (`check`, `brief`, `status`, `items`) at the plugin's own path, with no
-  shell syntax and paths only inside the workspace. Anything else asks as usual; your own deny and ask rules still
+  shell syntax and paths only inside the project folder. Anything else asks as usual; your own deny and ask rules still
   apply over it, and plan mode is not bypassed. Every git command the scripts run refuses a folder that only looks
   like a repository (a teammate could commit one) and ignores `core.fsmonitor`.
 - `scripts/protocol.sh` (UserPromptSubmit, PreToolUse, PostToolUse, SubagentStop, Stop) states
   the protocol in full at the first prompt of a session and after a compaction or restart (one line on
   the other prompts) and enforces it: a subagent brief must name an existing role card by its path
-  (`Role card: <workspace>/specialists/<role>.md`, which the subagent reads itself, or `Role card:
+  (`Role card: <project>/specialists/<role>.md`, which the subagent reads itself, or `Role card:
   utility` for a helper); a specialist cannot finish without its never-skip checklist and its
   `## Versions` with the judge's evidence, and its brief needs a `Library:` line; web search waits for a library search
   (`scripts/library.sh search`); a note is checked on save and at the end of the turn (links,
-  `Compared:`, retirements, notes written by shell commands too); agents cannot edit the workspace
+  `Compared:`, retirements, notes written by shell commands too); agents cannot edit the project's
   marker;
   a substantive turn (a deliverable file, web research, or a long answer) cannot end without a
   specialist and the reviewer, nor research end without a saved note. Each push happens once per
-  turn. Every turn is logged to `<workspace>/.protocol.log`, the adherence record.
+  turn. Every turn is logged to `<project>/.protocol.log`, the adherence record.
 - The same Stop hook runs `scripts/track.sh check` in a project session: a stage below `stage:` with
   an open item, an item marked done whose proof file does not exist or whose prerequisites are
   open, a not-applicable item without a reason, a reviewer item marked not applicable, a stage
@@ -250,27 +234,27 @@ asks the owner once which to add (each answer is recorded by its id, a no too, a
 
 ## The dispatcher (off by default)
 
-`scripts/dispatcher.sh <workspace>` runs `claude -p` in each project whose `STATE.md` says
+`scripts/dispatcher.sh <project folder>` runs `claude -p` in each project whose `STATE.md` says
 `status: in-progress` and `dispatch: ready`. The `handoff` skill sets `ready` only when the next
 action needs nobody. Guard rails:
 
-- refuses to run if the workspace git repo has no remote, unless `COS_ALLOW_NO_BACKUP=1`. The
+- refuses to run if the project's git repo has no remote, unless `COS_ALLOW_NO_BACKUP=1`. The
   sessions cannot push; set `COS_PUSH=1` for the dispatcher to push after its runs, or push yourself;
 - at most `COS_MAX_RUNS_PER_DAY` runs (default 3), `COS_MAX_BUDGET_USD` per run (default 2),
   `COS_RUN_TIMEOUT` seconds per run (default 1800); one dispatcher at a time, a stale lock is
   taken over;
 - the unattended session gets read and edit tools only, with no shell at all (so no git, no
   Keychain, no push), cannot ask questions, and cannot edit `CLAUDE.md`, `.claude/`, `.git/`, `.gitattributes` or the
-  dispatcher's own files (deny rules anchored to the workspace's absolute path);
+  dispatcher's own files (deny rules anchored to the project folder's absolute path);
 - the dispatcher itself commits after each run, with git hooks and other code-running git config
   switched off; if `.git/config` or `.git/hooks` changed anyway, it stops and commits or pushes nothing;
-- every run is logged in `<workspace>/.dispatch.log`, output in `.dispatch-<slug>.out`;
+- every run is logged in `<project>/.dispatch.log`, output in `.dispatch-<slug>.out`;
 - a run that ends without a handoff, times out, or is interrupted is parked (`dispatch: off`)
   instead of looping.
 
 Schedulers start with a short PATH, so give the absolute path of the CLI (`command -v claude`).
 On macOS, fill in `templates/dispatcher/com.chief-of-staff.dispatcher.plist`. On Linux, a cron line:
-`0 */2 * * * CLAUDE_BIN=/abs/path/claude /bin/sh /path/to/scripts/dispatcher.sh /path/to/workspace`.
+`0 */2 * * * CLAUDE_BIN=/abs/path/claude /bin/sh /path/to/scripts/dispatcher.sh /path/to/project`.
 
 ## Relation to Everything Claude Code (ECC)
 
@@ -288,7 +272,7 @@ What we reference or reuse as an idea:
   every session start gets two briefings.
 - **Minimal profile.** ECC's `minimal` install profile (`manifests/install-profiles.json`) leaves out
   its hook runtime. This package follows the same idea by default: 7 skills, 3 hook scripts that do
-  nothing outside a workspace unless you opt in, and the dispatcher off.
+  nothing outside a project folder unless you opt in, and the dispatcher off.
 - **Security scan.** ECC's AgentShield (`npx ecc-agentshield scan`, separate MIT package) scans
   `CLAUDE.md`, settings, MCP servers, hooks and agents for risky configuration. We do not bundle it.
   It is a useful check before turning the dispatcher on. For this repository we scan for secrets
@@ -311,7 +295,7 @@ What is ours, with no equivalent found in ECC:
 
 - **Cloud sessions** (Claude Code on the web) do not load plugins installed on your machine, so
   neither hook runs there. The rules still reach a cloud session only through the `CLAUDE.md` files,
-  and only if the workspace is that session's repository.
+  and only if the project folder is that session's repository.
 - The ask guard stops button questions only. A question written as plain text is not blocked; the
   `CLAUDE.md` rules are what prevent it.
 - The ask guard has been tested by script, not yet in an interactive session.
@@ -331,7 +315,7 @@ What is ours, with no equivalent found in ECC:
 - The hooks keep inside Claude Code's limits (5 s, 10 s for the briefing): each slow step (the prompt's
   library lookup, the turn-end note and track checks, the briefing's board and library reads) has its own
   budget. A lookup cut short is skipped until a note is added; a turn-end check cut short blocks the turn
-  once and says what to run, holds back what would go to the team that turn, and is logged as `slow=`,
+  once and says what to run, and is logged as `slow=`,
   not as a violation; the briefing says what it could not read.
 - The near-duplicate file notice compares names only, among files with the same extension (letter case,
   separators and a final s ignored), and never blocks: it asks the agent to check whether one duplicates the other.
@@ -350,17 +334,9 @@ What is ours, with no equivalent found in ECC:
   check that the decision was made and recorded.
 - Notes written by shell commands are caught when the command names the library path; other
   bypasses are caught by `library.sh doctor` and the panel, not by the turn gate.
-- Team libraries: the hooks block links and writes across libraries, but not an agent retyping
-  personal content in its own words into a team note; the reviewer and the team read what is shared.
-  Confirmation for join, leave and use matches the command text, so a renamed copy of library.sh
-  is not seen, and neither is a protected file name (`.chief-of-staff`, `.library`) built inside a
+- Confirmation for init, library and trust matches the command text, so a renamed copy of project.sh
+  is not seen, and neither is a protected file name (`.chief-of-staff`, `.library-id`) built inside a
   shell variable; those files are read-only on disk.
-- A shared workspace is the team's: nothing personal belongs in it, and it takes no personal or other
-  team library. The hooks do not stop an agent that reads a personal workspace elsewhere on the disk
-  and retypes it there; keep the two apart. The key check is a list of known token shapes (cloud keys,
-  GitHub tokens, private keys, Stellar secret seeds), not a full secret scanner. The member name is
-  local git config, set at join, not an identity check. A conflict (two people changing the same
-  card) is undone and becomes a card; it is not merged automatically.
 - The owner's OK (`.owner-ok`) is protected like the library settings: written only through
   `track.sh ok`, which asks the owner (in a run with nobody watching, the ask is refused), an item that
   needs it cannot be marked not applicable, and removing its mark or its line after opening is caught
@@ -371,11 +347,9 @@ What is ours, with no equivalent found in ECC:
 - Ambition: the hooks check that the `Ambition:` line and `## Versions` exist, not that the judge is
   a good one; the reviewer checks that, and it is the same model.
 - Target and check: the check runs a shell command written in TRACK.md, so only a session or the coordinator
-  on your computer runs it (never a hook), never for a teammate's project in a shared workspace, and
-  only a command the owner approved on this computer (the approval lives in `.owner-ok`, which never
-  syncs; in a shared workspace one that git tracks, in any letter case, came from the team repo: it is
-  moved aside and not trusted). A commit this computer did not make that changes the project after the
-  approval (a pull by the plugin or by hand) stops the check until the owner approves again.
+  on your computer runs it (never a hook), and only a command the owner approved on this computer (the
+  approval lives in `.owner-ok`, which is local: one that git tracks, in any letter case, came through git
+  and not from this computer's owner, so it is moved aside to `.owner-ok.from-git` and not trusted).
   The check is only as hard as its inputs. The freeze covers the files the command names and the files
   those name, not what the check reaches without naming it: a test suite run by `npm test` or `pytest`,
   or data the agent writes. Prefer a check that measures the product from outside (its command, its
@@ -383,24 +357,19 @@ What is ours, with no equivalent found in ECC:
   be flaky on a busy laptop; the owner's waiver (`waive: <reason>`) exists for that.
   `.check-runs` (the history the panel shows, run by the agent) is not protected: the approval and the delivery result
   live in `.owner-ok`, like the other owner OKs.
-- Times: write `deadline:` with its offset (`2026-10-25 18:00 -0300`) when teammates are in other
-  time zones; question times are stamped with the offset already. In a shared workspace, files over
-  20 MB, nested git repositories, settings (`.claude/`, `.mcp.json`, `.gitignore`, `.gitattributes`)
-  and files that look like they hold a key stay on the computer: a key stops the turn until it is
-  moved to `.env`, the rest is listed in the next briefing; a change to
-  settings coming from the team is refused at pull. A file name with a line break stops the push
-  until it is renamed.
-- The workspace root is the nearest folder with a `.chief-of-staff` marker. A marker that arrives inside a project
-  (a hand `git pull`, or an agent building the name in a variable) makes that project look like a workspace of its
-  own, and its track gate and guarded-push ask stop. `sync.sh pull` and `setup.sh join` refuse such a commit, and a
+- Times: write `deadline:` with its offset (`2026-10-25 18:00 -0300`) when people are in other
+  time zones; question times are stamped with the offset already.
+- The project root is the nearest folder with a `.chief-of-staff` marker. A marker that arrives in a subfolder
+  (a hand `git pull`, or an agent building the name in a variable) makes that subfolder look like a project of its
+  own, and its track gate and guarded-push ask stop. A
   forged owner OK stays untrusted (the guards read every marker above), but nothing else catches it: keep project
   repositories without a marker, and look at `git status` after a pull by hand.
-- An offloaded library: no automatic sync; Windows paths are not supported; in iCloud, keep the
+- A library outside the project (disk, cloud folder): no automatic sync; Windows paths are not supported; in iCloud, keep the
   folder downloaded on the computer (placeholder files are not seen).
 
 ## Pitfalls for maintainers
 
-- **WSL drives.** A workspace under `/mnt/c` (drvfs) reads files about 70 times slower than the Linux
+- **WSL drives.** A project under `/mnt/c` (drvfs) reads files about 70 times slower than the Linux
   home; every hook pays it. `setup.sh` warns; prefer `~/chief-of-staff`. Run the selftest from a copy on
   ext4 too (`/tmp`), or it takes many minutes.
 - **No fork per item in hooks.** The hooks run on every prompt and tool call: one `awk` over the board

@@ -15,7 +15,7 @@ Pick the simplest design that meets the stated requirements at the expected load
 - Existing systems, repos, and decisions to reuse or stay compatible with (read the code before proposing a rewrite).
 - Deadline and what is cut if it slips; what cannot be undone (data migrations, money movement, public APIs).
 - Data sensitivity: personal data, credentials, money, regulated data.
-- Search the workspace library first: `library.sh search "<topic>"` for earlier ADRs and findings.
+- Search the library first: `library.sh search "<topic>"` for earlier ADRs and findings.
 - Anything missing goes on the project card as a question to the owner. Never assume load, budget or compliance scope.
 
 ## Method

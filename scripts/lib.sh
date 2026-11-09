@@ -13,14 +13,15 @@ GIT_CONFIG_COUNT=$((_n + 2)); export GIT_CONFIG_COUNT
 cos_gitenv_off() { eval "unset GIT_CONFIG_KEY_$_n GIT_CONFIG_VALUE_$_n GIT_CONFIG_KEY_$((_n + 1)) GIT_CONFIG_VALUE_$((_n + 1))"
   if [ "$_n" = 0 ]; then unset GIT_CONFIG_COUNT; else GIT_CONFIG_COUNT=$_n; fi; }
 
-# Print the workspace root (the nearest folder holding a .chief-of-staff marker) or fail.
+# Print the project root (the nearest folder holding a .chief-of-staff marker) or fail. A marker of the old
+# workspace layout (no "kind: project" line; removed in 0.12.0) is no root: the hooks stay silent there
 cos_root() {
   d=${1:-$PWD}
   case $d in /*) ;; *) return 1 ;; esac   # a relative path never reaches "/"
   while [ -n "$d" ] && [ "$d" != "/" ]; do
     # exactly that name, inside the folder (find compares bytes; a name with a line break cannot pose as it): macOS
     # also opens .chief-of-ſtaff or .chief-of-staﬀ as the marker, names git, join and pull do not read as one (cos_fold)
-    [ -f "$d/.chief-of-staff" ] && [ -n "$(find -H "$d" -mindepth 1 -maxdepth 1 -name .chief-of-staff 2>/dev/null)" ] && { printf '%s\n' "$d"; return 0; }
+    [ -f "$d/.chief-of-staff" ] && [ -n "$(find -H "$d" -mindepth 1 -maxdepth 1 -name .chief-of-staff 2>/dev/null)" ] && { cos_isproj "$d" || return 1; printf '%s\n' "$d"; return 0; }
     d=${d%/*}   # no dirname: this runs in every hook call, and a fork per level is slow on WSL drives
   done
   return 1
@@ -35,32 +36,16 @@ cos_data() {
     printf '%s/data/%s-%s\n' "${_m%/cache/*}" "${_p##*/}" "${_m##*/}" ;;
     *) printf '%s\n' "$HOME/.cache/chief-of-staff" ;; esac
 }
-# A project folder: the folder the owner creates, its own root, marker line "kind: project" (project.sh init).
-# The older layout, a workspace with central/ and projects/<slug>/, stays until its projects move out
+# A project folder: the folder the owner creates, its own root, marker line "kind: project" (project.sh init)
 cos_isproj() { grep -qx 'kind: project' "$1/.chief-of-staff" 2>/dev/null; }
-# cos_pdirs ROOT -> the project folders of ROOT, one per line: ROOT itself, or each projects/<slug> with a STATE.md
-cos_pdirs() { if cos_isproj "$1"; then printf '%s\n' "$1"; else for _s in "$1"/projects/*/STATE.md; do [ -f "$_s" ] && printf '%s\n' "${_s%/STATE.md}"; done; fi; }
-# cos_pdir ROOT SLUG -> the folder of project SLUG of ROOT
-cos_pdir() { if cos_isproj "$1"; then printf '%s\n' "$1"; else printf '%s/projects/%s\n' "$1" "$(printf '%s' "$2" | tr -cd 'A-Za-z0-9._-')"; fi; }
-# cos_proj ROOT DIR -> "slug<TAB>folder" of the project a session in DIR works in; nothing outside a project
-cos_proj() {
-  if cos_isproj "$1"; then printf '%s\t%s\n' "${1##*/}" "$1"; return; fi
-  _r=${2#"$1"}; _r=${_r#/}
-  case $_r in projects/?*) _r=${_r#projects/}; _r=${_r%%/*}; printf '%s\t%s/projects/%s\n' "$_r" "$1" "$_r" ;; esac
-}
+# cos_old DIR -> true when the nearest marker above DIR is one of the old workspace layout (the briefing says so)
+cos_old() { d=$1; while [ -n "$d" ] && [ "$d" != "/" ]; do [ -f "$d/.chief-of-staff" ] && { cos_isproj "$d" && return 1; return 0; }; d=${d%/*}; done; return 1; }
 # cos_registered DIR -> true when DIR (its real path) is in <plugin data>/projects, the list project.sh init keeps
 cos_registered() { _d=$(cd "$1" 2>/dev/null && pwd -P) && grep -Fxq "$_d" "$(cos_data)/projects" 2>/dev/null; }
 # cos_owner ROOT DIR -> true when a session in DIR is a project's coordinator, the one that asks the owner and records
 # the owner's OK: DIR is the root of a project folder, and that folder is registered. A subfolder, a worktree that
 # carries its own marker, or a marker planted anywhere else is not. (Threads in the same folder: hooks/projects.tsx)
 cos_owner() { [ "$1" = "$2" ] && cos_isproj "$1" && cos_registered "$1"; }
-# cos_anyshared DIR -> true when any workspace marker above DIR says shared: yes. The owner-OK guards use it, not the
-# root's marker alone: a marker planted inside a project (a hand pull) would otherwise read as an unshared workspace
-cos_anyshared() {
-  d=$1; case $d in /*) ;; *) return 1 ;; esac
-  while [ -n "$d" ] && [ "$d" != "/" ]; do grep -qx 'shared: yes' "$d/.chief-of-staff" 2>/dev/null && return 0; d=${d%/*}; done
-  return 1
-}
 
 # cos_fold -> stdin with each character macOS folds into plain letters in a file name written as those letters: APFS
 # compares names with full Unicode case folding, so .owner-oK (Kelvin sign), .mcp.jſon (long s) and .chief-of-staﬀ
@@ -92,20 +77,17 @@ fm_set() {
   ' "$1" > "$tmp" && mv "$tmp" "$1"
 }
 
-# cos_lib ROOT -> prints the library folder: ROOT/knowledge, or the "library: /absolute/path" line of the
-# marker (set by library.sh offload). Returns 1 when its disk is unplugged (offline: a missing or empty mount
-# point under /Volumes, /mnt or /media), 2 when it is missing anywhere else, or exists without the
-# .library-id file offload writes (an empty mount point, or a wrong path),
-# 3 when the line is not one absolute path.
+# cos_lib ROOT -> prints the owner's personal library folder, the path in <plugin data>/library (project.sh library).
+# Returns 1 when none is set or its disk is unplugged (offline: a missing or empty mount point under /Volumes, /mnt
+# or /media), 2 when it is missing anywhere else, or exists without .library-id and notes/ (an empty mount point,
+# or a wrong path), 3 when the path is not one absolute path.
 cos_lib() {
-  _l=$(sed -n 's/^library: *//p' "$1/.chief-of-staff" 2>/dev/null | head -n 1)
-  # a project folder uses the owner's one library, <plugin data>/library (project.sh library); none set: offline
-  [ -n "$_l" ] || ! cos_isproj "$1" || { _l=$(head -n 1 "$(cos_data)/library" 2>/dev/null); [ -n "$_l" ] || { printf '%s\n' "$1/knowledge"; return 1; }; }
-  [ -n "$_l" ] || { printf '%s\n' "$1/knowledge"; return 0; }
+  # the owner's one library, <plugin data>/library (project.sh library); none set: offline
+  _l=$(head -n 1 "$(cos_data)/library" 2>/dev/null); [ -n "$_l" ] || { printf '%s\n' "$1/knowledge"; return 1; }
   printf '%s\n' "$_l"
   case $_l in /*) ;; *) return 3 ;; esac
   case $_l in */../*|*/..|*/./*) return 3 ;; esac
-    # offline only when the disk that holds it is unplugged; a library missing anywhere else was moved or
+  # offline only when the disk that holds it is unplugged; a library missing anywhere else was moved or
   # deleted (an agent cannot make it "offline" to skip the gates): broken
   if [ ! -d "$_l" ]; then
     # a mount point: /Volumes/<disk> (macOS), /media/<user>/<disk> or /mnt/<disk> (Linux); any other path is broken
@@ -120,31 +102,22 @@ cos_lib() {
   [ -f "$_l/.library-id" ] && [ -d "$_l/notes" ] || return 2
 }
 
-# Several libraries: "personal" (cos_lib) and one per team, marker line "team: <slug> /absolute/path".
-# cos_libs ROOT -> "name<TAB>path" for every library, personal first.
-cos_libs() {
-  printf 'personal\t%s\n' "$(cos_lib "$1")"
-  awk '$1 == "team:" && $2 ~ /^[a-z0-9][a-z0-9-]*$/ { n = $2; sub(/^team: +[^ ]+ +/, ""); print n "\t" $0 }' "$1/.chief-of-staff" 2>/dev/null
-}
-# cos_libname ROOT DIR -> the library a session in DIR uses: the team slug in projects/<p>/.library, else personal
-cos_libname() {
-  _r=${2#"$1"}; _r=${_r#/}; _n=
-  case $_r in projects/?*) _p=${_r#projects/}; _p=${_p%%/*}; _n=$(head -n 1 "$1/projects/$_p/.library" 2>/dev/null | tr -cd 'a-z0-9-') ;; esac
-  printf '%s\n' "${_n:-personal}"
-}
+# One library: "personal" (cos_lib, the owner's). The name-and-path form stays, so a second library needs no rewrite.
+# cos_libs ROOT -> "name<TAB>path" for every library
+cos_libs() { printf 'personal\t%s\n' "$(cos_lib "$1")"; }
+# cos_libname ROOT DIR -> the library a session uses
+cos_libname() { echo personal; }
 # cos_libpath ROOT NAME -> the folder of library NAME; returns as cos_lib, and 4 when no library has that name
 cos_libpath() {
   [ "$2" = personal ] && { cos_lib "$1"; return; }
   _l=$(cos_libs "$1" | awk -F '\t' -v n="$2" '$1 == n { print $2; exit }')
-  [ -n "$_l" ] || { printf '%s\n' "$1/libraries/$2"; return 4; }
+  [ -n "$_l" ] || { printf '%s\n' "$1/knowledge"; return 4; }
   printf '%s\n' "$_l"
-  case $_l in /*) ;; *) return 3 ;; esac
   [ -f "$_l/.library-id" ] && [ -d "$_l/notes" ] || return 2
 }
-# cos_cfg ROOT -> one checksum of every library setting (the marker and each project's .library); library.sh
-# records it after join, use, leave and offload, so a change made any other way shows at the turn end
-# (pace: counts too: the owner sets it and then records it, cos_cfgsave, like the library settings)
-cos_cfg() { { cat "$1/.chief-of-staff"; for _f in "$1"/projects/*/.library; do [ -f "$_f" ] && { printf '%s\n' "$_f"; cat "$_f"; }; done; } 2>/dev/null | cksum | tr -d ' \t'; }
+# cos_cfg ROOT -> one checksum of the project's settings (the marker: pace:, rotate_tokens:); recorded at the first
+# turn and by project.sh init/trust, so a change made any other way shows at the turn end
+cos_cfg() { cat "$1/.chief-of-staff" 2>/dev/null | cksum | tr -d ' \t'; }
 cos_cfgrec() { printf '%s/cos-cfg-%s' "${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"; }
 cos_cfgsave() { _c=$(cos_cfgrec "$1"); mkdir -p "$(dirname "$_c")" && { [ -f "$_c" ] && chmod u+w "$_c"; cos_cfg "$1" > "$_c"; chmod 444 "$_c"; }; }
 # cos_limit SECONDS CMD... -> CMD with its output, stopped after SECONDS (status 124, nothing printed then). A hook
@@ -241,13 +214,12 @@ cos_decisions() {
       n++; I[n] = id; D[n] = $2; Wh[n] = $3 }
     END { for (i = 1; i <= n; i++) if (!(I[i] in R) && D[i] !~ /^revoked:/) { d = D[i]; w = Wh[i]; gsub(/[\001-\037]/, "", d); gsub(/[\001-\037]/, "", w); print I[i] "\t" d "\t" w } }' "$1" 2>/dev/null
 }
-# cos_shared ROOT -> true when the workspace is shared by a team (setup.sh create --share, or join)
-cos_shared() { grep -qx 'shared: yes' "$1/.chief-of-staff" 2>/dev/null; }
+# a key or token in a file that would go to the team or in a team message (the panel's import check list, plus
+# Stellar secret seeds)
+COS_SECRETS='sk_live_[0-9A-Za-z]{20}|rk_live_[0-9A-Za-z]{20}|_authToken=[^ ]{20}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40}|sk-[A-Za-z0-9_-]{32}|xox[baprs]-[A-Za-z0-9-]{10}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10}[.]eyJ[A-Za-z0-9_-]{10}[.]|(^|[^A-Z0-9])S[A-Z2-7]{55}([^A-Z0-9]|$)'
 # cos_fast ROOT -> true in hackathon pace (pace: fast in the marker, which only the owner can write):
 # internal work needs one specialist or the reviewer; the reviewer is for what goes outside
 cos_fast() { grep -qx 'pace: fast' "$1/.chief-of-staff" 2>/dev/null; }
-# cos_member ROOT -> this person's name in a shared workspace (git config cos.member, local to this computer)
-cos_member() { git -C "$1" config cos.member 2>/dev/null | tr -d '\000-\037' | cut -c1-60; }
 # cos_broken ROOT PROJECT -> the time (seconds) of the latest turn of PROJECT in the last 24 h that ended without the
 # specialists, the reviewer or the track gate, and that nothing fixed since; empty when none. Fixed: a later turn of
 # the same session complied, or a later turn of any session ran a specialist and the reviewer without a violation

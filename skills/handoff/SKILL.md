@@ -28,7 +28,7 @@ a rotation, end the answer saying the work continues in a new session in this fo
    - `ready` only when the next action needs nobody (no owner decision, no money, no publishing,
      no irreversible step) and fits in one session;
    - `off` otherwise.
-3. **Update the card**: the project's card in `board/` of the project folder (in the older workspace layout, the file in `../../board/` whose front matter says `project: <this slug>`): `updated`, `status` (`waiting-owner` if any line waits on
+3. **Update the card**: the project's card in `board/` of the project folder: `updated`, `status` (`waiting-owner` if any line waits on
    the owner, else `in-progress`; a finished card is removed and its result goes in STATE.md).
    Keep each question's `(asked ...)` stamp as it is (the hook adds it; it times the oldest question)
    and never rewrite `asked:`. Move done tasks and decided questions to `board/archive/` when the

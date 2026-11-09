@@ -9,7 +9,7 @@
 #         graph   nodes, edges and problems as tab-separated lines, for the panel (N id title type state origin
 #                 group problems in-links confidence updated review_by; M id problem-text, first 10 per note)
 #         backlinks  notes that link to ID
-# TODAY = YYYY-MM-DD. LIBNAME, LIBKIND (personal|team): the library read. EXTF: file of "id<TAB>library" for the
+# TODAY = YYYY-MM-DD. LIBNAME, LIBKIND (personal): the library read. EXTF: file of "id<TAB>library" for the
 # ids of the other libraries (not also in this one), so a link across libraries is seen.
 # Gate with an index (library.sh): ALLF lists every note, NEWF the ones to read (changed since IDXF or targets);
 # the others come from IDXF, one line of cross-note facts per note, and IDXOUT gets the refreshed index.
@@ -254,13 +254,12 @@ function xcheck(n,   k, i, a, t, m, id, b, j, x, cnt) {
     if (cnt[m] >= 2 || (NORM[n] != "" && NORM[n] == NORM[m])) prob(n, "possible duplicate or conflict: [[" t "]] \"" clean(f(m, "title"), 80) "\". Add it to Compared: as replaces (this one is better), merged, or coexists (reason)")
   }
 }
-# a link to another library: a team note never carries one (it would leak); a personal note may, with a warning
+# a link to another library (none today: one library per computer) is allowed, with a warning
 function xlib(n,   k, a, i, t) {
   if (!active(n)) return
   k = split(OUT[n], a, " ")
   for (i = 1; i <= k; i++) { t = a[i]; if (!(t in EXTL) || (t in ID2N)) continue
-    if (LIBKIND == "team") prob(n, "links to [[" t "]], a note of the library '" EXTL[t] "': a note in the team library '" LIBNAME "' cannot link another library (the team cannot open it, and it carries private or another team's knowledge here). Remove the link; write the fact here in your own words only if the owner agrees it may be shared with this team")
-    else warn(n, "links to [[" t "]], a note of the team library '" EXTL[t] "': keep that team's knowledge out of other teams' work; the link breaks if you leave the team")
+    warn(n, "links to [[" t "]], a note of the library '" EXTL[t] "': the link breaks if that library moves")
   }
 }
 function shared(n,   t, c) { c = 0; for (t in QT) if ((n, t) in TW) c++; return c }

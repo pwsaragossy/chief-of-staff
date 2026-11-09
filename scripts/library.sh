@@ -1,7 +1,7 @@
 #!/bin/sh
 # The library: the company's second brain. One note per file in <library>/notes/, readable in Obsidian;
 # links are inline [[id]]; index, backlinks and graph are computed on the fly (library.awk), never stored.
-# Usage (inside a workspace):
+# Usage (inside a project folder):
 #   library.sh search <terms...>                best notes first, with their neighbours
 #   library.sh new <type> <origin> <title...>   make a note skeleton; prints its path and the similar notes
 #   library.sh similar <title...>               active notes whose title shares 2+ words with this one
@@ -14,40 +14,29 @@
 #   library.sh graph                            tab-separated nodes and edges, for the panel
 #   library.sh brief [project]                  counts for the session briefing
 #   library.sh where                            the library folder and whether it is reachable
-#   library.sh offload <folder> [--remote <git-url>]   move the personal library (central session only)
 #   library.sh libs                             every library: name, folder, state, notes, last sync, this session's (*)
-#   library.sh use <personal|team>              from a project folder: the library this project writes to and searches
-#   library.sh join <git-url> [<name>]          connect a team library (central only; an empty repo becomes one)
-#   library.sh leave <name>                     disconnect a team library (central only)
-#   library.sh trust                            the owner confirms the library settings as they are (central only)
-# Before the command, --lib <name> picks another library than the session's (personal, or a team's).
-# A session uses its project's library (projects/<p>/.library names a team; none = personal); central uses personal.
+# Before the command, --lib personal names the library outright (the only one: project.sh library sets where it lives).
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/lib.sh"
 
 die() { echo "library: $*" >&2; exit 1; }
-usage() { sed -n '4,25p' "$0" | sed 's/^# //' >&2; exit 1; }
+usage() { sed -n '4,21p' "$0" | sed 's/^# //' >&2; exit 1; }
 dir=${CLAUDE_PROJECT_DIR:-$PWD}
-root=$(cos_root "$dir") || die "not inside a chief-of-staff workspace"
+root=$(cos_root "$dir") || die "not inside a chief-of-staff project folder"
 name=; [ "${1:-}" = --lib ] && { name=${2:-}; shift 2 || usage; }
 mine=$(cos_libname "$root" "$dir")   # the session's own library
-setlib() { name=$1; lib=$(cos_libpath "$root" "$name"); state=$?; kind=team; [ "$name" = personal ] && kind=personal; }
-# what a person reads: a shared workspace's own library (knowledge/) is the team's, though its name stays personal
-label() { if [ "$name" = personal ] && cos_shared "$root"; then printf "the team's (shared workspace)"; else printf "'%s'" "$name"; fi; }
+setlib() { name=$1; lib=$(cos_libpath "$root" "$name"); state=$?; kind=personal; }
 setlib "${name:-$mine}"
-# a shared workspace is the team's: its knowledge/ is already the team library, and nothing personal joins it
-case ${1:-} in join|use|offload) cos_shared "$root" && die "this workspace is shared with the team: its library (knowledge/) is already the team's, so it takes no other library. Personal notes belong in a personal workspace." ;; esac
-central_only() { case ${dir#"$root"} in /central|/central/*) ;; *) die "only central $1, after the owner agrees (this session is in ${dir#"$root"/})" ;; esac; }
 today=$(date +%F)
 idre='^[a-z0-9][a-z0-9-]\{1,79\}$'
 
 offline() {
   case $state in
-    1) echo "Library offline: $lib is not reachable (external disk unplugged?). Work continues without it; plug it in, or move the library back with library.sh offload $root/knowledge from central." ;;
-    2) if [ "$name" != personal ]; then echo "Library error: the team library '$name' is missing or damaged at $lib. From central: library.sh leave $name, then library.sh join <its git link> $name again; or this project goes back to the personal library (library.sh use personal)."
-       else echo "Library error: $lib exists but has no .library-id file (an empty mount point, or a wrong path in $root/.chief-of-staff). Do not write notes there."; fi ;;
-    3) echo "Library error: the library: line in $root/.chief-of-staff must be one absolute path." ;;
-    4) echo "Library error: this session uses the library '$name', which is not connected (library.sh libs lists them; central connects one with library.sh join)." ;;
+    1) if [ -s "$(cos_data)/library" ]; then echo "Library offline: $lib is not reachable (external disk unplugged?). Work continues without it; plug it in, or the owner picks another folder with project.sh library <folder>."
+       else echo "No library yet: /chief-of-staff:setup picks where it lives. Work continues without it."; fi ;;
+    2) echo "Library error: $lib exists but has no .library-id file or notes/ (an empty mount point, or a wrong path in $(cos_data)/library). Do not write notes there." ;;
+    3) echo "Library error: the library path in $(cos_data)/library must be one absolute path (project.sh library <folder> sets it)." ;;
+    4) echo "Library error: there is no library '$name' here (the only library is personal)." ;;
   esac
 }
 need_online() { [ $state = 0 ] || { offline >&2; exit 1; }; }
@@ -66,7 +55,7 @@ ext() {
 }
 run() { # MODE [awk -v assignments...] -- runs library.awk over every note
   m=$1; shift
-  notes || { [ "$m" = brief ] && echo "Library $(label): empty (0 notes)."; return 0; }
+  notes || { [ "$m" = brief ] && echo "Library '$name': empty (0 notes)."; return 0; }
   case $m in gate|doctor|graph) ext ;; esac
   LC_ALL=C TODAY=$today awk -v MODE="$m" -v TODAY="$today" -v LIBNAME="$name" -v LIBKIND="$kind" "$@" -f "$here/library.awk" "$lib/notes/"*.md
 }
@@ -174,70 +163,12 @@ case ${1:-} in
   backlinks)
     [ $# -eq 2 ] || usage; need_online; run backlinks -v ID="$2" ;;
   graph) need_online; run graph ;;
-  brief) [ $state = 0 ] || { offline; exit 0; }; echo "Library of this session: $(label) ($lib)."; run brief -v PROJ="${2:-}" ;;
+  brief) [ $state = 0 ] || { offline; exit 0; }; echo "Library of this session: '$name' ($lib)."; run brief -v PROJ="${2:-}" ;;
   where) echo "$lib"; offline; exit $state ;;
-  offload) [ "$name" = personal ] || die "offload moves the personal library; a team library lives in its git repo"; sh "$here/offload.sh" "$@" ;;
   libs)
     cos_libs "$root" | while IFS="$(printf '\t')" read -r n p; do
       setlib "$n"; c=$(ls "$lib/notes/" 2>/dev/null | grep -c '\.md$')
-      sy=$(head -n 1 "$lib/.git/cos-sync" 2>/dev/null | tr -d '\000-\037' | cut -c1-120)
-      printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$n" "$lib" "$state" "$c" "${sy:--}" "$([ "$n" = "$mine" ] && echo '*')"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$n" "$lib" "$state" "$c" "-" "$([ "$n" = "$mine" ] && echo '*')"
     done ;;
-  use)
-    [ $# -eq 2 ] || usage
-    case ${dir#"$root"/} in projects/?*) p=${dir#"$root"/projects/}; p=${p%%/*} ;; *) die "run it from a project folder (projects/<name>)" ;; esac
-    setlib "$2"; [ $state = 4 ] && die "no library named '$2' (library.sh libs lists them)"
-    f=$root/projects/$p/.library; [ -f "$f" ] && chmod u+w "$f"
-    if [ "$2" = personal ]; then rm -f "$f"; else printf '%s\n' "$2" > "$f"; chmod 444 "$f"; fi
-    cos_cfgsave "$root"
-    echo "Project '$p' now writes to and searches the library '$2' ($lib). Other libraries only through search --all, with a warning." ;;
-  join)
-    [ $# -ge 2 ] || usage; central_only "connects a team library"
-    url=$2
-    [ "$(printf '%s' "$url${3:-}" | tr -d '\000-\037\177')" = "$url${3:-}" ] || die "the URL and the name must be one line, without control characters"
-    case $url in -*) die "the git URL must not start with -" ;; esac
-    n=${3:-$(basename "$url" .git | tr 'A-Z_' 'a-z-' | tr -cd 'a-z0-9-')}
-    printf '%s\n' "$n" | grep -q '^[a-z0-9][a-z0-9-]\{0,39\}$' || die "name the library: lowercase letters, digits and dashes (library.sh join <url> <name>)"
-    [ "$n" = personal ] && die "personal is your own library: pick another name"
-    setlib "$n"; [ $state = 4 ] || die "a library named '$n' is already connected"
-    p=$root/libraries/$n; [ -e "$p" ] && die "$p exists: remove it or pick another name"
-    GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh} -o BatchMode=yes -o ConnectTimeout=10" git clone -q -c core.symlinks=false -- "$url" "$p" 2>"$root/.join.err" || { e=$(head -n 3 "$root/.join.err" | tr '\n' ' '); rm -f "$root/.join.err"; rm -rf "${p:?}"; die "could not clone $url: $e(check the link and your access to it)"; }
-    rm -f "$root/.join.err"
-    if [ ! -f "$p/.library-id" ]; then
-      if [ -n "$(ls -A "$p" | grep -vx .git)" ]; then rm -rf "${p:?}"; die "$url holds files but is not a chief-of-staff library: use an empty repo, or one another member joined first"; fi
-      # an empty repo: this member starts the team library
-      mkdir -p "$p/notes" "$p/templates" "$p/inbox"; : > "$p/notes/.gitkeep"
-      cp "$here/../templates/knowledge/note.md" "$p/templates/note.md"
-      printf 'inbox/\n' > "$p/.gitignore"
-      od -An -N8 -tx1 /dev/urandom | tr -d ' \n' > "$p/.library-id"
-      git -C "$p" add -A && git -C "$p" -c user.name=chief-of-staff -c user.email=chief-of-staff@localhost commit -qm "library: started" || die "could not start the library in $p"
-      GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh} -o BatchMode=yes -o ConnectTimeout=10" git -C "$p" push -q -u origin HEAD 2>/dev/null || echo "Note: the first push to $url failed; it is retried after the first note saved in a project of this team."
-    fi
-    mkdir -p "$p/inbox"; chmod 444 "$p/.library-id" 2>/dev/null
-    grep -qx 'libraries/' "$root/.gitignore" 2>/dev/null || echo 'libraries/' >> "$root/.gitignore"
-    m=$root/.chief-of-staff; chmod u+w "$m"; printf 'team: %s %s\n' "$n" "$p" >> "$m"; chmod 444 "$m"
-    cos_cfgsave "$root"
-    echo "Connected the team library '$n' ($p, $(ls "$p/notes" | grep -c '\.md$') notes) from $url."
-    echo "A project uses it with: library.sh use $n (from the project folder). It syncs at session start and after each turn that saved notes in it." ;;
-  trust)   # the owner checked library.sh libs and confirms the settings as they are now
-    [ $# -eq 1 ] || usage; central_only "records the library settings"
-    cos_cfgsave "$root"; echo "Recorded the library settings as they are now; library.sh libs lists them." ;;
-  leave)
-    [ $# -eq 2 ] || usage; central_only "disconnects a team library"
-    [ "$2" = personal ] && die "the personal library cannot be left"
-    setlib "$2"; [ $state = 4 ] && die "no library named '$2'"
-    u=$(for f in "$root"/projects/*/.library; do [ -f "$f" ] && [ "$(head -n 1 "$f" | tr -cd 'a-z0-9-')" = "$2" ] && printf '%s\n' "$f"; done | sed 's|.*/projects/||; s|/.library$||' | tr '\n' ' ')
-    [ -z "$u" ] || die "projects still use '$2': $u. Close them, or switch each to another library (library.sh use, from the project folder, with the owner's OK)"
-    if [ -d "$lib/.git" ]; then
-      # never pushed (no upstream) counts as not pushed: the team would lose every note
-      [ -z "$(git -C "$lib" status --porcelain -- notes templates)" ] && git -C "$lib" rev-parse -q --verify '@{u}' >/dev/null &&
-        [ -z "$(git -C "$lib" log --oneline '@{u}..' 2>/dev/null)" ] ||
-        die "'$2' has notes not pushed to the team yet: run sh $here/sync.sh push \"$lib\" and leave again"
-    fi
-    m=$root/.chief-of-staff; chmod u+w "$m"; grep -v "^team: $2 " "$m" > "$m.tmp.$$"; chmod 444 "$m.tmp.$$"; mv -f "$m.tmp.$$" "$m"
-    old=; case $lib in "$root"/libraries/*) old=$lib.left-$(date +%Y%m%d-%H%M%S); mv "$lib" "$old" ;; esac
-    cos_cfgsave "$root"
-    echo "Disconnected '$2': it no longer appears in search. Notes that link it now show broken links (library.sh doctor)."
-    [ -n "$old" ] && echo "The local copy is in $old (ignored by git); delete it once you are sure." ;;
   *) usage ;;
 esac

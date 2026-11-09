@@ -15,7 +15,7 @@ Turn a clear strategy into a visual and interaction system that is distinct, con
 - Competitor and category visuals, captured with date, to find what to avoid and what is a category convention.
 - Constraints: platform guidelines, existing brand or design system, deadline, budget, formats required (print, app icon, social, favicon), languages and scripts.
 - Naming status: the identity is designed around a name that is final, or the name is flagged as provisional.
-- Search the workspace library first: `library.sh search "<topic>"`. Existing research, briefs and decisions come before new work.
+- Search the library first: `library.sh search "<topic>"`. Existing research, briefs and decisions come before new work.
 - Anything missing goes on the project card as a question to the owner. Never invent audience facts or preferences.
 
 ## Method

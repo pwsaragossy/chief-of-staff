@@ -14,7 +14,7 @@ Turn a decision question into a sourced, dated answer with explicit confidence. 
 - The exact question in one sentence, plus what answer would change the decision (the decision threshold).
 - Scope: geography, segment, time window, currency, what is out of scope.
 - Known hypotheses and what the requester already believes (to test them, not confirm them).
-- Search the workspace library first: `library.sh search "<topic>"`. Reuse existing findings and note their dates.
+- Search the library first: `library.sh search "<topic>"`. Reuse existing findings and note their dates.
 - Anything missing goes on the project card as a question to the owner. Never guess a scope, a number or a segment.
 
 ## Method

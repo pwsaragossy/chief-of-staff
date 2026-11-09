@@ -3,17 +3,17 @@
 # OFF by default. It runs only projects whose STATE.md front matter says `status: in-progress`
 # and `dispatch: ready` (the handoff skill sets that when the next action needs nobody).
 #
-# Usage: dispatcher.sh /path/to/workspace
-# Env:   COS_MAX_RUNS_PER_DAY (default 3)    ceiling across all projects, per calendar day
+# Usage: dispatcher.sh /path/to/project
+# Env:   COS_MAX_RUNS_PER_DAY (default 3)    ceiling for this project, per calendar day
 #        COS_MAX_BUDGET_USD (default 2)      API spend cap per run (passed to claude)
 #        COS_RUN_TIMEOUT (default 1800)      seconds before a run is killed
-#        COS_PUSH=1                          push the workspace after the runs (the backup)
-#        COS_ALLOW_NO_BACKUP=1               run even if the workspace git repo has no remote
+#        COS_PUSH=1                          push the project after the runs (the backup)
+#        COS_ALLOW_NO_BACKUP=1               run even if the project git repo has no remote
 #        CLAUDE_BIN (default claude)         absolute path recommended under launchd or cron
 . "$(dirname "$0")/lib.sh"
 
-root=$(cd "${1:?usage: dispatcher.sh /path/to/workspace}" && pwd) || exit 1
-[ -f "$root/.chief-of-staff" ] || { echo "not a workspace: $root" >&2; exit 1; }
+root=$(cd "${1:?usage: dispatcher.sh /path/to/project}" && pwd) || exit 1
+cos_isproj "$root" || { echo "not a chief-of-staff project: $root" >&2; exit 1; }
 max=${COS_MAX_RUNS_PER_DAY:-3}
 budget=${COS_MAX_BUDGET_USD:-2}
 limit=${COS_RUN_TIMEOUT:-1800}; case $limit in ""|*[!0-9]*) limit=1800 ;; esac
@@ -29,7 +29,7 @@ command -v "$bin" >/dev/null 2>&1 || { note "refused: '$bin' not found; set CLAU
 
 # Backup first: unattended edits without an off-machine copy are not allowed by default.
 if [ -z "$(git -C "$root" remote 2>/dev/null)" ] && [ "${COS_ALLOW_NO_BACKUP:-0}" != 1 ]; then
-  note "refused: workspace has no git remote (backup). Set COS_ALLOW_NO_BACKUP=1 to override."
+  note "refused: the project has no git remote (backup). Set COS_ALLOW_NO_BACKUP=1 to override."
   exit 1
 fi
 
@@ -47,7 +47,7 @@ trap 'kill $watch $run 2>/dev/null; rm -rf "$lock"' EXIT
 trap 'exit 130' INT TERM
 
 # We hold the lock, so a project still marked running was cut off by a crash or a kill: park it.
-if cos_isproj "$root"; then set -- "$root/STATE.md"; else set -- "$root"/projects/*/STATE.md; fi   # a project folder is one project
+set -- "$root/STATE.md"   # a project folder is one project
 for s in "$@"; do
   [ -f "$s" ] && [ "$(fm_get "$s" dispatch)" = "running" ] || continue
   fm_set "$s" dispatch off; note "parked $(basename "$(dirname "$s")"): previous run was interrupted"
@@ -58,15 +58,13 @@ prompt='You were started by the chief-of-staff dispatcher, with nobody watching.
 for s in "$@"; do
   [ -f "$s" ] || continue
   [ "$(fm_get "$s" status)" = "in-progress" ] && [ "$(fm_get "$s" dispatch)" = "ready" ] || continue
-  # a shared workspace: only this person's projects, so two teammates' dispatchers never run the same one
-  cos_shared "$root" && { [ -n "$(cos_member "$root")" ] && [ "$(fm_get "$s" member)" = "$(cos_member "$root")" ] || continue; }
   runs=$(grep -c "^$today [0-9:]* run " "$log" 2>/dev/null || true)
   if [ "${runs:-0}" -ge "$max" ]; then note "ceiling: $max runs today, stopping"; break; fi
   p=$(basename "$(dirname "$s")")
   fm_set "$s" dispatch running
   note "run $p: $(fm_get "$s" next)"
   # Guard rails: read and edit tools only, no shell at all (so no git, no sed/cp around the denies).
-  # The whole workspace is reachable (board, ROUTING.md); agent rules, settings, git internals and
+  # The whole project folder is reachable (board, ROUTING.md); agent rules, settings, git internals and
   # the dispatcher's own files are denied by absolute paths ("//" + root). Permission rules, not a sandbox.
   before=$(git_fingerprint)
   (cos_gitenv_off; cd "$(dirname "$s")" && exec "$bin" -p "$prompt" \
@@ -101,8 +99,6 @@ for s in "$@"; do
   else note "done $p rc=$rc, dispatch now $(fm_get "$s" dispatch)"; fi
 done
 
-# a shared workspace goes to the team only through the turn-end checks (sync.sh), never by a plain push
-if [ "${COS_PUSH:-0}" = 1 ] && cos_shared "$root"; then note "COS_PUSH ignored: a shared workspace is pushed by each turn end, after its checks"
-elif [ "${COS_PUSH:-0}" = 1 ]; then
+if [ "${COS_PUSH:-0}" = 1 ]; then
   safegit push -q --no-verify 2>>"$log" && note "pushed" || note "push failed"
 fi

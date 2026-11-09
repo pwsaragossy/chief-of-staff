@@ -1,6 +1,6 @@
 ---
 name: knowledge
-description: The workspace library, the company's second brain. Search it before any research, save every finding, decision, how-to, format or option as a note, link notes inline, and retire or merge what newer knowledge makes worse. Use for anything the owner sends to study (link, video, file), before any web research, whenever a specialist learns something worth keeping, or to move the library to a disk, cloud folder or private repo.
+description: The library, the company's second brain. Search it before any research, save every finding, decision, how-to, format or option as a note, link notes inline, and retire or merge what newer knowledge makes worse. Use for anything the owner sends to study (link, video, file), before any web research, whenever a specialist learns something worth keeping, or to move the library to a disk, cloud folder or private repo.
 ---
 
 # The library: one company memory, used by every project
@@ -23,7 +23,7 @@ DELIVERY.md (`## Sources`). Search the web only for what the library lacks.
 ```sh
 sh library.sh new <finding|decision|howto|option|topic> <origin> <title>
 ```
-`origin` is the project slug, `research:<slug>` or `central`: where it came from. It never limits who
+`origin` is the project slug or `research:<slug>`: where it came from. It never limits who
 uses the note; every project reads every note. `new` prints the file and the similar notes. Then fill
 every `{{...}}`:
 - the body in your own words, with its evidence, linking related notes inline: `[[their-id]]`;
@@ -51,20 +51,12 @@ A retired note stays in place, so old links still resolve; search shows it only 
 `sh library.sh doctor` lists every problem, broken link and possible duplicate; the panel shows the
 same as a graph. A note is never deleted by hand: retire it.
 
-## 5. Several libraries: personal and one per team
-`sh library.sh libs` lists them. Your session uses its project's library (a team project uses its
-team's; everything else uses personal), and `search`, `new` and `retire` work there. `search --all`
-also shows the other libraries, each under a line that says where it comes from: learn from them, but
-do not copy their content into this library or its deliverables unless the owner agrees.
-- A note in a team library never links a note of another library (blocked: the team cannot open it,
-  and it would carry private or another team's knowledge). A personal note may link a team note
-  (a warning: keep that team's knowledge out of other teams' work).
-- A team project's deliverable cites only its team's notes.
-- Team libraries sync by themselves: pulled at session start, pushed after each turn whose notes
-  passed the checks. A conflict becomes a card for this session in `board/`, with the steps.
-- Only central connects or disconnects a team, after the owner agrees: `library.sh join <git-link>`,
-  `library.sh leave <name>`. A project switches library with `library.sh use <name>`; the owner confirms. If the turn end says the library settings changed or their record is missing, show the owner `library.sh libs` and, on their OK, run `library.sh trust` from central.
+## 5. One library
+`sh library.sh libs` lists it: the owner's personal library, which every session uses. If the turn end says the
+project's settings changed, show the owner `.chief-of-staff` and, on their OK, run
+`project.sh trust <project folder>`.
 
 ## 6. Moving the library (disk, cloud folder, private repo)
-Only central does this, after the owner agrees: `sh library.sh offload <folder> [--remote <git-url>]`.
+Only the coordinator does this, after the owner agrees: `sh project.sh library <folder>` (an existing library, or
+a new one in an empty folder). Moving the notes themselves is a copy the owner makes first; the old folder stays as it was.
 If the disk is unplugged later, work continues and the panel turns yellow until it is back.
