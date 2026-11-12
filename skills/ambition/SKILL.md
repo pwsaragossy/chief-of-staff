@@ -48,6 +48,9 @@ Based on Felix Rieseberg, "How to be more ambitious" (altitude, depth, range, an
    what proves it worked. The code that meets it is the smallest that passes the judge: reuse what the
    project has, and add no abstraction, option or feature the judge does not measure. In code, a
    version improves by passing a harder judge, not by growing.
+   The same holds for writing, video and design: the size and the tone are the owner's. A letter the
+   owner wants short stays short; a version improves by being more correct or clearer, never longer,
+   louder or more ornate.
 
 ## Output
 - First line: the conclusion, including "this does not work as asked".

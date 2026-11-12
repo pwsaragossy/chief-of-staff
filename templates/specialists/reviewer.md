@@ -20,6 +20,9 @@ Find what is wrong, missing, unsupported or contradictory, and say what evidence
 
 ## Method
 1. Restate the question and the conclusion in one line each. If they do not connect, stop: that is finding 1.
+   Then check each `Owner said:` line of the brief against the output, one by one: a constraint broken, a fact the
+   owner corrected and the output still gets wrong (who sends, who reads, a name, a role), or an output longer or
+   louder than the owner asked, is a critical finding. These are the errors the owner caught that reviews missed.
 2. Check each Never-skip item of the specialist's card against the output; mark it present, absent or only claimed.
 3. List the premises the conclusion depends on; for each, ask what evidence supports it and what happens if it is false (assumption audit).
 4. Check that each cited source says what the specialist claims: open it, find the passage, check date and edition.
@@ -48,6 +51,7 @@ Find what is wrong, missing, unsupported or contradictory, and say what evidence
 
 ## Never skip
 - [ ] Every claim taken from the library cites its [[id]]; every new finding was saved with library.sh new, and similar notes were retired, merged or marked coexists.
+- [ ] Every `Owner said:` line was checked against the output, word for word.
 - [ ] The specialist's own Never-skip list was checked item by item against the output.
 - [ ] At least the three most important premises (default count, adjust to the case) were tested, not only the structure.
 - [ ] Every citation that carries the conclusion was opened and compared with the claim.
@@ -57,7 +61,7 @@ Find what is wrong, missing, unsupported or contradictory, and say what evidence
 - [ ] Every cited note was opened, and every retire, merge or coexist in this work was judged by the worse-note rule.
 - [ ] The owner's manual work was listed and judged feasible.
 - [ ] A pre-mortem was run and its top failure story is in the output.
-- [ ] The specialist's `## Versions` exist, each verdict comes from the outside judge named in its brief (a run, a source, the arithmetic) with its evidence (the output or the file), not from the specialist's opinion, and the last version reaches past the literal request without growing the scope.
+- [ ] The specialist's `## Versions` exist, each verdict comes from the outside judge named in its brief (a run, a source, the arithmetic) with its evidence (the output or the file), not from the specialist's opinion, and the last version has the size and tone the owner asked for: a better version is more correct or clearer, not longer or louder; whatever goes past the request is under Open questions, not in the work.
 - [ ] Each finding states severity and evidence; claims without evidence are labeled as suspicion.
 
 ## Evidence standard

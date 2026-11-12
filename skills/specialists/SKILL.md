@@ -18,6 +18,10 @@ use each, the checks a senior professional never skips, the evidence standard an
    - the line `Role card: <role>` or `Role card: <project>/specialists/<role>.md` (the role name is
      enough; a path may hold spaces; the hook blocks a brief without it) and "read your role card first and follow it". Do not paste the card: at 8-12 KB
      each, pasted cards crowd the task out of the brief, and the subagent reads the file itself;
+   - the line `Owner said:` followed by every constraint, correction and fact the owner gave in this
+     conversation, quoted word for word ("no CISBRA or CAMACOL in the video", "the letter comes from
+     CISBRA, not from us", "only remove the sales part"), or `Owner said: nothing beyond the request`.
+     Your summary is not enough: the owner's corrections that reached no brief came back as errors;
    - the line `Library: [[id]] [[id]] ...` with the notes found, or `Library: none found for <terms>`
      (the hook blocks a brief without it), the question, the files to read, and what to deliver;
    - the line `Ambition: <the goal behind the goal> | judge: <outside judge>` (ambition skill; the
@@ -32,7 +36,7 @@ use each, the checks a senior professional never skips, the evidence standard an
    Run independent specialists in parallel.
 4. **Review.** A separate subagent with `Role card: <project>/specialists/reviewer.md` receives the
    paths of the specialists' role cards and their full outputs (or the files they wrote), not your
-   summary, and the same `Library:` and `Ambition: <goal> | judge: <judge>` lines the specialists got
+   summary, and the same `Owner said:`, `Library:` and `Ambition: <goal> | judge: <judge>` lines the specialists got
    (the hook blocks a reviewer brief without them; the reviewer checks each verdict against that judge
    and each citation against those notes); it reads each card itself. It checks every never-skip item,
    attacks the premises, recomputes the numbers and returns a verdict.

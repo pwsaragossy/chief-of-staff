@@ -202,7 +202,8 @@ There the specialists and ambition gate runs with the plugin's own role cards; n
 rotation, and turns are logged to `protocol.log` in the same data folder.
 A second opt-in, `knowledge-mcp` in the same data folder, holds the path of a knowledge-mcp `server.py`: at each new
 session, in any folder, the briefing lists the knowledge bases its `discover` found and never offered, and the session
-asks the owner once which to add (each answer is recorded by its id, a no too, and never asked again).
+asks the owner once which to add (each answer is recorded by its id, a no too, and never asked again). Each base is
+shown in one session only, answered or not (`kb-offered` in the data folder; delete it to be asked again).
 
 - `SessionStart` prints a factual briefing (at most 2000 characters): cards waiting on the owner,
   the project's status and next action, the library's counts and the project's latest notes.
@@ -214,10 +215,12 @@ asks the owner once which to add (each answer is recorded by its id, a no too, a
   apply over it, and plan mode is not bypassed. Every git command the scripts run refuses a folder that only looks
   like a repository (a teammate could commit one) and ignores `core.fsmonitor`.
 - `scripts/protocol.sh` (UserPromptSubmit, PreToolUse, PostToolUse, SubagentStop, Stop) states
-  the protocol in full at the first prompt of a session and after a compaction or restart (one line on
+  the protocol in full at the first prompt of a session and after a compaction or restart (nothing on
   the other prompts) and enforces it: a subagent brief must name an existing role card by its path
   (`Role card: <project>/specialists/<role>.md`, which the subagent reads itself, or `Role card:
-  utility` for a helper); a specialist cannot finish without its never-skip checklist and its
+  utility` for a helper; an Explore, web-fetch or claude-code-guide subagent is a helper by its type); a
+  turn that only edits a file this session already put through specialists and the reviewer is not a new deliverable
+  (a Write, or an edit of DECISIONS.md, still is); a specialist cannot finish without its never-skip checklist and its
   `## Versions` with the judge's evidence, and its brief needs a `Library:` line; web search waits for a library search
   (`scripts/library.sh search`); a note is checked on save and at the end of the turn (links,
   `Compared:`, retirements, notes written by shell commands too); agents cannot edit the project's

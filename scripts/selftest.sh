@@ -118,7 +118,8 @@ ev() { printf '{"session_id":"s1","hook_event_name":"%s"%s}' "$1" "${2:-}"; }
 rc() { h "$1" "$2" >/dev/null 2>&1; echo $?; }
 check "prompt hook restates the protocol" 'h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "at least one specialist and the independent reviewer"'
 check "prompt hook is silent outside a workspace" '[ -z "$(h "$(ev UserPromptSubmit)" /tmp)" ]'
-check "the next prompt of the session gets one line, not the whole protocol" 'o=$(h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P"); printf "%s" "$o" | grep -q "as stated at the start of this session" && ! printf "%s" "$o" | grep -q "the independent reviewer, as subagents"'
+check "the next prompt of the session gets no protocol text (the full text is already in context)" 'o=$(h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P"); ! printf "%s" "$o" | grep -q "the independent reviewer, as subagents" && ! printf "%s" "$o" | grep -q "as stated at the start"'
+check "the full protocol asks for the owner's words in every brief" 'rm -f "$CLAUDE_PLUGIN_DATA/turns/s7.seen"; h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"" | sed s/s1/s7/)" "$P" | grep -q "Owner said:"'
 check "after a compaction the next prompt gets the full protocol again" 'printf "{\"session_id\":\"s1\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh" >/dev/null; h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "the independent reviewer, as subagents"'
 check "a resumed session is not told to write a new arrival synthesis; a new one is" 'o=$(printf "{\"session_id\":\"s9\",\"source\":\"resume\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh"); ! printf "%s" "$o" | grep -q "arrival synthesis in STATE.md is written" && printf "%s" "$o" | grep -q "Resumed session: if STATE.md already holds your arrival synthesis, do not write it again" && printf "{\"session_id\":\"s9\",\"source\":\"startup\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh" | grep -q "arrival synthesis in STATE.md is written"'
 check "a compacted session gets its turn record, not a new arrival synthesis" 'o=$(printf "{\"session_id\":\"s1\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh"); printf "%s" "$o" | grep -q "Resumed after a compaction, same turn: .* 0 specialist" && ! printf "%s" "$o" | grep -q "arrival synthesis in STATE.md is written"'
@@ -145,6 +146,23 @@ check "specialists plus a saved note end freely" '[ "$(rc "$(ev Stop ",\"stop_ho
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/pitch.md\"}")" "$P"
 check "a deliverable without specialists cannot end" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
+# a revision of a file this session already reviewed is not a new deliverable; a Write of it still is
+rm -f "$CLAUDE_PLUGIN_DATA/turns/s1.reviewed"
+h "$(ev UserPromptSubmit)" "$P" >/dev/null
+h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/letter.md\"}")" "$P"
+h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher ...\"}")" "$P"
+h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: reviewer ...\"}")" "$P"
+h "$(ev Stop ",\"stop_hook_active\":false")" "$P" >/dev/null 2>&1
+h "$(ev UserPromptSubmit ",\"prompt\":\"Sim, ajusta\"")" "$P" >/dev/null
+h "$(ev PostToolUse ",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$P/letter.md\"}")" "$P"
+check "an Edit of a file this session already reviewed ends freely" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
+h "$(ev UserPromptSubmit)" "$P" >/dev/null
+h "$(ev PostToolUse ",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$P/other.md\"}")" "$P"
+check "an Edit of a file never reviewed is still a deliverable" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
+h "$(ev UserPromptSubmit)" "$P" >/dev/null
+h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/letter.md\"}")" "$P"
+check "a Write over a reviewed file is still a deliverable" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
+rm -f "$CLAUDE_PLUGIN_DATA/turns/s1.reviewed"
 # a specialist and reviewer run in the background: their report comes back as a new prompt (a hand-back), and the
 # turn that applies it is credited with them, even when the owner wrote in between; the owner's own prompt is not,
 # nor is a hand-back after foreground work only, nor a notice from another plugin
@@ -174,7 +192,7 @@ h "$(ev UserPromptSubmit)" "$P" >/dev/null; dv; bgi researcher; bgi reviewer; st
 check "a launch with run_in_background in its input is credited at its hand-back too" '[ "$(stop)" = 0 ]'
 # hackathon pace: one specialist is enough for internal work, nothing is still not enough
 chmod u+w "$W/.chief-of-staff"; cp "$W/.chief-of-staff" "$W/marker.bak"; echo "pace: fast" >> "$W/.chief-of-staff"; ( . "$here/lib.sh"; cos_cfgsave "$W" )
-check "hackathon pace: the prompt says the reviewer is for what goes outside" 'h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "reviewer runs only on what goes outside"'
+check "hackathon pace: the prompt says the reviewer is for what goes outside" 'rm -f "$CLAUDE_PLUGIN_DATA/turns/s1.seen"; h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "reviewer runs only on what goes outside"'
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/plan.md\"}")" "$P"
 check "hackathon pace: a deliverable with no specialist still cannot end" 'h "$(ev Stop ",\"stop_hook_active\":false")" "$P" 2>&1 | grep -q "no specialist"'
 h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher ...\"}")" "$P"
@@ -206,6 +224,7 @@ check "a subagent without a role card is blocked" '[ "$(rc "$(ev PreToolUse ",\"
 check "a role card that does not exist is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: astrologer\"}")" "$P")" = 2 ]'
 check "an existing role card is allowed" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher Library: none found for x Ambition: answer many lookups fast, not one | judge: sh check.sh under 3 s\"}")" "$P")" = 0 ]'
 check "a utility helper is allowed" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: utility\"}")" "$P")" = 0 ]'
+check "an Explore helper needs no role card; a general subagent still does" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"subagent_type\":\"Explore\",\"tool_input\":{\"prompt\":\"find the file\"}")" "$P")" = 0 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"subagent_type\":\"general-purpose\",\"tool_input\":{\"prompt\":\"find the file\"}")" "$P")" = 2 ]'
 check "a specialist cannot finish without its checklist" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance answer\"")" "$P")" = 2 ]'
 check "a specialist with its checklist and versions finishes" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Versions v1 depth: judge fail, evidence: sh check.sh printed 4.2 s ## Never-skip checklist ok\"")" "$P")" = 0 ]'
 check "ambition: a version without the judge.s evidence cannot finish" 'h "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: finance ## Versions v1 depth: judge fail ## Never-skip checklist ok\"")" "$P" 2>&1 | grep -q "never invent a failed version"'
@@ -225,7 +244,7 @@ check "a turn-end track check slower than its budget blocks in time and says wha
 check "a briefing whose board read runs out of time says so and ends in time" 's=$(date +%s); o=$(CLAUDE_PROJECT_DIR="$W" sh "$SL/briefing.sh"); [ $(($(date +%s) - s)) -lt 9 ] && printf "%s" "$o" | grep -q "board was not read in time"'
 rm -rf "$SL" "$CLAUDE_PLUGIN_DATA"/slow-*
 check "the Versions placeholder of a role card does not pass the hook; a real line does" '( for m in "## Versions <one line> - evidence: <the command and its output>" "## Versions v1 passed: <what the judge printed>"; do [ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: engineer ## Never-skip checklist $m\"")" "$P")" = 2 ] || exit 1; done; [ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: engineer ## Never-skip checklist ## Versions v1 passed: npm test printed 12 passing\"")" "$P")" = 0 ] )'
-check "the specialists skill briefs the reviewer with the lines the hook requires (no block when followed literally)" 'awk "/^4\. \*\*Review/,/^5\./" "$here/../skills/specialists/SKILL.md" | tr "\n" " " | grep -q "same .Library:. and .Ambition: <goal> | judge: <judge>. lines"'
+check "the specialists skill briefs the reviewer with the lines the hook requires (no block when followed literally)" 'awk "/^4\. \*\*Review/,/^5\./" "$here/../skills/specialists/SKILL.md" | tr "\n" " " | grep -q "same .Owner said:., .Library:. and .Ambition: <goal> | judge: <judge>. lines"'
 check "every specialist card's output format has the ## Versions section the SubagentStop hook requires" '( for f in "$here"/../templates/specialists/*.md; do case $f in */reviewer.md) continue ;; esac; awk "/^## Output format/,/^## What the reviewer/" "$f" | grep -q "^## Versions" && awk "/^## Output format/,/^## What the reviewer/" "$f" | grep -q "evidence: <" || { echo "no Versions in $f"; exit 1; }; done )'
 check "every helper lib.sh defines is used by another script (no dead code)" '( for f in $(sed -n "s/^\(cos_[a-z]*\)().*/\1/p" "$here/lib.sh"); do grep -lw "$f" "$here"/*.sh "$here"/*.py | grep -v "/lib.sh$\|/selftest.sh$" | grep -q . || grep -v "^#\|^$f()" "$here/lib.sh" | grep -qw "$f" || { echo "unused: $f"; exit 1; }; done )'
 check "README says which commands the plugin approves by itself, and that the user's own rules still win" 'grep -q "approves by itself" "$here/../README.md" && grep -q "your own deny and ask rules still" "$here/../README.md"'
@@ -988,10 +1007,13 @@ check "knowledge bases: a session anywhere is told the new base and how to recor
 check "knowledge bases: a base whose id is not 10 hex characters is dropped, and no folder path reaches the session" '! printf "%s" "$o" | grep -q "(id)" && ! printf "%s" "$o" | grep -q "/x/"'
 check "knowledge bases: discover runs from the session's folder (its two-brain scope)" '[ "$(cat "$K/cwd")" = "$K/anywhere" ] || [ "$(cat "$K/cwd")" = "$(cd "$K/anywhere" && pwd -P)" ]'
 check "knowledge bases: a resume or a compaction does not ask again" '[ -z "$(kb "$K/anywhere" resume)" ] && [ -z "$(kb "$K/anywhere" compact)" ]'
+check "knowledge bases: a base shown once is not shown again in a new session, answered or not" '[ -z "$(kb "$K/anywhere")" ]'
+rm -f "$CLAUDE_PLUGIN_DATA/kb-offered"
 check "knowledge bases: inside a workspace the offer comes with the briefing" 'kb "$W" | grep -q "^- Livros"'
+rm -f "$CLAUDE_PLUGIN_DATA/kb-offered"
 printf '%s\n' 'print("", end="")' > "$K/server.py"
 check "knowledge bases: nothing new, nothing said" '[ -z "$(kb "$K/anywhere")" ]'
-rm -rf "$K" "$CLAUDE_PLUGIN_DATA/knowledge-mcp"
+rm -rf "$K" "$CLAUDE_PLUGIN_DATA/knowledge-mcp" "$CLAUDE_PLUGIN_DATA/kb-offered"
 
 
 # project folders (no central of any kind): the folder the owner creates is the project. project.sh init makes it

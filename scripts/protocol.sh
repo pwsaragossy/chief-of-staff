@@ -87,15 +87,15 @@ case $(jget hook_event_name) in
     # The text goes out first, before any slow step, and is marked as seen only once it is out
     if [ -f "$st.full" ] || [ ! -f "$st.seen" ]; then
       pt=$( echo "Chief-of-staff protocol for this request (checked by hooks at the end of the turn):"
-      echo "- A deliverable for other people, a decision that crosses areas, or research goes through the specialists skill: at least one specialist and the independent reviewer, as subagents, each briefed with the line 'Role card: <role>' naming its card in $root/specialists/ (the subagent reads the card itself),$([ -z "$lite" ] && printf " a 'Library:' line and") an 'Ambition: <goal behind the goal> | judge: <outside judge>' line. A new request from the owner goes through the ambition skill first."
+      echo "- A deliverable for other people, a decision that crosses areas, or research goes through the specialists skill: at least one specialist and the independent reviewer, as subagents, each briefed with the line 'Role card: <role>' naming its card in $root/specialists/ (the subagent reads the card itself),$([ -z "$lite" ] && printf " a 'Library:' line,") an 'Owner said:' line with the owner's constraints and corrections word for word, and an 'Ambition: <goal behind the goal> | judge: <outside judge>' line. A new request from the owner goes through the ambition skill first."
       cos_fast "$root" && echo "- Hackathon pace (pace: fast): internal work (plans, code, cards, research for the team) needs one specialist subagent, no reviewer. The independent reviewer runs only on what goes outside: the submission, the video, the README, messages to judges, partners or users. Independent work goes to parallel sessions, not one long turn."
       [ -z "$lite" ] && echo "- Research starts in the library: sh \"$L\" search <terms> (workspace: $root). Web search only for what the library lacks. Every new finding, decision, how-to or option becomes a note: sh \"$L\" new <finding|decision|howto|option|topic> <origin> <title>, then fill it. Hooks check every note."
       echo "- Facts that change (what runs in production, balances, public links, deploy state) are measured again before they are repeated, never copied from STATE.md or a card." )
       # one write: a reader that stops at the first line (grep -q) cannot cut the text before it is marked seen
       printf '%s\n' "$pt" && { rm -f "$st.full"; : > "$st.seen"; }
-    else
-      echo "Chief-of-staff protocol as stated at the start of this session (checked at the end of the turn): specialists and the reviewer for deliverables, research and cross-area decisions$([ -z "$lite" ] && printf '; the library first (sh "%s" search <terms>); each finding becomes a note' "$L").$(cos_fast "$root" && printf ' Hackathon pace: one specialist for internal work; the reviewer runs only on what goes outside.')"
     fi
+    # Every other prompt gets nothing: a one-line reminder on all of them (485 prompts, 82% with no specialist due)
+    # pushed specialists onto trivial questions. The full text stays in context and the Stop gate still checks
     [ -n "$lite" ] && exit 0
     # first use: trust the settings as they are
     [ -f "$(cos_cfgrec "$root")" ] || cos_cfgsave "$root"
@@ -162,7 +162,12 @@ $p"; fi ;;
               # project's own TRACK.md / DELIVERY.md, its settings and Claude's memory (an owner preference) are not deliverables
               case $in in *"\"file_path\":\"$fp\""*|*"\"file_path\": \"$fp\""*)
                 case $fp in "$root/TRACK.md"|"$root/DELIVERY.md"|*/CLAUDE.md|*/.claude/*|"$root/specialists/"*|"$root/ROUTING.md") ctl=1 ;; esac ;; esac
-              [ -n "$ctl" ] || mark deliverable ;; esac ;;
+              # An Edit of a file this session already put through specialists and the reviewer is a revision the
+              # owner asked for ("Sim, ajusta"), not a new deliverable: half the turn-end pushes in real use were such
+              # follow-ups. A Write (a new file or a full rewrite) and DECISIONS.md (guarded decisions) always count
+              [ -n "$ctl" ] || { printf '%s\n' "$fp" >> "$st/files"
+                case "$tool:$fp" in Edit:*/DECISIONS.md|MultiEdit:*/DECISIONS.md|Write:*) mark deliverable ;;
+                  *) grep -qxF -- "$fp" "$st.reviewed" 2>/dev/null || mark deliverable ;; esac; } ;; esac ;;
         esac ;; esac ;;
     esac
     case $in in *library.sh*search*|*"$lib/"*|*"$root/knowledge"*) [ "$tool" = Write ] || [ "$tool" = Edit ] || mark library ;; esac
@@ -180,6 +185,9 @@ $p"; fi ;;
       Agent)
         role=$(roleof)
         [ "$role" = utility ] && exit 0
+        # a built-in read-only helper (search, a web page, Claude Code docs) is a utility by its type: its launch was
+        # blocked for a missing role card, a wasted round each time. It earns no specialist credit either way
+        [ -z "$role" ] && case $(jget subagent_type) in Explore|web-fetch|claude-code-guide) exit 0 ;; esac
         if [ -n "$role" ] && [ -f "$SPEC/$role.md" ]; then
           [ -n "$lite" ] || case $in in *"Library:"*) ;; *)
             echo "Blocked by chief-of-staff: the brief must carry what the library already knows. Add a line 'Library: [[id]] [[id]] ...' with the notes from library.sh search, or 'Library: none found for <terms>'." >&2
@@ -438,8 +446,10 @@ WS
     agents=$(count agent); specialists=$(count specialist); reviewers=$(count reviewer)
     reason=
     if cos_fast "$root"; then
+      [ $((specialists + reviewers)) -ge 1 ] && [ -f "$st/files" ] && cat "$st/files" >> "$st.reviewed"
       [ "$substantive" = 1 ] && [ $((specialists + reviewers)) -lt 1 ] && reason="This turn produced a deliverable, research or a long answer with no specialist. Before finishing, run one senior specialist as a subagent, briefed with its role card from $root/specialists/ (and the independent reviewer too if this goes outside: submission, video, README, a message to judges or partners), then revise the answer with what it found."
     else
+      [ "$specialists" -ge 1 ] && [ "$reviewers" -ge 1 ] && [ -f "$st/files" ] && cat "$st/files" >> "$st.reviewed"
       [ "$substantive" = 1 ] && { [ "$specialists" -lt 1 ] || [ "$reviewers" -lt 1 ]; } && reason="This turn produced a deliverable, research or a long answer with $specialists specialist(s) and $reviewers reviewer(s). Before finishing, run the specialists skill: at least one senior specialist and the independent reviewer as subagents, each briefed with its role card from $root/specialists/, then revise the answer with what they found."
     fi
     [ -f "$st/web" ] && [ ! -f "$st/saved" ] && [ $lst = 0 ] && reason="${reason:+$reason }This turn searched the web but saved nothing to the library. Save each new finding as a note in $lib/notes/ (sh \"$L\" new ...) before finishing."
