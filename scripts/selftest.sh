@@ -163,6 +163,11 @@ h "$(ev UserPromptSubmit)" "$P" >/dev/null
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/letter.md\"}")" "$P"
 check "a Write over a reviewed file is still a deliverable" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
 rm -f "$CLAUDE_PLUGIN_DATA/turns/s1.reviewed"
+# a .md inside a code repository (git plus a build or test manifest) is code or its docs; its README, and any .md
+# outside such a repository, still count
+CR="$T/coderepo"; mkdir -p "$CR/.git" "$CR/skills/x" "$T/plainrepo/.git"; : > "$CR/package.json"
+cm() { h "$(ev UserPromptSubmit)" "$P" >/dev/null; h "$(ev PostToolUse ",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$1\"}")" "$P"; rc "$(ev Stop ",\"stop_hook_active\":false")" "$P"; }
+check "a .md inside a code repository is not a deliverable; its README and a .md in a plain repository are" '[ "$(cm "$CR/skills/x/SKILL.md")" = 0 ] && [ "$(cm "$CR/README.md")" = 2 ] && [ "$(cm "$T/plainrepo/carta.md")" = 2 ] && [ "$(cm "$CR/deck.html")" = 2 ]'
 # a specialist and reviewer run in the background: their report comes back as a new prompt (a hand-back), and the
 # turn that applies it is credited with them, even when the owner wrote in between; the owner's own prompt is not,
 # nor is a hand-back after foreground work only, nor a notice from another plugin

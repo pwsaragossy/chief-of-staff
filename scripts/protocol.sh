@@ -60,6 +60,16 @@ roleof() { _r=$(printf '%s' "$in" | grep -o 'Role card: */[^"\\]*/specialists/[a
   else _r=$(printf '%s' "$in" | grep -o 'Role card: *[^ "\\]*' | head -n 1 | sed 's/^Role card: *//'); case $_r in */*) _r= ;; esac; fi
   printf '%s' "$_r" | sed 's/[^a-z-].*//'; }
 
+# codemd FILE: the file sits in a git repository whose top holds a build or test manifest (no fork: a walk up the path)
+codemd() { _d=${1%/*}
+  while [ -n "$_d" ]; do
+    if [ -e "$_d/.git" ]; then
+      for _m in package.json Cargo.toml pyproject.toml go.mod Package.swift project.yml Makefile tests test __tests__ spec .claude-plugin; do
+        [ -e "$_d/$_m" ] && return 0; done
+      return 1; fi
+    _d=${_d%/*}; done
+  return 1; }
+
 sid=$(jget session_id | tr -cd 'A-Za-z0-9_-')
 [ -n "$sid" ] || exit 0
 st="$DATA/turns/$sid"   # per user, never shared /tmp
@@ -161,7 +171,12 @@ $p"; fi ;;
               # jget stops at , } or a quote: trust fp only if the raw input closes the string right after it. The
               # project's own TRACK.md / DELIVERY.md, its settings and Claude's memory (an owner preference) are not deliverables
               case $in in *"\"file_path\":\"$fp\""*|*"\"file_path\": \"$fp\""*)
-                case $fp in "$root/TRACK.md"|"$root/DELIVERY.md"|*/CLAUDE.md|*/.claude/*|"$root/specialists/"*|"$root/ROUTING.md") ctl=1 ;; esac ;; esac
+                case $fp in "$root/TRACK.md"|"$root/DELIVERY.md"|*/CLAUDE.md|*/.claude/*|"$root/specialists/"*|"$root/ROUTING.md") ctl=1 ;;
+                  # a .md inside a code repository (git, plus a build or test manifest at its top) is code or its docs,
+                  # covered by its own tests: a skill, a template, docs/. Its README goes public and DECISIONS.md holds
+                  # guarded decisions, so both still count; a letter or a deck outside a code repository always counts
+                  */[Rr][Ee][Aa][Dd][Mm][Ee].md|*/DECISIONS.md) ;;
+                  *.md) codemd "$fp" && ctl=1 ;; esac ;; esac
               # An Edit of a file this session already put through specialists and the reviewer is a revision the
               # owner asked for ("Sim, ajusta"), not a new deliverable: half the turn-end pushes in real use were such
               # follow-ups. A Write (a new file or a full rewrite) and DECISIONS.md (guarded decisions) always count

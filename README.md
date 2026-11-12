@@ -220,7 +220,8 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
   (`Role card: <project>/specialists/<role>.md`, which the subagent reads itself, or `Role card:
   utility` for a helper; an Explore, web-fetch or claude-code-guide subagent is a helper by its type); a
   turn that only edits a file this session already put through specialists and the reviewer is not a new deliverable
-  (a Write, or an edit of DECISIONS.md, still is); a specialist cannot finish without its never-skip checklist and its
+  (a Write, or an edit of DECISIONS.md, still is); a .md inside a code repository (git plus a build or test
+  manifest at its top: a skill, a template, docs/) is code, not a deliverable, except its README and DECISIONS.md; a specialist cannot finish without its never-skip checklist and its
   `## Versions` with the judge's evidence, and its brief needs a `Library:` line; web search waits for a library search
   (`scripts/library.sh search`); a note is checked on save and at the end of the turn (links,
   `Compared:`, retirements, notes written by shell commands too); agents cannot edit the project's
