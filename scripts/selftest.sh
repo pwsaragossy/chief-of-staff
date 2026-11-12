@@ -220,7 +220,7 @@ for f in sub/DELIVERY.md NOTTRACK.md sub/DECISIONS.md DECISIONS.md; do
   check "$f is a real deliverable, not a control file" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
 done
 # DECISIONS.md is a deliverable: a text-only rule could not tell an append from a split, a move or a deletion of a guard: line
-dl='- 2026-10-30 10:00 | Price at 19 | owner | replaces: -'; d0='- 2026-10-26 09:20 | Demo on mainnet, guard: testnet | pedro | replaces: -'
+dl='- 2026-10-30 10:00 | Price at 19 | owner | replaces: -'; d0='- 2026-10-26 09:20 | Demo on mainnet, guard: testnet | user1 | replaces: -'
 dw() { h "$(ev UserPromptSubmit)" "$P" >/dev/null; h "$(ev PostToolUse ",\"tool_name\":\"$1\",\"tool_input\":{\"file_path\":\"$P/DECISIONS.md\"$2}")" "$P" >/dev/null; rc "$(ev Stop ",\"stop_hook_active\":false")" "$P"; }
 check "a memo, a revoke or a replacement written into DECISIONS.md is still a deliverable" '[ "$(dw Write ",\"content\":\"# Investor memo\\nfive pages\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"$d0\",\"new_string\":\"$d0\\n- 2026-10-30 10:00 | revoked: no longer needed | agent | replaces: 2026-10-26 09:20\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"$d0\",\"new_string\":\"$d0\\n- 2026-10-30 10:00 | Demo on testnet | agent | replaces: 2026-10-26 09:20\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"a\",\"new_string\":\"a\\\\\\\" x\"")" = 2 ] && [ "$(dw Edit ",\"old_string\":\"$d0\\n$dl\",\"new_string\":\"$dl\"")" = 2 ] && [ "$(dw Write ",\"content\":\"$dl\"")" = 2 ]'
 check "every turn is logged for the adherence metric" 'grep -q "substantive=1 agents=2 specialists=1 reviewers=1 library=1 web=1 saved=1" "$W/.protocol.log"'
@@ -645,8 +645,8 @@ fm_set "$G/TRACK.md" deadline ""; fm_set "$G/TRACK.md" deputy ""
 awk 'BEGIN { print "---\nstatus: in-progress\nproject: gamma\n---\n# Gamma"; for (i = 0; i < 70; i++) print "- done task " i }' > "$G/board/Gamma.md"
 check "a card over 60 lines is flagged, with where the rest goes" 'H gamma | grep -q "^yellow: card too long to read (7[0-9] lines" && b "$G" | grep -q "Cards too long to read whole.*board/archive/"'
 rm "$G/board/Gamma.md"
-printf -- '# Decisions\n- 2026-10-25 14:00 | Demo on testnet only | pedro | replaces: -\n- 2026-10-25 15:00 | Logo stays blue | leo | replaces: -\n- 2026-10-26 09:20 | Demo on mainnet now, guard: testnet | pedro | replaces: 2026-10-25 14:00\n- 2026-10-26 10:00 | revoked: the brand is open again | leo | replaces: 2026-10-25 15:00\n' > "$G/DECISIONS.md"
-check "the project briefing shows only the decisions in force" 'o=$(b "$G"); printf "%s" "$o" | grep -q "^- 2026-10-26 09:20: Demo on mainnet now, guard: testnet (pedro)" && ! printf "%s" "$o" | grep -q "testnet only" && ! printf "%s" "$o" | grep -q "Logo stays blue"'
+printf -- '# Decisions\n- 2026-10-25 14:00 | Demo on testnet only | user1 | replaces: -\n- 2026-10-25 15:00 | Logo stays blue | user2 | replaces: -\n- 2026-10-26 09:20 | Demo on mainnet now, guard: testnet | user1 | replaces: 2026-10-25 14:00\n- 2026-10-26 10:00 | revoked: the brand is open again | user2 | replaces: 2026-10-25 15:00\n' > "$G/DECISIONS.md"
+check "the project briefing shows only the decisions in force" 'o=$(b "$G"); printf "%s" "$o" | grep -q "^- 2026-10-26 09:20: Demo on mainnet now, guard: testnet (user1)" && ! printf "%s" "$o" | grep -q "testnet only" && ! printf "%s" "$o" | grep -q "Logo stays blue"'
 GR="$W/guardrepo"; git init -q --bare "$GR.git"; git clone -q "$GR.git" "$GR" 2>/dev/null; git -C "$GR" config user.email t@t; git -C "$GR" config user.name t
 echo a > "$GR/f"; git -C "$GR" add f; git -C "$GR" commit -qm a; git -C "$GR" push -q origin HEAD 2>/dev/null; git -C "$GR" branch -q -u origin/HEAD 2>/dev/null || git -C "$GR" branch -q -u "origin/$(git -C "$GR" rev-parse --abbrev-ref HEAD)"
 echo "network: testnet" > "$GR/f"; git -C "$GR" commit -qam b
@@ -802,24 +802,24 @@ assert n[\"a\"][\"confidence\"] == \"low\" and n[\"a\"][\"updated\"] == \"2026-0
 assert n[\"a\"][\"issues\"] == [\"updated: must be a date\"] and n[\"b\"][\"issues\"] == [] and n[\"b\"][\"confidence\"] == \"\" and L[\"edges\"] == [[\"a\", \"b\"]], L
 assert panel.MAX_NODES == 500" "$here"'
 check "panel shows the last 5 decisions in force, newest first, and the outside checks" 'python3 -c "import sys, os, tempfile, time; sys.path.insert(0, sys.argv[1]); import panel
-d = tempfile.mkdtemp(); open(os.path.join(d, \"DECISIONS.md\"), \"w\").write(\"\".join(\"- 2026-10-2%d 10:00 | d%d | Leo | replaces: -\\n\" % (i, i) for i in range(7)) + \"- 2026-10-27 10:00 | revoked: no | Leo | replaces: 2026-10-26 10:00\\n- 2026-10-27 11:00 | d0 again | Ana | replaces: 2026-10-20 10:00\\n\")
+d = tempfile.mkdtemp(); open(os.path.join(d, \"DECISIONS.md\"), \"w\").write(\"\".join(\"- 2026-10-2%d 10:00 | d%d | user2 | replaces: -\\n\" % (i, i) for i in range(7)) + \"- 2026-10-27 10:00 | revoked: no | user2 | replaces: 2026-10-26 10:00\\n- 2026-10-27 11:00 | d0 again | Ana | replaces: 2026-10-20 10:00\\n\")
 g = panel.decisions(d); assert [x[\"what\"] for x in g] == [\"d0 again\", \"d5\", \"d4\", \"d3\", \"d2\"], g
 o = panel.outside(\"public https://a.example/x 200 ok\\x1eprod https://a.example/v abc1234 other\\x1ejunk\")
 assert o == [{\"kind\": \"public\", \"url\": \"https://a.example/x\", \"code\": \"200\", \"state\": \"ok\"}, {\"kind\": \"prod\", \"url\": \"https://a.example/v\", \"commit\": \"abc1234\", \"state\": \"other\"}], o" "$here"'
 check "panel lists ## Tasks lines by person, from open cards only" '( d=$(cd "$(mktemp -d)" && pwd -P)/p; mkdir -p "$d"; sh "$here/project.sh" init "$d" >/dev/null
-printf -- "---\nstatus: in-progress\nproject: p\n---\n## Tasks\n- (template line)\n- Leo, now: deploy by 13:00\n- Vhendala: video cut\n- check the page\n## For the owner to decide\n- Pedro: title A or B?\n" > "$d/board/a.md"
-printf -- "---\nstatus: done\nproject: p\n---\n## Tasks\n- Leo: old task\n" > "$d/board/b.md"
-python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; g = {x[\"who\"]: [i[\"task\"] for i in x[\"items\"]] for x in panel.tasks(sys.argv[2])}; assert g == {\"Leo\": [\"deploy by 13:00\"], \"Vhendala\": [\"video cut\"], \"Unassigned\": [\"check the page\"]}, g" "$here" "$d"; r=$?; rm -rf "$d"; exit $r )'
+printf -- "---\nstatus: in-progress\nproject: p\n---\n## Tasks\n- (template line)\n- user2, now: deploy by 13:00\n- user3: video cut\n- check the page\n## For the owner to decide\n- user1: title A or B?\n" > "$d/board/a.md"
+printf -- "---\nstatus: done\nproject: p\n---\n## Tasks\n- user2: old task\n" > "$d/board/b.md"
+python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel; g = {x[\"who\"]: [i[\"task\"] for i in x[\"items\"]] for x in panel.tasks(sys.argv[2])}; assert g == {\"user2\": [\"deploy by 13:00\"], \"user3\": [\"video cut\"], \"Unassigned\": [\"check the page\"]}, g" "$here" "$d"; r=$?; rm -rf "$d"; exit $r )'
 check "panel lists a project.s files with last author, age and versions" '( d=$(cd "$(mktemp -d)" && pwd -P); g() { git -C "$d" -c user.email=t@t "$@" >/dev/null 2>&1; }; g init -q
 mkdir -p "$d/src"; printf "kind: project\n" > "$d/.chief-of-staff"; printf s > "$d/STATE.md"; printf v1 > "$d/deck.pdf"; printf x > "$d/src/a.js"; printf "<b>x</b>" > "$d/<b>.md"
-g -c user.name=Ana add -A; g -c user.name=Ana commit -m one; printf v2 > "$d/deck.pdf"; g -c user.name=Leo add -A; g -c user.name=Leo commit -m two
+g -c user.name=Ana add -A; g -c user.name=Ana commit -m one; printf v2 > "$d/deck.pdf"; g -c user.name=user2 add -A; g -c user.name=user2 commit -m two
 g checkout -q -b evil; printf v9 > "$d/src/a.js"; g -c user.name=EVIL add -A; g -c user.name=EVIL commit -m evil; g checkout -q -; printf x > "$d/src/a.js"
 printf q > "$d/q\"uote.md"; g -c user.name=Ana add -A; g -c user.name=Ana commit -m quote; printf new > "$d/notes.md"
 python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import panel
 f = {x[\"path\"]: x for x in panel.files(sys.argv[2], sys.argv[2])}
 assert set(f) == {\"deck.pdf\", \"src/a.js\", \"<b>.md\", \"notes.md\", \"q\\\"uote.md\"}, f
 assert f[\"src/a.js\"][\"who\"] == \"Ana\" and f[\"q\\\"uote.md\"][\"versions\"] == 1, f
-assert f[\"deck.pdf\"][\"who\"] == \"Leo\" and f[\"deck.pdf\"][\"versions\"] == 2 and f[\"deck.pdf\"][\"age\"] >= 0, f[\"deck.pdf\"]
+assert f[\"deck.pdf\"][\"who\"] == \"user2\" and f[\"deck.pdf\"][\"versions\"] == 2 and f[\"deck.pdf\"][\"age\"] >= 0, f[\"deck.pdf\"]
 assert f[\"src/a.js\"][\"versions\"] == 1 and f[\"notes.md\"][\"versions\"] == 0 and f[\"notes.md\"][\"who\"] == \"\", f
 assert \"innerHTML\" not in panel.PAGE" "$here" "$d"; r=$?; rm -rf "$d"; exit $r )\'
 check "the ambition loop raises the goal and the judge, never the amount of code" 'grep -q "never the amount of code" "$here/../skills/ambition/SKILL.md" && grep -q "smallest that passes the judge" "$here/../skills/ambition/SKILL.md"'
@@ -1051,7 +1051,7 @@ check "pf: registering a folder or setting the library through Bash asks the own
 sed -i.bak 's/^- \[ \] review-1 /- [x] review-1 /; s/| needs: scope | evidence:$/| needs: scope | evidence: nope.md/' "$PB/TRACK.md"
 check "pf: the turn end checks the project's own TRACK.md" 'hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$PB" >/dev/null; hk "$(ev Stop ",\"stop_hook_active\":false")" "$PB" 2>&1 | grep -q "Track gate"'
 check "pf: TRACK.md and DELIVERY.md of the project are control files, not deliverables" 'hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$PB" >/dev/null; hk "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$PB/DELIVERY.md\"}")" "$PB" >/dev/null 2>&1; [ ! -f "$CLAUDE_PLUGIN_DATA/turns/s1/deliverable" ]'
-check "pf: the briefing at the root is the coordinator's: state, decisions, cards waiting on the owner" 'printf -- "---\nstatus: waiting-owner\n---\n# Q\n\n## For the owner to decide\n- Ship it? Recommended: yes\n" > "$PA/board/Q.md"; printf -- "- 2026-11-08 10:00 | Name is Alpha | Pedro | replaces: -\n" >> "$PA/DECISIONS.md"; o=$(b "$PA"); printf "%s" "$o" | grep -q "coordinator" && printf "%s" "$o" | grep -q "Next action recorded" && printf "%s" "$o" | grep -q "Name is Alpha" && printf "%s" "$o" | grep -q "Ship it? Recommended: yes"'
+check "pf: the briefing at the root is the coordinator's: state, decisions, cards waiting on the owner" 'printf -- "---\nstatus: waiting-owner\n---\n# Q\n\n## For the owner to decide\n- Ship it? Recommended: yes\n" > "$PA/board/Q.md"; printf -- "- 2026-11-08 10:00 | Name is Alpha | user1 | replaces: -\n" >> "$PA/DECISIONS.md"; o=$(b "$PA"); printf "%s" "$o" | grep -q "coordinator" && printf "%s" "$o" | grep -q "Next action recorded" && printf "%s" "$o" | grep -q "Name is Alpha" && printf "%s" "$o" | grep -q "Ship it? Recommended: yes"'
 check "pf: a session in a subfolder is told it does not ask the owner" 'b "$PB/src" | grep -q "does not ask the owner"'
 check "pf: the role cards are the plugin's when the project has none" 'hk "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher\\nLibrary: none found for x\\nAmbition: the goal behind the goal here | judge: an outside measure\"}")" "$PB" >/dev/null 2>&1; [ $? = 0 ]'
 # health, panel and overview: one project folder, or every registered one (the global panel), no central anywhere

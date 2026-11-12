@@ -4,12 +4,12 @@ import { briefGaps, COORDINATOR, decisions, fm, ownerCommand, panelAsk, THREAD_R
 
 const FILES: Record<string, string> = {
   '/ws/projects/dock/STATE.md': '---\nstatus: in-progress\nupdated: 2026-11-04\nnext: spike the panel\n---\n# Dock',
-  '/ws/projects/dock/DECISIONS.md': '- 2026-11-04 01:15 | Waitlist only | Pedro | -\n- 2026-11-04 01:16 | old | Pedro | -\n- 2026-11-04 01:17 | new one | Pedro | replaces: 2026-11-04 01:16\n',
+  '/ws/projects/dock/DECISIONS.md': '- 2026-11-04 01:15 | Waitlist only | user1 | -\n- 2026-11-04 01:16 | old | user1 | -\n- 2026-11-04 01:17 | new one | user1 | replaces: 2026-11-04 01:16\n',
 }
 
 test('front matter and decisions read like lib.sh', () => {
   expect(fm(FILES['/ws/projects/dock/STATE.md']!, 'next')).toBe('spike the panel')
-  expect(decisions(FILES['/ws/projects/dock/DECISIONS.md']!)).toEqual(['Waitlist only (Pedro)', 'new one (Pedro)'])
+  expect(decisions(FILES['/ws/projects/dock/DECISIONS.md']!)).toEqual(['Waitlist only (user1)', 'new one (user1)'])
 })
 
 const THREADS = {
@@ -130,7 +130,7 @@ function folder(on: any, opts: { thread?: boolean; appDown?: boolean; storeRoot?
   const files = (): Record<string, string> => ({
     ...(marker ? { '/p/Alpha/.chief-of-staff': 'chief-of-staff project v0.1\nkind: project\n' } : {}),
     '/p/Alpha/STATE.md': '---\nstatus: in-progress\nupdated: 2026-11-08\nnext: first slice\n---\n',
-    '/p/Alpha/DECISIONS.md': '- 2026-11-08 10:00 | Name is Alpha | Pedro | replaces: -\n',
+    '/p/Alpha/DECISIONS.md': '- 2026-11-08 10:00 | Name is Alpha | user1 | replaces: -\n',
     '/p/Alpha/board/Q.md': '---\nstatus: waiting-owner\n---\n# Q\n\n## For the owner to decide\n- Ship it? Recommended: yes\n',
   })
   let rootv = opts.storeRoot ?? ''
