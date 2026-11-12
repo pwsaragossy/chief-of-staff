@@ -36,8 +36,8 @@ done | LC_ALL=C awk -F '\t' -v rows="$rows" -v now="$now" -v today="$today" -v s
     s = tolower(field("status")); p = field("projeto"); if (p == "") p = field("project"); if (p == "") p = "-"
     d = field("prazo"); if (d == "") d = field("due"); d = substr(d, 1, 10)
     if (s ~ /^(encerrado|fechado|done|delivered|closed|arquivado)$/) next
-    if (rows) { gsub(/\t/, " ", title); print (s ~ /^(aguardando-pedro|waiting-owner)$/ ? "w" : s ~ /^(parado|paused|blocked|esperando|waiting)$/ ? "s" : "m") "\t" title "\t" p "\t" d "\t" $1; next }
-    if (s ~ /^(aguardando-pedro|waiting-owner)$/) add("w", title " (" p ")")
+    if (rows) { gsub(/\t/, " ", title); print (s ~ /^waiting-owner$/ ? "w" : s ~ /^(parado|paused|blocked|esperando|waiting)$/ ? "s" : "m") "\t" title "\t" p "\t" d "\t" $1; next }
+    if (s ~ /^waiting-owner$/) add("w", title " (" p ")")
     else if (s ~ /^(parado|paused|blocked|esperando|waiting)$/) stopped[p]++
     else add("m", title " (" p ", " s ")")
     if (d ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/ && d <= soon) add("d", d (d < today ? " LATE " : " ") title)

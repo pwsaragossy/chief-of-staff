@@ -991,7 +991,7 @@ rm -rf "$O" "$O2" "$CLAUDE_PLUGIN_DATA/everywhere"
 
 # overview: the whole picture as chat text, from board folders in English or Portuguese
 OB="$W.boards"; mkdir -p "$OB/a" "$OB/b"
-printf -- '---\nstatus: aguardando-pedro\nprojeto: x\nprazo: 2000-01-01\n---\n\n# Sign the lease\n' > "$OB/a/1.md"
+printf -- '---\nstatus: waiting-owner\nprojeto: x\nprazo: 2000-01-01\n---\n\n# Sign the lease\n' > "$OB/a/1.md"
 printf -- '---\nstatus: in-progress\nproject: y\n---\n\n# Ship the app\n' > "$OB/b/2.md"
 printf -- '---\nstatus: parado\nprojeto: y\n---\n\n# Old idea\n' > "$OB/b/3.md"
 printf -- '---\nstatus: encerrado\nprojeto: y\n---\n\n# Done thing\n' > "$OB/b/4.md"
@@ -1076,7 +1076,7 @@ assert \"No projects yet. Run /chief-of-staff:new-project in a folder.\" in pane
 " "$here"'
 fi
 # board folders the global panel also reads (an existing system's own boards, such as a second brain): project.sh board
-mkdir -p "$PF/brain/board"; printf -- '---\nstatus: aguardando-pedro\nprojeto: z\n---\n\n# Pay the tax\n' > "$PF/brain/board/t.md"
+mkdir -p "$PF/brain/board"; printf -- '---\nstatus: waiting-owner\nprojeto: z\n---\n\n# Pay the tax\n' > "$PF/brain/board/t.md"
 check "pf: project.sh board records a board folder once; overview --all reads it with the projects" 'PJ board "$PF/brain/board" >/dev/null && PJ board "$PF/brain/board" >/dev/null && [ "$(PJ boards)" = "$(printf "ok\t%s" "$(cd "$PF/brain/board" && pwd -P)")" ] && o=$(sh "$here/overview.sh" --all) && printf "%s\n" "$o" | grep -qx "\- Pay the tax (z)" && printf "%s\n" "$o" | grep -q "Q (-)"'
 check "pf: project.sh board refuses a relative path or a missing folder" '! PJ board brain/board 2>/dev/null && ! PJ board "$PF/nope" 2>/dev/null'
 if command -v python3 >/dev/null; then
