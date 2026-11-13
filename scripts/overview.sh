@@ -4,7 +4,8 @@
 # Reads the cards' front matter in English or Portuguese (status/project/due/updated or status/projeto/prazo/
 # atualizado). Read-only. Usage: sh overview.sh <board folder>...   or   sh overview.sh --all (every registered project
 # and every recorded board folder, project.sh board). --rows <board folder>... prints one line per open card instead,
-# class<TAB>title<TAB>project<TAB>due<TAB>mtime (class w waiting, m moving, s stopped), which the web panel reads.
+# class<TAB>title<TAB>project<TAB>due<TAB>mtime<TAB>folder (class w waiting, m moving, s stopped; folder from pasta:/folder:),
+# which the web panel reads.
 rows=0; [ "${1:-}" = --rows ] && { rows=1; shift; }
 if [ "${1:-}" = --all ]; then
   # every registered project folder and recorded board folder that still exists, one per line like the lists
@@ -36,7 +37,8 @@ done | LC_ALL=C awk -F '\t' -v rows="$rows" -v now="$now" -v today="$today" -v s
     s = tolower(field("status")); p = field("projeto"); if (p == "") p = field("project"); if (p == "") p = "-"
     d = field("prazo"); if (d == "") d = field("due"); d = substr(d, 1, 10)
     if (s ~ /^(encerrado|fechado|done|delivered|closed|arquivado)$/) next
-    if (rows) { gsub(/\t/, " ", title); print (s ~ /^waiting-owner$/ ? "w" : s ~ /^(parado|paused|blocked|esperando|waiting)$/ ? "s" : "m") "\t" title "\t" p "\t" d "\t" $1; next }
+    if (rows) { gsub(/\t/, " ", title); w = field("pasta"); if (w == "") w = field("folder"); gsub(/^"|"$/, "", w)
+      print (s ~ /^waiting-owner$/ ? "w" : s ~ /^(parado|paused|blocked|esperando|waiting)$/ ? "s" : "m") "\t" title "\t" p "\t" d "\t" $1 "\t" w; next }
     if (s ~ /^waiting-owner$/) add("w", title " (" p ")")
     else if (s ~ /^(parado|paused|blocked|esperando|waiting)$/) stopped[p]++
     else add("m", title " (" p ", " s ")")

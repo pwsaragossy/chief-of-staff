@@ -1112,16 +1112,18 @@ assert \"No projects yet. Run /chief-of-staff:new-project in a folder.\" in pane
 " "$here"'
 fi
 # board folders the global panel also reads (an existing system's own boards, such as a second brain): project.sh board
-mkdir -p "$PF/brain/board"; printf -- '---\nstatus: waiting-owner\nprojeto: z\n---\n\n# Pay the tax\n' > "$PF/brain/board/t.md"
+mkdir -p "$PF/brain/board"; printf -- '---\nstatus: waiting-owner\nprojeto: z\npasta: \"~/w/z\"\n---\n\n# Pay the tax\n' > "$PF/brain/board/t.md"; printf -- '---\nstatus: parado\n---\n\n# Old idea\n' > "$PF/brain/board/u.md"
 check "pf: project.sh board records a board folder once; overview --all reads it with the projects" 'PJ board "$PF/brain/board" >/dev/null && PJ board "$PF/brain/board" >/dev/null && [ "$(PJ boards)" = "$(printf "ok\t%s" "$(cd "$PF/brain/board" && pwd -P)")" ] && o=$(sh "$here/overview.sh" --all) && printf "%s\n" "$o" | grep -qx "\- Pay the tax (z)" && printf "%s\n" "$o" | grep -q "Q (-)"'
 check "pf: project.sh board refuses a relative path or a missing folder" '! PJ board brain/board 2>/dev/null && ! PJ board "$PF/nope" 2>/dev/null'
 if command -v python3 >/dev/null; then
-  check "pf: the global panel shows each board as a row with its waiting cards; a board that is gone is grey" 'python3 -c "
+  check "pf: the global panel shows one row per project of a board (projeto:, else the board) with its folder and waiting cards; a board that is gone is grey" 'python3 -c "
 import sys; sys.path.insert(0, sys.argv[1]); import panel
 s = panel.snapshot(panel.registered(), boards=panel.boards() + [sys.argv[2] + \"/lost/board\", sys.argv[2] + \"/beta/board\"])
 assert [p[\"slug\"] for p in s[\"projects\"]].count(\"beta\") == 1, s[\"projects\"]
-row = [p for p in s[\"projects\"] if p[\"slug\"] == \"brain\"]
-assert row and row[0][\"color\"] == \"yellow\" and row[0][\"reason\"].startswith(\"1 waiting\"), row
+row = [p for p in s[\"projects\"] if p[\"slug\"] == \"z\"]
+assert row and row[0][\"color\"] == \"yellow\" and row[0][\"reason\"] == \"waiting on you · brain\" and row[0][\"path\"] == \"~/w/z\" and row[0][\"cards\"] == \"Pay the tax\", row
+old = [p for p in s[\"projects\"] if p[\"slug\"] == \"brain\"]
+assert old and old[0][\"reason\"] == \"stopped · brain\" and old[0][\"path\"] == \"\" and old[0][\"pipeline\"][0][\"key\"][1] == \"brain\", old
 assert \"Pay the tax\" in [c[\"title\"] for c in s[\"cards\"]] and \"Q\" in [c[\"title\"] for c in s[\"cards\"]], s[\"cards\"]
 assert [p[\"color\"] for p in s[\"projects\"] if p[\"slug\"] == \"lost\"] == [\"gray\"], s[\"projects\"]
 " "$here" "$PF"'

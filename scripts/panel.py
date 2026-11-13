@@ -353,40 +353,44 @@ def set_phase(src, name, phase):
 
 
 def board_view(b):
-    """One recorded board folder as a panel row (its counts) and its cards waiting on the owner. The cards are
-    classed by overview.sh --rows, the same reading the chat overview prints, so the two never disagree."""
+    """One recorded board folder as panel rows, one per project (the cards' projeto:/project:, else the board's
+    name), and its cards waiting on the owner. The cards are classed by overview.sh --rows, the same reading the
+    chat overview prints, so the two never disagree."""
     b = b.rstrip("/")
     name = os.path.basename(os.path.dirname(b)) if os.path.basename(b) == "board" else os.path.basename(b)
-    row = {"slug": name or b, "path": b, "reasons": [], "items": [], "stage_names": [], "outside": [], "decisions": [], "files": [],
-           "progress": [], "total": "", "next": "", "member": "", "target": "", "deadline": None, "delivered": False}
+    blank = {"slug": name or b, "path": b, "reasons": [], "items": [], "stage_names": [], "outside": [], "decisions": [], "files": [],
+             "progress": [], "total": "", "next": "", "member": "", "target": "", "deadline": None, "delivered": False}
     if not os.path.isdir(b):
-        return dict(row, color="gray", reason="Folder not found"), []
+        return [dict(blank, color="gray", reason="Folder not found")], []
     soon, today, now = time.strftime("%Y-%m-%d", time.localtime(time.time() + 7 * 86400)), time.strftime("%Y-%m-%d"), time.time()
-    n, cards = {"w": 0, "m": 0, "s": 0, "d": 0}, []
     try:
         out = sh("overview.sh", "--rows", b, strict=True)
     except TimeoutError:   # an empty answer would look like a healthy board
-        return dict(row, color="gray", reason="Could not read the board in 20 s"), []
-    phase, names, waiting = read_pipeline(b), {}, set()
+        return [dict(blank, color="gray", reason="Could not read the board in 20 s")], []
+    phase, by, cards = read_pipeline(b), {}, []
     for line in rows(out):
-        f = (line.split("\t") + [""] * 5)[:5]
-        if f[2] not in ("", "-"):
-            names[f[2]] = 1
-            if f[0] == "w":
-                waiting.add(f[2])
-        n[f[0]] = n.get(f[0], 0) + 1
-        late = re.fullmatch(r"\d{4}-\d{2}-\d{2}", f[3]) and f[3] < today
-        n["d"] += bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", f[3]) and f[3] <= soon)
+        f = (line.split("\t") + [""] * 6)[:6]
+        proj = f[2] if f[2] not in ("", "-") else blank["slug"]
+        g = by.setdefault(proj, {"w": 0, "m": 0, "s": 0, "d": 0, "titles": [], "folder": ""})
+        g[f[0]] = g.get(f[0], 0) + 1
+        g["d"] += bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", f[3]) and f[3] <= soon)
+        g["titles"].append(f[1])
+        g["folder"] = g["folder"] or f[5]
         if f[0] == "w":
-            cards.append({"title": f[1] + (" · due " + f[3] + (" (late)" if late else "") if f[3] else ""), "project": f[2] if f[2] not in ("", "-") else name, "member": "", "color": "yellow",
+            late = re.fullmatch(r"\d{4}-\d{2}-\d{2}", f[3]) and f[3] < today
+            cards.append({"title": f[1] + (" · due " + f[3] + (" (late)" if late else "") if f[3] else ""), "project": proj, "member": "", "color": "yellow",
                           "waited": int((now - int(f[4])) / 60) if f[4].isdigit() else 0, "limit": "",
                           "questions": [], "deputy": "", "size": "", "ages": []})
-    row["pipeline"] = [{"name": x, "phase": phase.get(x, ""), "src": "board", "key": [b, x], "where": row["slug"],
-                        "color": "yellow" if x in waiting else "green"} for x in dict.fromkeys(list(phase) + list(names))]
-    reason = "%d waiting on you · %d due in 7 days · %d moving · %d stopped" % (n["w"], n["d"], n["m"], n["s"])
-    return dict(row, color="yellow" if n["w"] or n["d"] else "green", reason=reason), cards
-
-
+    out_rows = []
+    for x in dict.fromkeys(list(by) + list(phase)):   # a project kept only in PIPELINE.md still gets its kanban card
+        g = by.get(x, {"w": 0, "m": 0, "s": 0, "d": 0, "titles": [], "folder": ""})
+        color = "yellow" if g["w"] or g["d"] else "green" if g["m"] else "gray"
+        state = "waiting on you" if g["w"] else "moving" if g["m"] else "stopped" if g["s"] else "no open cards"
+        out_rows.append(dict(blank, slug=x, path=g["folder"], color=color, reason=state + " · " + name,
+                             cards=" · ".join(g["titles"][:3]) + (" +%d" % (len(g["titles"]) - 3) if len(g["titles"]) > 3 else ""),
+                             pipeline=[{"name": x, "phase": phase.get(x, ""), "src": "board", "key": [b, x], "where": name,
+                                        "color": "yellow" if g["w"] else "green"}]))
+    return out_rows or [dict(blank, color="green", reason="No open cards")], cards
 
 
 def root_projects(root):
@@ -453,7 +457,7 @@ def snapshot(roots, libname="personal", boards=()):
         if os.path.realpath(b) in read:
             continue
         p, c = board_view(b)
-        projects.append(p); cards += c
+        projects += p; cards += c
     root = here[0] if here else None   # the library, the log and the team state come from the first folder that exists
     libs = libraries(root) if root else []
     if libname not in [x["name"] for x in libs]:
@@ -870,6 +874,8 @@ function render(){
       body.append(el("div","",p.reason.length>140?p.reason.slice(0,140)+"…":p.reason));
       if(p.total){const b=el("div","bar"),i=el("i");i.style.width=(100*p.closed/p.total)+"%";b.append(i);body.append(b,el("div","muted",p.closed+" of "+p.total+" deliverables closed"))}
       if(p.next)body.append(el("div","muted","Next: "+p.next));
+      if(p.cards)body.append(el("div","muted","Cards: "+p.cards));
+      if(p.path)body.append(el("div","muted",p.path));
       return row}
     const rs=p.reasons||[];if(rs.length<2)body.append(el("div","",p.reason));if(p.path)body.append(el("div","muted",p.path));
     else{const li=r=>{const x=el("li");x.append(el("span","dot "+r.color),el("span","",r.text));return x},u=el("ul","why");  // every reason, worst first
