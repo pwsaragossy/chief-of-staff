@@ -592,7 +592,7 @@ select{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--line);
 <h2>Waits on you</h2><div id="cards" class="box"></div>
 <div id="kanban-wrap" hidden><h2>Pipeline</h2><div id="kanban" class="kanban"></div></div>
 <h2>Projects</h2><div id="projects" class="box"></div>
-<h2>Tasks</h2><div id="tasks" class="box"></div>
+<div id="tasks-wrap"><h2>Tasks</h2><div id="tasks" class="box"></div></div>
 <h2>Import knowledge</h2>
 <div id="drop" class="box">Drop files here or click to choose<input id="file" type="file" multiple hidden></div>
 <form id="linkform"><input id="link" type="text" placeholder="Link or text" aria-label="Link or text"><button>Save</button></form>
@@ -866,6 +866,11 @@ function render(){
   if(!d.projects.length)empty(P,"No projects yet. Run /chief-of-staff:new-project in a folder.");else P.replaceChildren(...d.projects.map(p=>{
     const row=el("div","row"),body=el("div","grow");row.append(el("span","dot "+p.color),body);
     body.append(el("div","name",p.slug+(p.member?" · "+p.member:"")));
+    if(d.overview){  // the global panel is the overview: one line each; a project's own panel has the detail
+      body.append(el("div","",p.reason.length>140?p.reason.slice(0,140)+"…":p.reason));
+      if(p.total){const b=el("div","bar"),i=el("i");i.style.width=(100*p.closed/p.total)+"%";b.append(i);body.append(b,el("div","muted",p.closed+" of "+p.total+" deliverables closed"))}
+      if(p.next)body.append(el("div","muted","Next: "+p.next));
+      return row}
     const rs=p.reasons||[];if(rs.length<2)body.append(el("div","",p.reason));if(p.path)body.append(el("div","muted",p.path));
     else{const li=r=>{const x=el("li");x.append(el("span","dot "+r.color),el("span","",r.text));return x},u=el("ul","why");  // every reason, worst first
       rs.slice(0,3).forEach(r=>u.append(li(r)));
@@ -903,6 +908,7 @@ function render(){
     if(c.deputy){const x=el("div","pill red");x.append(el("span","dot red"),"Past the limit with the deadline under 3 h: if the owner cannot answer now, "+c.deputy+" (deputy) decides");b.append(x)}
     if(c.size)b.append(el("div","muted","Card too long to read ("+c.size+"): move what is done to board/archive/"));
     row.append(el("span",c.color==="red"?"":"muted","Waiting "+ago(c.waited)+(c.color==="red"?", past "+c.limit+" min":"")));return row}));
+  document.getElementById("tasks-wrap").hidden=!!d.overview;  // a session's tasks belong to its project's own panel
   const K=document.getElementById("tasks");
   if(!(d.tasks||[]).length)empty(K,"No tasks");else K.replaceChildren(...d.tasks.map(g=>{
     const row=el("div","row"),b=el("div","grow");row.append(b);b.append(el("div","name",g.who));
@@ -1014,7 +1020,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.reply("text/html; charset=utf-8", PAGE.replace("<style>", '<style nonce="%s">' % n, 1).replace("<script>", '<script nonce="%s">' % n, 1).encode(), n)
         elif path == "/api":
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            self.reply("application/json", json.dumps(snapshot(self.roots(), (q.get("lib") or ["personal"])[0], boards=self.boards())).encode())
+            self.reply("application/json", json.dumps(dict(snapshot(self.roots(), (q.get("lib") or ["personal"])[0], boards=self.boards()), overview=not self.root)).encode())
         else:
             self.deny(404, "Not found.")
 
