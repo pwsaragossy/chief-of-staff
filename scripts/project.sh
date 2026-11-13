@@ -38,6 +38,7 @@ case ${1:-} in
       cos_isproj "$d" || die "$d is a workspace of the old layout (central/, projects/<slug>), removed in 0.12.0: make each project's own folder a project instead"
       echo "Project: $d"
     fi
+    cos_ignore_owner "$d"
     # ponytail: two inits at the same instant can both append; readers (panel, overview) drop repeated lines
     grep -Fxq "$d" "$D/projects" 2>/dev/null || { { cat "$D/projects" 2>/dev/null; printf '%s\n' "$d"; } | put projects; } || die "cannot write $D/projects"
     ;;

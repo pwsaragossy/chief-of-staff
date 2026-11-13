@@ -14,6 +14,8 @@
 #   runs the frozen check. verify <project_dir> runs it any time and keeps the result in .check-runs.
 # "| owner: ok" marks an item that closes only with the owner's OK, recorded in <project>/.owner-ok by
 #   track.sh ok <project_dir> <id> <the owner's words>   (the coordinator only; the hook asks the owner to approve it)
+#   track.sh ok <project_dir> untrack <words>: the owner files came through git; takes them out of the index, keeps them
+#   out (.gitignore) and rebuilds a missing .owner-items from the owner: ok items. It records no OK
 # No TRACK.md: silent, exit 0 (old projects keep working).
 . "$(dirname "$0")/lib.sh"
 
@@ -89,6 +91,7 @@ if [ -n "$wroot" ]; then
   done
   case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) OKF=/nonexistent/.owner-ok ;; esac
   case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-items*) OIF=/nonexistent/.owner-items ;; esac
+  [ "$cmd" = check ] && cos_ignore_owner "$dir"   # projects opened before 0.12.7 get the lines on their next gate run
 fi
 # a file the disk only reads as an owner file (macOS: .owner-oK with a Kelvin sign, .owner-itemſ with a long s) is not
 # the owner's: git and the guards never see it under that name. Moved aside the same way, in any project
@@ -187,9 +190,9 @@ check() {
   # (.owner-items, read-only and written once by baseline: TRACK.md itself is the agent's to edit)
   # a project opened with a baseline always has the list: without it the owner gate would be off (fail closed)
   for _f in $folded; do echo "$_f is not named exactly like the owner's file, though this disk reads it as one, so this computer does not trust it; it was moved aside to $_f.from-disk: have the owner give their OKs again"; done
-  for _f in $forged; do echo "$_f is tracked by git, so it came through git and not from this computer's owner; it was moved aside to $_f.from-git: remove it from git (git rm --cached $_f) and have the owner give their OKs again"; done
-  [ -n "$(fm_get "$t" baseline)" ] && [ ! -r "$OIF" ] &&
-    echo "the list of owner items is missing (.owner-items, written when the project opened): restore it from git or ask the owner"
+  for _f in $forged; do echo "$_f is tracked by git, so it came through git and not from this computer's owner; it was moved aside to $_f.from-git: put on the project card that the owner approves taking it out of git; the coordinator runs track.sh ok \"$dir\" untrack <the owner's words>, then records the owner's OKs again"; done
+  [ -n "$(fm_get "$t" baseline)" ] && [ ! -r "$OIF" ] && [ -z "$forged" ] &&
+    echo "the list of owner items is missing (.owner-items, written when the project opened): put it on the project card; with the owner's OK the coordinator rebuilds it from the items marked owner: ok with track.sh ok \"$dir\" untrack <the owner's words>"
   for b in $(cat "$OIF" 2>/dev/null); do [ "$b" = target: ] && continue
     printf '%s\n' "$rows" | awk -F "$US" -v i="$b" '$1 == "I" && $4 == i && $9 == "ok" { f = 1 } END { exit !f }' ||
       echo "$b needed the owner's OK when the project opened (.owner-items): put back its line with | owner: ok"
@@ -281,14 +284,33 @@ case $cmd in
     _s=${CLAUDE_PROJECT_DIR:-$PWD}; _sr=$(cos_root "$_s"); _dr=$(cos_root "$dir")
     [ -n "$_sr" ] && cos_owner "$_sr" "$_s" && [ "$(cd "$_sr" && pwd -P)" = "$(cd "$_dr" 2>/dev/null && pwd -P)" ] ||
       { echo "track.sh ok: only the coordinator of this project (the owner's conversation at its folder's root) records the owner's OK" >&2; exit 1; }
-    id=${3:-}; shift 3 2>/dev/null || { echo "usage: track.sh ok <project_dir> <item|check|delivery> <the owner's words>" >&2; exit 2; }
+    id=${3:-}; shift 3 2>/dev/null || { echo "usage: track.sh ok <project_dir> <item|check|delivery|untrack> <the owner's words>" >&2; exit 2; }
+    # untrack: the owner's files came through git (a move, a clone). The agent cannot run git on these names and the
+    # owner runs no commands, so this run, which the owner approves, takes them out of the index (the files and the
+    # history stay), keeps them out (.gitignore) and rebuilds a missing owner list from the items marked owner: ok.
+    # It records no OK: the old ones stay aside (.from-git) and the owner gives each again with track.sh ok
+    if [ "$id" = untrack ]; then
+      [ -n "$(printf '%s' "$*" | tr -d ' \t')" ] || { echo "track.sh ok untrack: write the owner's words" >&2; exit 1; }
+      [ -n "$wroot" ] && [ -n "$forged" ] && { set -f; wg rm -q --cached -- $forged || { echo "track.sh ok untrack: git could not untrack:$forged" >&2; exit 1; }; set +f
+        echo "taken out of git (index only; the files and the history stay):$forged"; }
+      cos_ignore_owner "$dir"
+      if [ ! -e "$dir/.owner-items" ] && [ -n "$(fm_get "$t" baseline)" ]; then
+        # never shorter than before: the list that came through git is joined in, so dropping an owner: ok mark from
+        # TRACK.md before an untrack does not drop the owner (its id then asks for its line back)
+        # ponytail: a list deleted with no copy aside is rebuilt from TRACK.md alone; the file is read-only and guarded
+        { printf '%s\n' "$rows" | awk -F "$US" '$1 == "I" && $9 == "ok" { print $4 }'; [ -n "$has_tc" ] && echo target:
+          for _f in $forged .owner-items; do case $(printf '%s' "$_f" | tr 'A-Z' 'a-z') in .owner-items) grep -Ex '[A-Za-z0-9_-]+|target:' "$dir/$_f.from-git" 2>/dev/null ;; esac; done; } | awk '!s[$0]++' > "$dir/.owner-items"; chmod 444 "$dir/.owner-items"
+        echo "rebuilt the list of owner items from TRACK.md: $(tr '\n' ' ' < "$dir/.owner-items")"
+      fi
+      echo "no OK is recorded: the owner gives each again (track.sh ok <project> <item|check> <words>)"; exit 0
+    fi
     case $id in
       check) [ -n "$has_tc" ] && [ -n "$tgt" ] && [ -n "$chk" ] || { echo "track.sh ok: write target: and check: in TRACK.md first" >&2; exit 1; } ;;
       delivery) [ -n "$runnable" ] || { echo "track.sh ok: the delivery OK runs the check, and TRACK.md has none to run" >&2; exit 1; } ;;
       *) printf '%s\n' "$rows" | awk -F "$US" -v i="$id" '$1 == "I" && $4 == i && $9 == "ok" { f = 1 } END { exit !f }' ||
            { echo "track.sh ok: $id is not an item of this track marked owner: ok" >&2; exit 1; } ;;
     esac
-    case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) echo "track.sh ok: .owner-ok is tracked by git, so it is not this computer's owner's: remove it from git first (git rm --cached .owner-ok)" >&2; exit 1 ;; esac
+    case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) echo "track.sh ok: .owner-ok is tracked by git, so it is not this computer's owner's: take it out of git first with track.sh ok <project> untrack <the owner's words>" >&2; exit 1 ;; esac
     w=$(printf '%s' "$*" | tr -d '\000-\037' | cut -c1-300); x=
     if [ "$id" = check ]; then x="${TB}freeze=$(tcsum)"; _fl=$(tcfiles)
       echo "the owner approves the target '$tgt' and the command '$chk'${_fl:+, frozen with its files: $_fl}"
@@ -345,5 +367,5 @@ EOF
     if [ -z "$now" ]; then now="none, the stage can pass its gate"; [ -n "$wait" ] && now="nothing until the prerequisites below are closed"; fi
     printf 'Track %s, stage %s of %s (%s), delivery line at stage %s. Open now: %s.%s\n' "$(fm_get "$t" track)" "$cur" "$stages" "$sname" "$del" \
       "$now" "${wait:+ Waiting on prerequisites: $wait.}" ;;
-  *) echo "usage: track.sh check|brief|status|items|baseline|verify <project_dir> | track.sh ok <project_dir> <item|check|delivery> <words>" >&2; exit 2 ;;
+  *) echo "usage: track.sh check|brief|status|items|baseline|verify <project_dir> | track.sh ok <project_dir> <item|check|delivery|untrack> <words>" >&2; exit 2 ;;
 esac

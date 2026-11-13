@@ -503,7 +503,7 @@ check "the plugin's git never treats a folder a teammate committed as a reposito
 check "an owner OK that git tracks, in any letter case, is moved aside and not trusted, and track.sh ok refuses" '( d=$(cd "$(mktemp -d)" && pwd -P); export CLAUDE_PLUGIN_DATA="$d/data"; g() { git -C "$d/p" -c user.name=t -c user.email=t@t "$@" >/dev/null 2>&1; }
   mkdir -p "$d/p"; g init -q; sh "$here/project.sh" init "$d/p" >/dev/null; printf -- "---\nstage: 1\n---\n## Stage 1: A\n- [x] scope | S | card: product | needs: - | evidence: s.md | owner: ok\n- [ ] r | R | card: reviewer | needs: scope | evidence:\n" > "$d/p/TRACK.md"; echo s > "$d/p/s.md"
   mkdir -p "$d/p/objects/info" "$d/p/refs/heads"; printf "ref: refs/heads/k\n" > "$d/p/HEAD"; printf "[core]\n\tbare = false\n" > "$d/p/config"
-  printf "scope\t2026-01-01 10:00\tyes\n" > "$d/p/.OWNER-OK"; g add -A; g commit -qm x; r=0
+  printf "scope\t2026-01-01 10:00\tyes\n" > "$d/p/.OWNER-OK"; g add -A; g add -f .OWNER-OK; g commit -qm x; r=0
   o=$(sh "$here/track.sh" check "$d/p"); printf "%s\n" "$o" | grep -q "scope closes only with the owner" || { echo "trusted: $o"; r=1; }
   printf "%s\n" "$o" | grep -q "is tracked by git" && [ -e "$d/p/.OWNER-OK.from-git" ] && [ ! -e "$d/p/.OWNER-OK" ] || { echo "not moved aside"; r=1; }
   printf "scope\t2026-01-01 10:00\tyes\n" > "$d/p/.owner-ok"; g add -f .owner-ok; g commit -qm y
@@ -720,6 +720,40 @@ check "a session that is not the project's coordinator cannot record the owner O
 check "the OK is only for items marked owner: ok" '! CLAUDE_PROJECT_DIR="$T/t3" T ok "$T/t3" review-1 yes 2>/dev/null'
 check "the coordinator records the owner OK and the item closes" 'CLAUDE_PROJECT_DIR="$T/t3" T ok "$T/t3" scope "yes, freeze it" >/dev/null && ! T check "$T/t3" | grep -q "owner.s OK" && ro "$T/t3/.owner-ok"'
 check "recording the owner OK asks the owner" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/track.sh ok $T/t3 scope yes\"}")" "$T/t3" | grep -q "permissionDecision\":\"ask"'
+# a project moved with its owner list committed to git: the agent cannot run git on that name and
+# the owner runs no commands, so the plugin untracks it itself, with the owner's approval, and the gate can close again
+check "an owner list committed to git is untracked by track.sh ok untrack, which the owner approves, and the OKs can be given again" '( d=$(cd "$(mktemp -d)" && pwd -P); export CLAUDE_PLUGIN_DATA="$d/data"; p="$d/p"; g() { git -C "$p" -c user.name=t -c user.email=t@t "$@" >/dev/null 2>&1; }
+  mkdir -p "$p"; sh "$here/project.sh" init "$p" >/dev/null; printf -- "---\nstage: 1\n---\n## Stage 1: A\n- [x] scope | S | card: product | needs: - | evidence: s.md | owner: ok\n- [ ] r | R | card: reviewer | needs: scope | evidence:\n" > "$p/TRACK.md"; echo s > "$p/s.md"
+  sh "$here/track.sh" baseline "$p"; g init -q; g add -A; g add -f .owner-items; g commit -qm moved; r=0
+  o=$(sh "$here/track.sh" check "$p"); printf "%s\n" "$o" | grep -qF "track.sh ok \"$p\" untrack" || { echo "no untrack in: $o"; r=1; }
+  printf "%s\n" "$o" | grep -q "git rm" && { echo "still says git rm"; r=1; }
+  [ "$(rk "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git rm --cached .owner-items\"}")" "$W")" = 2 ] || { echo "agent git rm not blocked"; r=1; }
+  ! CLAUDE_PROJECT_DIR="$W" sh "$here/track.sh" ok "$p" untrack yes 2>/dev/null || { echo "not the coordinator, still untracked"; r=1; }
+  h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/track.sh ok $p untrack sim\"}")" "$p" | grep -q "records YOUR OK.*takes your OK files out of git" || { echo "untrack does not ask the owner"; r=1; }
+  h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/track.sh ok $p scope yes untrack\"}")" "$p" | grep -q "records YOUR OK" || { echo "an item OK hides behind the untrack text"; r=1; }
+  CLAUDE_PROJECT_DIR="$p" sh "$here/track.sh" ok "$p" untrack sim >/dev/null || { echo "untrack failed"; r=1; }
+  [ -z "$(git -C "$p" ls-files -- .owner-items .owner-ok)" ] || { echo "still tracked"; r=1; }
+  grep -qx scope "$p/.owner-items" && ro "$p/.owner-items" || { echo "owner list not rebuilt"; r=1; }
+  [ -e "$p/.owner-ok" ] && { echo "an OK was recorded without the owner"; r=1; }
+  g add -A; [ -z "$(git -C "$p" ls-files -- .owner-items .owner-ok)" ] || { echo "git add -A takes the owner files again"; r=1; }
+  o=$(sh "$here/track.sh" check "$p"); printf "%s\n" "$o" | grep -Eq "tracked by git|owner items is missing|needed the owner" && { echo "gate still stuck: $o"; r=1; }
+  printf "%s\n" "$o" | grep -q "^scope closes only with the owner" || { echo "scope closed without the owner: $o"; r=1; }
+  CLAUDE_PROJECT_DIR="$p" sh "$here/track.sh" ok "$p" scope sim >/dev/null && ! sh "$here/track.sh" check "$p" | grep -q "owner" || { echo "the OK does not close it"; r=1; }
+  rm -rf "$d"; exit $r )'
+check "untrack never shrinks the owner list: a mark the agent dropped from TRACK.md before it still needs the owner" '( d=$(cd "$(mktemp -d)" && pwd -P); export CLAUDE_PLUGIN_DATA="$d/data"; p="$d/p q"; g() { git -C "$p" -c user.name=t -c user.email=t@t "$@" >/dev/null 2>&1; }
+  mkdir -p "$p"; sh "$here/project.sh" init "$p" >/dev/null; printf -- "---\nstage: 1\n---\n## Stage 1: A\n- [x] scope | S | card: product | needs: - | evidence: s.md | owner: ok\n- [ ] r | R | card: reviewer | needs: scope | evidence:\n" > "$p/TRACK.md"; echo s > "$p/s.md"
+  sh "$here/track.sh" baseline "$p"; g init -q; g add -A; g add -f .owner-items; g commit -qm moved; sh "$here/track.sh" check "$p" >/dev/null; r=0
+  sed -i.bak "s/ | owner: ok//" "$p/TRACK.md"; ! CLAUDE_PROJECT_DIR="$p" sh "$here/track.sh" ok "$p" untrack "" 2>/dev/null || { echo "untrack without the owner words"; r=1; } ; [ -n "$(git -C "$p" ls-files -- .owner-items)" ] || { echo "untrack without words changed git"; r=1; }
+  CLAUDE_PROJECT_DIR="$p" sh "$here/track.sh" ok "$p" untrack sim >/dev/null || { echo "untrack failed in a folder with a space"; r=1; }
+  grep -qx scope "$p/.owner-items" || { echo "list shrank"; r=1; }; sh "$here/track.sh" check "$p" | grep -q "^scope needed the owner.s OK" || { echo "dropped mark passes"; r=1; }
+  rm -rf "$d"; exit $r )'
+check "project.sh init in a git folder keeps the owner files out of git, and an existing project gets it on its next gate run" '( d=$(cd "$(mktemp -d)" && pwd -P); export CLAUDE_PLUGIN_DATA="$d/data"; r=0
+  mkdir -p "$d/a" "$d/b"; git -C "$d/a" init -q; sh "$here/project.sh" init "$d/a" >/dev/null; grep -qxF "/.owner-ok*" "$d/a/.gitignore" && grep -qxF "/.owner-items*" "$d/a/.gitignore" || { echo "init: no .gitignore"; r=1; }
+  sh "$here/project.sh" init "$d/b" >/dev/null; [ -e "$d/b/.gitignore" ] && { echo "a folder without git got a .gitignore"; r=1; }
+  git -C "$d/b" init -q; printf "build/" > "$d/b/.gitignore"; printf -- "---\nstage: 1\n---\n## Stage 1: A\n- [ ] r | R | card: reviewer | needs: - | evidence:\n" > "$d/b/TRACK.md"
+  sh "$here/track.sh" check "$d/b" >/dev/null; grep -qx "build/" "$d/b/.gitignore" && grep -qxF "/.owner-ok*" "$d/b/.gitignore" || { echo "gate run: $(cat "$d/b/.gitignore")"; r=1; }
+  sh "$here/track.sh" check "$d/b" >/dev/null; [ "$(grep -c owner "$d/b/.gitignore")" = 2 ] || { echo "lines repeated"; r=1; }
+  rm -rf "$d"; exit $r )'
 # target and check: a hard number and an outside judge that runs (v0.3)
 TC="$T/tc"; mkdir -p "$TC"; sh "$here/project.sh" init "$TC" >/dev/null; C="$TC"
 printf -- '---\nstatus: in-progress\n---\n# tc\n' > "$TC/STATE.md"; echo plan > "$TC/plan.md"; echo ok > "$TC/r1.md"

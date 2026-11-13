@@ -46,6 +46,11 @@ cos_registered() { _d=$(cd "$1" 2>/dev/null && pwd -P) && grep -Fxq "$_d" "$(cos
 # the owner's OK: DIR is the root of a project folder, and that folder is registered. A subfolder, a worktree that
 # carries its own marker, or a marker planted anywhere else is not. (Threads in the same folder: hooks/projects.tsx)
 cos_owner() { [ "$1" = "$2" ] && cos_isproj "$1" && cos_registered "$1"; }
+# cos_ignore_owner DIR -> the owner's files (and their moved-aside copies) never enter git: DIR/.gitignore gets the two
+# lines once, when DIR is inside a repository (the nearest .git at DIR or above). An agent cannot write these names itself
+cos_ignore_owner() { _r=$1; while [ -n "$_r" ] && [ ! -e "$_r/.git" ]; do _r=${_r%/*}; done; [ -n "$_r" ] || return 0
+  _g="$1/.gitignore"; [ -L "$_g" ] && return 0; for _p in '/.owner-ok*' '/.owner-items*'; do grep -qxF "$_p" "$_g" 2>/dev/null && continue
+    [ -s "$_g" ] && [ -n "$(tail -c 1 "$_g")" ] && echo >> "$_g"; printf '%s\n' "$_p" >> "$_g"; done 2>/dev/null; }
 
 # cos_fold -> stdin with each character macOS folds into plain letters in a file name written as those letters: APFS
 # compares names with full Unicode case folding, so .owner-oK (Kelvin sign), .mcp.jſon (long s) and .chief-of-staﬀ
