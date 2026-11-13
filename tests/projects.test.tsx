@@ -21,8 +21,9 @@ test('the Threads pane groups the threads this conversation started and lists th
   const calls: { tool: string; args: any }[] = []
   const card = '---\nproject: dock\nstatus: waiting-owner\n---\n# Dock\n\n## For the owner to decide (central asks, all at once)\n- (asked 2026-11-04 01:33 -0300) Approve target and check? Recommend: yes.\n\n## Decided\n- 2026-11-04: old\n'
   const opened: string[] = []
-  on('store.get', () => ({ value: '/ws' }))
-  on('store.set', () => ({ value: undefined }))
+  const kept = new Map<string, unknown>()
+  on('store.get', (_: any, e: any) => ({ value: kept.has(JSON.stringify(e.key)) ? kept.get(JSON.stringify(e.key)) : /showResolved/.test(JSON.stringify(e.key)) ? undefined : '/ws' }))
+  on('store.set', (_: any, e: any) => { kept.set(JSON.stringify(e.key), e.value); return { value: undefined } })
   on('fs.exists', (_: any, e: any) => ({ value: e.path === '/ws/dock/.chief-of-staff' }))
   on('command.register', () => ({ value: { command: 'projects' } }))
   on('ui.open', (_: any, e: any) => { opened.push(e.id); return { value: { isPlaced: true } } })
@@ -59,13 +60,18 @@ test('the Threads pane groups the threads this conversation started and lists th
   expect(await ui.find({ type: 'Text', text: /^dock$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Approve target and check\? Recommend: yes\.$/ })).toBeDefined()
   expect((await ui.find({ key: 'local_a' }))?.text).toMatch(/Build slice 1/)
-  expect([...new Set((await ui.findAll({ type: 'Svg' })).map(x => x.props.alt))].sort()).toEqual(['Idle', 'Ready for review', 'Resolved', 'Waiting on you', 'Working'])
+  expect([...new Set((await ui.findAll({ type: 'Svg' })).map(x => x.props.alt))].sort()).toEqual(['Idle', 'Ready for review', 'Waiting on you', 'Working'])
   expect(await ui.find({ type: 'Text', text: /^21m$/ })).toBeDefined()
   expect((await ui.find({ key: 'local_b' }))?.text).toMatch(/Spec the app/)
   expect((await ui.find({ key: 'local_r' }))?.text).toMatch(/Fix login/)
   expect(await ui.find({ type: 'Text', text: /^ +PR #12$/ })).toBeDefined()
   const order = (await ui.findAll({ type: 'Text' })).map(x => x.text).filter(t => /^[A-Z][a-z ]+ · \d+$/.test(t))
-  expect(order).toEqual(['Waiting on you · 1', 'Ready for review · 1', 'Working · 1', 'Idle · 1', 'Resolved · 3', 'Memory · 1'])
+  expect(order).toEqual(['Waiting on you · 1', 'Ready for review · 1', 'Working · 1', 'Idle · 1', 'Memory · 1'])
+  // Resolved is one closed line; a press opens it
+  expect((await ui.find({ key: 'resolved' }))?.text).toMatch(/Resolved · 3/)
+  expect(await ui.find({ key: 'local_c' })).toBeUndefined()
+  await ui.press({ key: 'resolved' })
+  expect((await ui.find({ key: 'local_c' }))?.text).toMatch(/Old/)
   expect(await ui.find({ key: 'local_x' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: 'next: ship v1' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Local only \(owner\)/ })).toBeDefined()

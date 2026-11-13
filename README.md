@@ -9,7 +9,7 @@ What it gives you:
   conversation's folder a project (opening questions, then a `.chief-of-staff` marker, `board/`, `STATE.md`,
   `DECISIONS.md`), the folder joins the plugin's project list and the conversation becomes its coordinator.
   `/threads` only makes a conversation a coordinator (threads, the Threads pane); it creates no project.
-  `/chief-of-staff:setup` picks where the library lives first. The web panel shows one project, or every registered one.
+  `/chief-of-staff:setup` picks where the library lives first. The web panel shows one project, or every registered one; the global one adds a Pipeline kanban (idea, validating, building, launched, earning, paused) where you drag a project to its phase (saved in its `STATE.md`, or in `PIPELINE.md` beside a board).
 - **Projects that talk to you.** Each project's conversation at its folder's root is its coordinator:
   it asks you its decisions and runs long or parallel work in threads nested under it. Questions that
   waited while you were away sit on a card in `board/`; the coordinator asks them all at once. Threads and

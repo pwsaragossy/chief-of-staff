@@ -292,6 +292,63 @@ def boards():
     return [l.split("\t", 1)[1] for l in rows(sh("project.sh", "boards")) if "\t" in l]
 
 
+# The life of a project, as the global panel's kanban draws it. A registered project keeps its phase in STATE.md
+# front matter (phase:); a board keeps one line per project in PIPELINE.md beside the board folder
+# ("- <project> | <phase>"). A project with no phase yet sits in "No phase" until the owner drags it.
+PHASES = ("idea", "validating", "building", "launched", "earning", "paused")
+
+
+def pipeline_file(b):
+    return os.path.join(os.path.dirname(b.rstrip("/")), "PIPELINE.md")
+
+
+def read_pipeline(b):
+    try:
+        with open(pipeline_file(b), encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return {}
+    out = {}
+    for l in lines:
+        m = re.fullmatch(r"- (.+?) \| *([a-z]+) *", l)
+        if m and m.group(2) in PHASES:
+            out[m.group(1).strip()] = m.group(2)
+    return out
+
+
+def set_phase(src, name, phase):
+    """Write one project's phase: src "state" (name is the project folder) or "board" (name in that board's PIPELINE.md)."""
+    if src == "state":
+        f = os.path.join(name, "STATE.md")
+        try:
+            with open(f, encoding="utf-8") as h:
+                text = h.read()
+        except OSError:
+            text = ""
+        lines = text.split("\n")
+        if lines[0] == "---" and "---" in lines[1:]:
+            end = lines.index("---", 1)
+            head = [l for l in lines[1:end] if not l.startswith("phase:")]
+            lines = ["---"] + head + ["phase: " + phase] + lines[end:]
+        else:
+            lines = ["---", "phase: " + phase, "---"] + ([] if text == "" else lines)
+        body = "\n".join(lines)
+    else:
+        f = pipeline_file(name[0])
+        try:
+            with open(f, encoding="utf-8") as h:
+                old = h.read().splitlines()
+        except OSError:
+            old = ["# Pipeline", "", "One line per project: - <project> | <phase> (%s). The panel's kanban writes it." % ", ".join(PHASES), ""]
+        key = name[1]
+        old = [l for l in old if not re.fullmatch(r"- %s \| *[a-z]+ *" % re.escape(key), l)]
+        body = "\n".join(old + ["- %s | %s" % (key, phase)]) + "\n"
+    tmp = f + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as h:
+        h.write(body)
+    os.replace(tmp, f)
+
+
 def board_view(b):
     """One recorded board folder as a panel row (its counts) and its cards waiting on the owner. The cards are
     classed by overview.sh --rows, the same reading the chat overview prints, so the two never disagree."""
@@ -307,8 +364,13 @@ def board_view(b):
         out = sh("overview.sh", "--rows", b, strict=True)
     except TimeoutError:   # an empty answer would look like a healthy board
         return dict(row, color="gray", reason="Could not read the board in 20 s"), []
+    phase, names, waiting = read_pipeline(b), {}, set()
     for line in rows(out):
         f = (line.split("\t") + [""] * 5)[:5]
+        if f[2] not in ("", "-"):
+            names[f[2]] = 1
+            if f[0] == "w":
+                waiting.add(f[2])
         n[f[0]] = n.get(f[0], 0) + 1
         late = re.fullmatch(r"\d{4}-\d{2}-\d{2}", f[3]) and f[3] < today
         n["d"] += bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", f[3]) and f[3] <= soon)
@@ -316,6 +378,8 @@ def board_view(b):
             cards.append({"title": f[1] + (" · due " + f[3] + (" (late)" if late else "") if f[3] else ""), "project": f[2] if f[2] not in ("", "-") else name, "member": "", "color": "yellow",
                           "waited": int((now - int(f[4])) / 60) if f[4].isdigit() else 0, "limit": "",
                           "questions": [], "deputy": "", "size": "", "ages": []})
+    row["pipeline"] = [{"name": x, "phase": phase.get(x, ""), "src": "board", "key": [b, x], "where": row["slug"],
+                        "color": "yellow" if x in waiting else "green"} for x in dict.fromkeys(list(phase) + list(names))]
     reason = "%d waiting on you · %d due in 7 days · %d moving · %d stopped" % (n["w"], n["d"], n["m"], n["s"])
     return dict(row, color="yellow" if n["w"] or n["d"] else "green", reason=reason), cards
 
@@ -349,6 +413,8 @@ def root_projects(root):
             "stage_names": stage_names, "items": items,
             "brief": " ".join(l for l in rows(sh("track.sh", "brief", pdir)) if not l.startswith("Target: ")).strip().split(" Waiting on prerequisites:")[0],
             "next": front_matter(os.path.join(pdir, "STATE.md")).get("next", ""),
+            "pipeline": [{"name": slug, "phase": (lambda v: v if v in PHASES else "")(front_matter(os.path.join(pdir, "STATE.md")).get("phase", "")),
+                          "src": "state", "key": pdir, "where": "", "color": color}],
             "progress": progress(view),
             "reasons": reasons or ([{"color": color, "text": reason}] if color != "green" else []),
             "outside": outside(out), "decisions": decisions(pdir), "files": files(root, root),
@@ -417,7 +483,9 @@ def snapshot(roots, libname="personal", boards=()):
     n_notes = lib.get("total", 0)
     rank_c = [c["color"] for c in cards]
     overall = max([overall] + rank_c, key=lambda c: rank.get(c, 0))
+    pipeline = [x for p in projects for x in p.get("pipeline", [])]
     return {"library": lib, "libs": libs, "workspace": root, "overall": overall, "projects": projects, "cards": cards, "tasks": todo,
+            "pipeline": pipeline, "phases": PHASES,
             "counts": counts,
             "inbox": n_inbox, "notes": n_notes, "time": time.strftime("%H:%M:%S")}
 
@@ -505,6 +573,11 @@ svg.edges path.ok{stroke:var(--green);opacity:.6}svg.edges path.hot{stroke:var(-
 .glist ul{max-height:260px;overflow:auto;margin:6px 0 0;padding-left:18px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media (max-width:639px){.gwrap{height:420px}.gdet{top:auto;left:0;width:auto;max-height:65%;border-left:0;border-top:1px solid var(--line);border-radius:12px 12px 0 0;box-shadow:0 -4px 16px rgba(0,0,0,.18)}}
+.kanban{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(150px,1fr);gap:10px;overflow-x:auto;padding-bottom:4px}
+.kcol{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;min-height:96px;display:flex;flex-direction:column;gap:6px}
+.kcol.over{outline:2px solid var(--green);outline-offset:-2px}.kcol h3{margin:0 0 4px;font-size:12px;font-weight:600;color:var(--muted)}
+.kcard{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px;cursor:grab;background:var(--card)}
+.kcard:focus-visible{outline:2px solid var(--green)}.kcard .dot{flex:none}.kcard small{display:block;color:var(--muted);font-size:11px}
 .counts{display:grid;grid-template-columns:repeat(3,1fr)}.counts div{padding:14px 16px;border-left:1px solid var(--line)}.counts div:first-child{border-left:0}
 .counts b{display:block;font-size:24px;font-weight:600}.q{margin:4px 0 0;padding-left:18px;font-size:13px}
 .lists{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;border-top:1px solid var(--line)}
@@ -514,6 +587,7 @@ select{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--line);
 <div class="top"><span id="overall" class="dot"></span><h1>Chief of staff</h1><span class="grow"></span><span id="time" class="muted"></span></div>
 <div id="ws" class="muted"></div>
 <h2>Waits on you</h2><div id="cards" class="box"></div>
+<div id="kanban-wrap" hidden><h2>Pipeline</h2><div id="kanban" class="kanban"></div></div>
 <h2>Projects</h2><div id="projects" class="box"></div>
 <h2>Tasks</h2><div id="tasks" class="box"></div>
 <h2>Import knowledge</h2>
@@ -816,6 +890,7 @@ function render(){
       if(p.files.length>6){const m=el("details"),w=el("ul");m.append(el("summary","",(p.files.length-6)+" more"));p.files.slice(6).forEach(x=>w.append(li(x)));m.append(w);f.append(m)}
       body.append(f)}
     return row}));
+  drawKanban(d);
   const C=document.getElementById("cards");
   if(!d.cards.length)empty(C,"Nothing waiting");else C.replaceChildren(...d.cards.map(c=>{
     const row=el("div","row"),b=el("div","grow");row.append(el("span","dot "+c.color),b);
@@ -848,6 +923,26 @@ function render(){
   const U=document.getElementById("turns"),n=(v,t,c)=>{const x=el("div");const b=el("b","",String(v));if(c&&v)b.style.color="var(--"+c+"-t)";x.append(b,el("span","muted",t));return x};
   U.replaceChildren(n(d.counts.turns,"turns"),n(d.counts.violations,"broke the protocol","red"),n(d.counts.rejected,"notes rejected","yellow"));
 }
+const PHASE_LABEL={idea:"Idea",validating:"Validating",building:"Building",launched:"Launched",earning:"Earning",paused:"Paused","":"No phase"};
+function drawKanban(d){
+  const W=document.getElementById("kanban-wrap"),K=document.getElementById("kanban"),P=d.pipeline||[];
+  W.hidden=P.length<2;if(W.hidden)return;  // one project: its own panel says it all
+  const cols=[...(P.some(x=>!x.phase)?[""]:[]),...d.phases];
+  K.replaceChildren(...cols.map(ph=>{const c=el("div","kcol"),items=P.filter(x=>x.phase===ph);
+    c.append(el("h3","",PHASE_LABEL[ph]+" · "+items.length));
+    items.forEach(x=>{const k=el("div","kcard"),t=el("div","grow");k.draggable=true;k.tabIndex=0;
+      t.append(el("span","",x.name));if(x.where)t.append(el("small","",x.where));k.append(el("span","dot "+x.color),t);
+      k.title="Drag to another phase, or press ← →";
+      k.ondragstart=e=>e.dataTransfer.setData("text/plain",JSON.stringify({src:x.src,key:x.key}));
+      k.onkeydown=e=>{const i=d.phases.indexOf(x.phase),j=e.key==="ArrowRight"?i+1:e.key==="ArrowLeft"?i-1:-2;
+        if(j>=0&&j<d.phases.length){e.preventDefault();move({src:x.src,key:x.key},d.phases[j])}};
+      c.append(k)});
+    if(ph){c.ondragover=e=>{e.preventDefault();c.classList.add("over")};c.ondragleave=()=>c.classList.remove("over");
+      c.ondrop=e=>{e.preventDefault();c.classList.remove("over");try{move(JSON.parse(e.dataTransfer.getData("text/plain")),ph)}catch(_){}}}
+    return c}))}
+async function move(x,phase){
+  const m=document.getElementById("msg"),r=await fetch("phase?t="+encodeURIComponent(T),{method:"POST",body:JSON.stringify({...x,phase}),headers:{"Content-Type":"application/json"}});
+  if(!r.ok)m.textContent=await r.text();load()}
 async function send(body,name,kind){
   const m=document.getElementById("msg");m.textContent="Saving…";
   const r=await fetch("import?t="+encodeURIComponent(T),{method:"POST",body,headers:{"X-Name":encodeURIComponent(name),"X-Kind":kind}});
@@ -923,6 +1018,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.allowed():
             return
+        if urllib.parse.urlparse(self.path).path == "/phase":
+            return self.phase()
         if urllib.parse.urlparse(self.path).path != "/import":
             return self.deny(404, "Not found.")
         try:
@@ -958,6 +1055,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.deny(409, "A file with that name arrived the same second. Send it again.")
         warn = b" Warning: it looks like it holds a key or token; remove it before the library is shared." if SECRET.search(data) else b""
         self.reply("text/plain; charset=utf-8", b"saved" + warn)
+
+
+def _phase(self):
+    """A kanban drag: one project's new phase, written only to a folder or board this panel shows."""
+    try:
+        d = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 4096)) or b"{}")
+        src, key, phase = d.get("src"), d.get("key"), d.get("phase")
+    except (ValueError, AttributeError):
+        return self.deny(400, "Could not read the move. Reload the panel and drag again.")
+    if phase not in PHASES:
+        return self.deny(400, "Unknown phase.")
+    if src == "state" and isinstance(key, str) and key in [find_root(r) for r in self.roots() if os.path.isdir(r)]:
+        set_phase("state", key, phase)
+    elif (src == "board" and isinstance(key, list) and len(key) == 2 and key[0] in self.boards()
+          and isinstance(key[1], str) and 0 < len(key[1]) <= 120 and not re.search(r"[|\n\r]", key[1])):
+        set_phase("board", key, phase)
+    else:
+        return self.deny(403, "That project is not on this panel. Reload it.")
+    self.reply("text/plain; charset=utf-8", b"saved")
+
+
+Handler.phase = _phase
 
 
 def main():

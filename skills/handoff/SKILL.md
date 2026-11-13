@@ -13,7 +13,8 @@ a rotation, end the answer saying the work continues in a new session in this fo
 
 1. **Update `STATE.md` as a snapshot of now**, not a diary (history lives in git):
    - front matter: `updated` (now, `YYYY-MM-DD HH:MM`: the panel times the handoff from it, not from
-     the file date a git pull resets), `next` (the next action in one line), `status`;
+     the file date a git pull resets), `next` (the next action in one line), `status`, and `phase` when the
+     project moved (idea, validating, building, launched, earning, paused: the global panel's kanban column);
    - section 1: severity (green / yellow / red) and one line;
    - section 3: what is true now, one line per fact: `- fact — source — verified: YYYY-MM-DD HH:MM`.
      Never copy a fact that changes on its own (the commit running in production, balances, public

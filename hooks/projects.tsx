@@ -10,6 +10,8 @@ const coord = atom({ plugin: 'chief-of-staff', key: 'coord' } as const, '', { sh
 const here = atom({ plugin: 'chief-of-staff', key: 'here' } as const, '', { shape: 'here-2' })
 // the owner closed the Threads pane by hand: it stays closed until /threads
 const shut = atom({ plugin: 'chief-of-staff', key: 'threadsShut' } as const, false, { shape: 'shut-1' })
+// the Resolved group is one line until the owner opens it: finished work stays out of the way
+const showDone = atom({ plugin: 'chief-of-staff', key: 'showResolved' } as const, false, { shape: 'resolved-1' })
 
 type Project = { slug: string; dir: string; status: string; updated: string; next: string; goal: string }
 
@@ -328,7 +330,7 @@ export const register: Register = on => {
     const p = r && slug ? await project($, r, slug) : undefined
     const dc = p ? decisions(await $.fs.read(`${p.dir}/DECISIONS.md`).catch(() => '')).slice(-5) : []
     const instr = p ? (await $.fs.read(`${p.dir}/CLAUDE.md`).catch(() => '')).split('\n').slice(0, 30).join('\n') : ''
-    const err = await read($, error)
+    const err = await read($, error), done = await read($, showDone)
     const show = async (t: Thread) => {
       await update($, error, () => '')
       try {
@@ -368,12 +370,12 @@ export const register: Register = on => {
         {group('review')}
         {group('working')}
         {group('idle')}
-        <Box flexDirection="column" gap={1}>
-          {head('Resolved', by('resolved').length)}
-          {by('resolved').length === 0
-            ? <Box borderStyle="round" borderColor="subtle" paddingX={1} justifyContent="center"><Text dimColor>Completed threads.</Text></Box>
-            : by('resolved').map(row)}
-        </Box>
+        {by('resolved').length > 0 && <Box flexDirection="column" gap={1}>
+          <Button key="resolved" plain dimColor onPress={async () => { await update($, showDone, v => !v); $.ui.invalidate('ui.render') }}>
+            {done ? '▾' : '▸'} Resolved · {by('resolved').length}
+          </Button>
+          {done && by('resolved').map(row)}
+        </Box>}
         {ts.length === 0 && <Text dimColor>No threads yet.</Text>}
         {err && <Text color="error">{err}</Text>}
         {p && <Box flexDirection="column">
