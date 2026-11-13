@@ -23,20 +23,19 @@ test('the Threads pane groups the threads this conversation started and lists th
   const opened: string[] = []
   on('store.get', () => ({ value: '/ws' }))
   on('store.set', () => ({ value: undefined }))
-  on('fs.exists', (_: any, e: any) => ({ value: ['/ws/.chief-of-staff', '/ws/projects'].includes(e.path) }))
+  on('fs.exists', (_: any, e: any) => ({ value: e.path === '/ws/dock/.chief-of-staff' }))
   on('command.register', () => ({ value: { command: 'projects' } }))
   on('ui.open', (_: any, e: any) => { opened.push(e.id); return { value: { isPlaced: true } } })
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('clock.now', () => ({ value: Date.parse('2026-11-05T12:00:00Z') }))
   const files: Record<string, string> = {
-    '/ws/board/Dock.md': card,
-    '/ws/projects/dock/STATE.md': '---\nstatus: active\nupdated: 2026-11-05\nnext: ship v1\n---\n',
-    '/ws/projects/dock/DECISIONS.md': '- 2026-11-04 10:00 | Local only | owner | replaces: -\n',
-    '/ws/projects/dock/CLAUDE.md': '# Dock\nKeep the dock fast.\n',
+    '/ws/dock/.chief-of-staff': 'kind: project\n',
+    '/ws/dock/board/Dock.md': card,
+    '/ws/dock/STATE.md': '---\nstatus: active\nupdated: 2026-11-05\nnext: ship v1\n---\n',
+    '/ws/dock/DECISIONS.md': '- 2026-11-04 10:00 | Local only | owner | replaces: -\n',
+    '/ws/dock/CLAUDE.md': '# Dock\nKeep the dock fast.\n',
   }
-  on('fs.list', (_: any, e: any) => ({ value: e.path === '/ws/projects'
-    ? [{ name: 'dock', kind: 'dir', size: 0, mtimeMs: 0, isLink: false }]
-    : [{ name: 'Dock.md', kind: 'file', size: 0, mtimeMs: 0, isLink: false }] }))
+  on('fs.list', (_: any, e: any) => ({ value: e.path === '/ws/dock/board' ? [{ name: 'Dock.md', kind: 'file', size: 0, mtimeMs: 0, isLink: false }] : [] }))
   on('fs.read', (_: any, e: any) => (e.path in files ? { value: files[e.path] } : { deny: 'ENOENT' }))
   on('mcp.call', (_: any, e: any) => {
     calls.push({ tool: `${e.server}.${e.tool}`, args: e.args })
@@ -54,7 +53,7 @@ test('the Threads pane groups the threads this conversation started and lists th
     return t('Opened')
   })
   on('prompt.fill', (_: any, e: any) => { calls.push({ tool: 'prompt.fill', args: e }); return { isFilled: true } })
-  await $.session.start({ cwd: '/ws/projects/dock', surface: 'desktop', isInteractive: true })
+  await $.session.start({ cwd: '/ws/dock', surface: 'desktop', isInteractive: true })
   expect(opened).toEqual(['cos-threads'])
   const ui = await $.ui.mount({ ...THREADS, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: /^dock$/ })).toBeDefined()
@@ -311,7 +310,7 @@ test('a coordinator thread brief needs its specialist and opens with the thread 
 })
 
 test('the coordinator text carries the six thread rules', () => {
-  for (const rule of [/Only you talk to the owner/, /DECISIONS\.md/, /no push, no deploy/, /Review before production/, /ask the owner where it runs today/, /ROUTING\.md/, /reviewer role/, /yes or no/, /in one pass/])
+  for (const rule of [/Only you talk to the owner/, /DECISIONS\.md/, /no push, no deploy/, /Review before production/, /ask the owner where it runs today/, /ROUTING\.md/, /reviewer role/, /yes or no/, /in one pass/, /archive it/])
     expect(COORDINATOR).toMatch(rule)
   expect(briefGaps('Role card: utility find the file')).toBe('')
   expect(briefGaps('Role card: /My Drive/ws/specialists/researcher.md Library: [[a]] Ambition: the goal behind it | judge: npm test passes', ['researcher'])).toBe('')

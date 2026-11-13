@@ -162,6 +162,8 @@ export const COORDINATOR =
   'looks like), several at once when the pieces are independent, never detached. Keep this conversation short: ' +
   'answer, start threads, read their reports when they end a turn, check the result, and bring results and questions ' +
   'back to the owner here. Steer a running thread with SendMessage to its session id instead of starting a new one. ' +
+  'When a thread\'s report checks out and its work is done, archive it (archive_session) and tell the owner in one ' +
+  'line, so the Threads pane shows it Resolved; a thread still waiting on something stays open. ' +
   // the rules a grant run with six threads broke: the owner asked from many places, facts drifted, a thread
   // pushed unapproved, a video rendered 8 times, a host proposed before asking, no thread used a specialist
   'Only you talk to the owner: threads report to you and never ask the owner; put everything that needs the owner ' +

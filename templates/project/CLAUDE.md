@@ -31,6 +31,8 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
     and `Ambition: <goal behind the goal> | judge: <outside judge>`; the plugin refuses a brief without
     them and opens it with the thread rules: no Save or Submit in an external form, no push, no deploy, no
     message sent, without the owner's approval relayed by you. Check every report for those actions.
+  - When a thread's report checks out and its work is done, archive it (`archive_session`) and tell the
+    owner in one line: the Threads pane then shows it Resolved. A thread still waiting on something stays open.
   - Only you write `DECISIONS.md` and talk to the owner. A thread reads `DECISIONS.md` before it uses a
     shared fact (slogan, amounts, names, roles) and reports a decision it hears to you; you record it and
     tell the other threads.
