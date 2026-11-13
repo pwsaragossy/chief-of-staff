@@ -5,7 +5,7 @@ knowledge/inbox/. Standard library only. Listens on 127.0.0.1; every request nee
 
 Usage: python3 panel.py <project folder> | --all [port]     (port 0 or omitted = a free port)
 """
-import http.server, json, os, re, secrets, subprocess, sys, time, urllib.parse
+import http.server, json, os, re, secrets, subprocess, sys, tempfile, time, urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAX_UPLOAD = 50 * 1024 * 1024
@@ -343,9 +343,12 @@ def set_phase(src, name, phase):
         key = name[1]
         old = [l for l in old if not re.fullmatch(r"- %s \| *[a-z]+ *" % re.escape(key), l)]
         body = "\n".join(old + ["- %s | %s" % (key, phase)]) + "\n"
-    tmp = f + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as h:
+    if os.path.islink(f):   # a planted link would send the write outside the project or board folder
+        raise OSError("refusing to write through a link: " + f)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(f), prefix=".phase-")   # O_EXCL: never an existing file or link
+    with os.fdopen(fd, "w", encoding="utf-8") as h:
         h.write(body)
+    os.chmod(tmp, 0o644)
     os.replace(tmp, f)
 
 
@@ -1067,10 +1070,16 @@ def _phase(self):
     if phase not in PHASES:
         return self.deny(400, "Unknown phase.")
     if src == "state" and isinstance(key, str) and key in [find_root(r) for r in self.roots() if os.path.isdir(r)]:
-        set_phase("state", key, phase)
+        try:
+            set_phase("state", key, phase)
+        except OSError as x:
+            return self.deny(409, "Could not save the phase: %s" % x)
     elif (src == "board" and isinstance(key, list) and len(key) == 2 and key[0] in self.boards()
           and isinstance(key[1], str) and 0 < len(key[1]) <= 120 and not re.search(r"[|\n\r]", key[1])):
-        set_phase("board", key, phase)
+        try:
+            set_phase("board", key, phase)
+        except OSError as x:
+            return self.deny(409, "Could not save the phase: %s" % x)
     else:
         return self.deny(403, "That project is not on this panel. Reload it.")
     self.reply("text/plain; charset=utf-8", b"saved")
