@@ -106,7 +106,15 @@ claude plugin install chief-of-staff@chief-of-staff
 
 The repository is public, so installing needs no GitHub account or access. Inside Claude Code,
 `/plugin marketplace add pwsaragossy/chief-of-staff` and `/plugin install chief-of-staff@chief-of-staff`
-do the same. Update later with `claude plugin marketplace update chief-of-staff`.
+do the same. Update later with both commands, then restart Claude Code (the first only refreshes the
+marketplace; the installed copy stays on its old version until the second):
+
+```sh
+claude plugin marketplace update chief-of-staff
+claude plugin update chief-of-staff@chief-of-staff
+```
+
+With a local marketplace (a clone added by path), run `git pull` in the clone first.
 
 Then open Claude Code in any folder and run `/chief-of-staff:setup`. It looks at your computer first,
 asks one question: where the company library goes (your Obsidian vault, iCloud Drive, Dropbox, Google
@@ -126,6 +134,22 @@ The plugin's data folder keeps `projects` (one registered folder per line) and `
 path). The older workspace layout (`central/`, `projects/<slug>/`) was removed in 0.12.0: the briefing of
 such a folder says so, and `/chief-of-staff:new-project` in each project's own folder starts it again
 (copy its STATE.md, TRACK.md and board card across).
+
+## Upgrading from 0.5 to 0.11
+
+Update as in [Install](#install), then:
+
+- **Old workspace layout.** A workspace of the layout removed in 0.12.0 (`central/`, `projects/<slug>/`)
+  is no longer read: its briefing says so in one line, and `project.sh` refuses to register it. For
+  each project, open its own folder, run `/chief-of-staff:new-project`, and copy across its `STATE.md`,
+  `TRACK.md` and board cards.
+- **Library.** `/chief-of-staff:setup` asks for one library. Point it at your existing library folder
+  (the one with `.library-id` and `notes/`): it is kept as it is.
+- **Team sync.** Shared projects, team libraries and their commands were removed in 0.12.0 (`setup.sh create`/`join`, `sync.sh`, `library.sh join`/`leave`/`use`).
+  A folder that was shared says so once in its briefing, and nothing is sent to or pulled from the team.
+  If your team still works that way, stay on 0.11.5 (commit `27a3db1`) until the team plugin ships.
+- **Rollback.** Install 0.11.5, or restore single files with `git checkout 7f56dbf -- <path>` (as in the
+  0.12.0 release notes).
 
 ## Upgrading from 0.4.x
 
