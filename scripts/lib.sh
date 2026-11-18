@@ -129,7 +129,7 @@ cos_libpath() {
   printf '%s\n' "$_l"
   [ -f "$_l/.library-id" ] && [ -d "$_l/notes" ] || return 2
 }
-# cos_cfg ROOT -> one checksum of the project's settings (the marker: pace:, rotate_tokens:); recorded at the first
+# cos_cfg ROOT -> one checksum of the project's settings (the marker: pace:); recorded at the first
 # turn and by project.sh init/trust, so a change made any other way shows at the turn end
 cos_cfg() { cat "$1/.chief-of-staff" 2>/dev/null | cksum | tr -d ' \t'; }
 cos_cfgrec() { printf '%s/cos-cfg-%s' "${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"; }

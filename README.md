@@ -44,7 +44,8 @@ What it gives you:
   is saved (format, sources for its confidence, no secrets, no hidden text, third-party text fenced as
   data). When a new note meets a similar one it must say how: the worse is retired, the two are
   merged, or they coexist as valid options. Every prompt brings the notes that bear on it, briefs
-  carry a `Library:` line, web search waits for a library search, and DELIVERY.md cites its sources.
+  carry a `Library:` line, web research is reminded once per turn to search and save to the library
+  (never blocked), and DELIVERY.md cites its sources.
   The library can live on an external disk, a cloud folder or a private repo (`project.sh library <folder>`).
 - **Team sync is a separate plugin.** chief-of-staff works for one owner. Team sync left in 0.12.0 and will
   come back as its own plugin; 0.11.5 still has the old shared workspace.
@@ -222,8 +223,8 @@ the same stage shows as "↳ id", and pointing at an item outlines what it needs
 Every hook does nothing outside a project folder, so the plugin does not affect your other projects.
 Opt-in for the rest of your folders: list them in `everywhere` inside the plugin's data folder
 (`~/.claude/plugins/data/chief-of-staff-chief-of-staff/everywhere`, one absolute path per line, `/` for all).
-There the specialists and ambition gate runs with the plugin's own role cards; no library, board, track or
-rotation, and turns are logged to `protocol.log` in the same data folder.
+There the specialists and ambition gate runs with the plugin's own role cards; no library, board or
+track, and turns are logged to `protocol.log` in the same data folder.
 A second opt-in, `knowledge-mcp` in the same data folder, holds the path of a knowledge-mcp `server.py`: at each new
 session, in any folder, the briefing lists the knowledge bases its `discover` found and never offered, and the session
 asks the owner once which to add (each answer is recorded by its id, a no too, and never asked again). Each base is
@@ -246,12 +247,12 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
   turn that only edits a file this session already put through specialists and the reviewer is not a new deliverable
   (a Write, or an edit of DECISIONS.md, still is); a .md inside a code repository (git plus a build or test
   manifest at its top: a skill, a template, docs/) is code, not a deliverable, except its README and DECISIONS.md; a specialist cannot finish without its never-skip checklist and its
-  `## Versions` with the judge's evidence, and its brief needs a `Library:` line; web search waits for a library search
-  (`scripts/library.sh search`); a note is checked on save and at the end of the turn (links,
+  `## Versions` with the judge's evidence, and its brief needs a `Library:` line; web research gets one reminder per turn to search
+  the library (`scripts/library.sh search`) and save what it found, never a block; a note is checked on save and at the end of the turn (links,
   `Compared:`, retirements, notes written by shell commands too); agents cannot edit the project's
   marker;
-  a substantive turn (a deliverable file, web research, or a long answer) cannot end without a
-  specialist and the reviewer, nor research end without a saved note. Each push happens once per
+  a substantive turn (a deliverable file or a long answer) cannot end without a
+  specialist and the reviewer; research alone is not substantive. Each push happens once per
   turn. Every turn is logged to `<project>/.protocol.log`, the adherence record.
 - The same Stop hook runs `scripts/track.sh check` in a project session: a stage below `stage:` with
   an open item, an item marked done whose proof file does not exist or whose prerequisites are
@@ -328,7 +329,7 @@ What is ours, with no equivalent found in ECC:
   `CLAUDE.md` rules are what prevent it.
 - The ask guard has been tested by script, not yet in an interactive session.
 - The reviewer is the same model with a different brief. It catches incoherence, not authority.
-- "Substantive" is a heuristic (deliverable file, web research, or an answer over 6000 characters,
+- "Substantive" is a heuristic (deliverable file or an answer over 6000 characters,
   measured on the answer itself). Until v0.4.7 it was the whole hook input over 2500 bytes, which a
   2-3 KB status report crossed and forced specialists on every turn. A short answer to a real decision
   is not forced through specialists.

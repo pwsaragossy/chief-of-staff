@@ -123,7 +123,6 @@ check "the full protocol asks for the owner's words in every brief" 'rm -f "$CLA
 check "after a compaction the next prompt gets the full protocol again" 'printf "{\"session_id\":\"s1\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh" >/dev/null; h "$(ev UserPromptSubmit ",\"prompt\":\"hi\"")" "$P" | grep -q "the independent reviewer, as subagents"'
 check "a resumed session is not told to write a new arrival synthesis; a new one is" 'o=$(printf "{\"session_id\":\"s9\",\"source\":\"resume\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh"); ! printf "%s" "$o" | grep -q "arrival synthesis in STATE.md is written" && printf "%s" "$o" | grep -q "Resumed session: if STATE.md already holds your arrival synthesis, do not write it again" && printf "{\"session_id\":\"s9\",\"source\":\"startup\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh" | grep -q "arrival synthesis in STATE.md is written"'
 check "a compacted session gets its turn record, not a new arrival synthesis" 'o=$(printf "{\"session_id\":\"s1\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$P" sh "$here/briefing.sh"); printf "%s" "$o" | grep -q "Resumed after a compaction, same turn: .* 0 specialist" && ! printf "%s" "$o" | grep -q "arrival synthesis in STATE.md is written"'
-rm -f "$CLAUDE_PLUGIN_DATA/turns/s1.compacted"   # those compactions would make every later s1 turn rotate (tested below)
 long() { awk -v n="$1" 'BEGIN { while (n-- > 0) printf "a" }'; }
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
 check "a 3,000-character status answer is not substantive, a 7,000-character one is" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false,\"last_assistant_message\":\"$(long 3000)\"")" "$P")" = 0 ] && [ "$(rc "$(ev Stop ",\"stop_hook_active\":false,\"last_assistant_message\":\"$(long 7000)\"")" "$P")" = 2 ]'
@@ -132,17 +131,20 @@ check "a Read outside the library is silent and records nothing; one inside mark
 check "the note id cache follows notes added and removed" '( . "$here/lib.sh"; cos_ids "$W/knowledge" | grep -qx n1 && : > "$W/knowledge/notes/zz-new.md" && cos_ids "$W/knowledge" | grep -qx zz-new && rm "$W/knowledge/notes/zz-new.md" && ! cos_ids "$W/knowledge" | grep -qx zz-new )'
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
 check "a short turn ends freely" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
-check "web search is blocked before the library" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
+check "web search is never held back, even before the library" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 0 ]'
 h "$(ev PostToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh /x/library.sh search tax\"}")" "$P"
 check "web search is allowed after the library" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 0 ]'
-h "$(ev PostToolUse ",\"tool_name\":\"WebSearch\"")" "$P"
-check "research without specialists or saving cannot end" 'h "$(ev Stop ",\"stop_hook_active\":false")" "$P" 2>&1 | grep -q "specialists skill" && h "$(ev Stop ",\"stop_hook_active\":false")" "$P" 2>&1 | grep -q "saved nothing to the library"'
+check "web research gets one reminder per turn to save to the library, never a block" 'o=$(h "$(ev PostToolUse ",\"tool_name\":\"WebSearch\"")" "$P") && printf "%s" "$o" | grep -q "additionalContext\":\"chief-of-staff: this turn researched the web. Save each new finding" && [ -z "$(h "$(ev PostToolUse ",\"tool_name\":\"WebFetch\"")" "$P")" ]'
+check "research alone ends freely: no specialists, no saved note" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
 check "the gate lets go on the second stop" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":true")" "$P")" = 0 ]'
+h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/brief.md\"}")" "$P"   # a deliverable: research alone no longer makes the turn substantive
 h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher ...\"}")" "$P"
 check "a specialist without the reviewer cannot end" 'h "$(ev Stop ",\"stop_hook_active\":false")" "$P" 2>&1 | grep -q "1 specialist(s) and 0 reviewer(s)"'
 h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: reviewer ...\"}")" "$P"
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/knowledge/notes/n9.md\"}")" "$P"
 check "specialists plus a saved note end freely" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
+h "$(ev UserPromptSubmit)" "$P" >/dev/null
+check "research before any library search is reminded to search it first" 'h "$(ev PostToolUse ",\"tool_name\":\"WebSearch\"")" "$P" | grep -q "Search the library for what the company already knows"'
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/pitch.md\"}")" "$P"
 check "a deliverable without specialists cannot end" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
@@ -389,7 +391,7 @@ check "the prompt hook brings the notes that bear on the request, with their cla
 check "a library marked slow skips the unasked lookup and says how to search" '( . "$here/lib.sh"; s=$(cos_cache slow "$W/knowledge"); mkdir -p "${s%/*}"; sleep 1; : > "$s" ); o=$(h "$(ev UserPromptSubmit ",\"prompt\":\"what is the tax rate on services?\"")" "$P"); rm -f "$CLAUDE_PLUGIN_DATA"/slow-*; printf "%s" "$o" | grep -q "Library lookup skipped"'
 fm_set "$N/tax-2.md" confidence low
 check "a short prompt brings no library noise" '! h "$(ev UserPromptSubmit ",\"prompt\":\"ok\"")" "$P" | grep -q "Library notes"'
-check "the prompt search does not count as searching" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
+check "the prompt search does not count as searching" 'h "$(ev PostToolUse ",\"tool_name\":\"WebSearch\"")" "$P" | grep -q "Search the library for what the company already knows"'
 check "a brief without its Library: line is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher\"}")" "$P")" = 2 ]'
 check "a brief with its Library: line is allowed" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher Library: [[tax-2]] Ambition: answer many lookups fast, not one | judge: sh check.sh under 3 s\"}")" "$P")" = 0 ]'
 check "ambition: a specialist brief without its Ambition: line is blocked, and says how to fix it" 'h "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher Library: [[tax-2]]\"}")" "$P" 2>&1 | grep -q "Ambition:" && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher Library: [[tax-2]]\"}")" "$P")" = 2 ]'
@@ -445,16 +447,16 @@ check "writing the marker with dd is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool
 # offline: the library setting (<plugin data>/library) points at a missing disk, or at a folder that is not a library
 setlib() { chmod u+w "$CLAUDE_PLUGIN_DATA/library"; printf '%s\n' "$1" > "$CLAUDE_PLUGIN_DATA/library"; chmod 444 "$CLAUDE_PLUGIN_DATA/library"; }
 setlib "$W/library-deleted"
-check "a library deleted from a folder that is still there is broken, not offline" '! L where | grep -q "Library offline" && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
+check "a library deleted from a folder that is still there is broken, not offline" '! L where | grep -q "Library offline"'
 setlib "/Volumes/cos-selftest-no-disk/knowledge"
 check "an unplugged library is reported, not fatal" 'L search tax | grep -q "Library offline"'
 turn >/dev/null
-check "web research goes on while the library is offline" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 0 ]'
+check "web research goes on while the library is offline, with no library reminder" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 0 ] && [ -z "$(h "$(ev PostToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" ]'
 stop >/dev/null
 check "an offline turn is logged" 'tail -n 1 "$W/.protocol.log" | grep -q "offline=1"'
 mkdir -p "$W/emptymount/notes"; setlib "$W/emptymount"
 check "a folder without .library-id is an error, not a library" 'L search tax | grep -q "has no .library-id"'
-check "a broken library does not free web research" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
+check "a broken library does not hold back web research" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 0 ]'
 check "agents cannot delete the library id file" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm /lib/.library-id\"}")" "$P")" = 2 ]'
 check "agents cannot rewrite the library setting" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo /x > ~/.claude/plugins/data/chief-of-staff/library\"}")" "$P")" = 2 ]'
 setlib "$W/knowledge"
@@ -985,35 +987,22 @@ check "quoted globs, built braces, git -c and find -delete still block" '( for c
 check "a script called with a list of words (python subprocess) still asks, and blocks in a project" '( for c in "python3 -c \"import subprocess; subprocess.run(['"'"'sh'"'"','"'"'/x/track.sh'"'"','"'"'ok'"'"','"'"'t1'"'"'])\"" "python3 -c \"import subprocess; subprocess.run(['"'"'sh'"'"','"'"'/x/track.sh'"'"','"'"'ok'"'"','"'"'p'"'"'])\"" "grep --filter=\"*:node -e spawn(sh,[/x/track.sh,ok])\" y z" "grep x \$(python3 -c \"subprocess.run(['"'"'sh'"'"','"'"'/x/track.sh'"'"','"'"'ok'"'"'])\")"; do asks "$c" || { echo "no ask: $c"; exit 1; }; done ) && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":$(JQ "python3 -c \"import subprocess; subprocess.run(['"'"'sh'"'"','"'"'/x/track.sh'"'"','"'"'ok'"'"','"'"'p'"'"'])\"")")" "$OP/sub")" = 2 ]'
 check "a broken pattern in the guard fails closed" 'grep -q "\[ \$? != 1 \]" "$here/protocol.sh"'
 
-# rotation: a long or compacted conversation writes its state before the turn ends
+# no rotation: a long or compacted conversation ends its turn like any other (the owner works in one session)
 RP="$T/rot"; mkdir -p "$RP"; sh "$here/project.sh" init "$RP" >/dev/null; sed -e "s/{{PROJECT_NAME}}/rot/" -e "s/{{DATE}}/2026-01-01/" -e "s/{{NEXT_ACTION}}/x/" "$here/../templates/project/STATE.md" > "$RP/STATE.md"
 RT="$W/rot.jsonl"; tok() { printf '{"type":"assistant","message":{"usage":{"input_tokens":2,"cache_creation_input_tokens":1000,"cache_read_input_tokens":%s,"output_tokens":5}}}\n' "$1" >> "$RT"; }
 rs() { printf '{"session_id":"%s","hook_event_name":"Stop","stop_hook_active":false,"transcript_path":"%s"}' "$1" "$RT" | CLAUDE_PROJECT_DIR="$2" sh "$here/protocol.sh" 2>&1; }
 rc1() { rs "$@" >/dev/null; echo $?; }   # one turn end, its exit code
 rsc() { rs "$@" >/dev/null; printf '{"session_id":"%s","hook_event_name":"Stop","stop_hook_active":false,"transcript_path":"%s"}' "$1" "$RT" | CLAUDE_PROJECT_DIR="$2" sh "$here/protocol.sh" >/dev/null 2>&1; echo $?; }
-tok 50000
-check "rotation: a short conversation ends freely" '[ "$(rsc r1 "$RP")" = 0 ]'
 tok 150000
-check "rotation: past 140k tokens the turn end asks for the handoff" '[ "$(rc1 r0 "$RP")" = 2 ] && rs r1 "$RP" | grep -q "Rotation: this conversation is long (151002 tokens"'
-check "rotation: once STATE.md is newer, the turn ends, and the same size does not ask again" 'sleep 1; touch "$RP/STATE.md"; [ "$(rsc r1 "$RP")" = 0 ] && [ "$(rsc r1 "$RP")" = 0 ]'
-tok 195000
-check "rotation: 40k tokens later it is due again" '[ "$(rc1 r1 "$RP")" = 2 ]'
-check "rotation: a subagent.s usage is not the conversation.s size" 'printf "{\"type\":\"user\",\"toolUseResult\":{\"usage\":{\"input_tokens\":1,\"cache_read_input_tokens\":10}}}\n" >> "$RT"; rs r4 "$RP" | grep -q "(196002 tokens"'
-check "rotation: a handoff written earlier in the same turn counts" '( printf "{\"session_id\":\"r5\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"x\"}" | CLAUDE_PROJECT_DIR="$RP" sh "$here/protocol.sh" >/dev/null 2>&1; sleep 1; touch "$RP/STATE.md"; sleep 1; [ "$(rsc r5 "$RP")" = 0 ] )'
-RW="$T/rotws"; mkdir -p "$RW"; sh "$here/project.sh" init "$RW" >/dev/null; cp "$RP/STATE.md" "$RW/STATE.md"
-check "rotation: rotate_tokens in the marker sets the limit" ': > "$RT"; tok 60000; [ "$(rsc r2 "$RW")" = 0 ] && chmod u+w "$RW/.chief-of-staff" && printf "rotate_tokens: 50000\n" >> "$RW/.chief-of-staff" && [ "$(rc1 r2 "$RW")" = 2 ]'
-check "rotation: a compaction makes it due at any size" ': > "$RT"; tok 10000; printf "{\"session_id\":\"r3\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$RP" sh "$here/briefing.sh" >/dev/null; rs r3 "$RP" | grep -q "or was compacted" && sleep 1 && touch "$RP/STATE.md" && [ "$(rsc r3 "$RP")" = 0 ] && [ ! -e "$CLAUDE_PLUGIN_DATA/turns/r3.compacted" ]'
-# delivered once and ignored by a turn with nothing to hand off: quiet until 40k tokens more, not at every turn end
-check "rotation: told once, a later turn of the same size ends freely; 40k tokens later it asks again" ': > "$RT"; tok 150000; [ "$(rc1 r8 "$RP")" = 2 ] && [ "$(rc1 r8 "$RP")" = 0 ] && [ "$(rc1 r8 "$RP")" = 0 ] && tok 190000 && [ "$(rc1 r8 "$RP")" = 2 ]'
-# a session in a git worktree of the project (the marker is not in git, so the hooks find the main folder): its
-# handoff writes the worktree's STATE.md, and that is the one the rotation reads
+check "a conversation past 150k tokens ends its turn freely" '[ "$(rc1 r0 "$RP")" = 0 ] && ! rs r0 "$RP" | grep -q "Rotation"'
+check "a compacted conversation ends its turn freely" 'printf "{\"session_id\":\"r3\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$RP" sh "$here/briefing.sh" >/dev/null; [ "$(rc1 r3 "$RP")" = 0 ] && [ ! -e "$CLAUDE_PLUGIN_DATA/turns/r3.compacted" ]'
+# a session in a git worktree of the project (the marker is not in git, so the hooks find the main folder) reads
+# the worktree's STATE.md, where its handoff writes
 RG="$T/rotgit"; RGW="$RG/.claude/worktrees/w"; mkdir -p "$RG"; sh "$here/project.sh" init "$RG" >/dev/null; cp "$RP/STATE.md" "$RG/STATE.md"
 printf '.chief-of-staff\n.claude/\n' > "$RG/.gitignore"
 { git -C "$RG" init -q && git -C "$RG" add STATE.md .gitignore && git -C "$RG" -c user.name=t -c user.email=t@t commit -qm x && git -C "$RG" worktree add -q "$RGW"; } >/dev/null 2>&1
-check "rotation: in a worktree of the project it asks for the worktree's STATE.md" ': > "$RT"; tok 150000; [ -f "$RGW/STATE.md" ] && [ ! -f "$RGW/.chief-of-staff" ] && rs r6 "$RG/.claude/worktrees/w" | grep -q "write .claude/worktrees/w/STATE.md"'
-check "rotation: a handoff written in the worktree silences it" '( printf "{\"session_id\":\"r7\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"x\"}" | CLAUDE_PROJECT_DIR="$RGW" sh "$here/protocol.sh" >/dev/null 2>&1; sleep 1; touch "$RGW/STATE.md"; sleep 1; [ "$(rc1 r7 "$RGW")" = 0 ] && [ -s "$CLAUDE_PLUGIN_DATA/turns/r7.rotated" ] )'
-check "rotation: the briefing in a worktree reads the worktree's STATE.md" 'fm_set "$RGW/STATE.md" next "worktree next"; b "$RGW" | grep -q "Next action recorded: worktree next"'
-rm -rf "$RP" "$RT" "$RW" "$RG"
+check "the briefing in a worktree reads the worktree's STATE.md" 'fm_set "$RGW/STATE.md" next "worktree next"; b "$RGW" | grep -q "Next action recorded: worktree next"'
+rm -rf "$RP" "$RT" "$RG"
 
 # everywhere: the owner's work runs in folders outside any workspace (a repo, ~/brain, a scratch folder), where the
 # hooks were silent, so no specialist was ever asked for. With the opt-in file the specialists gate runs there too,
@@ -1094,7 +1083,7 @@ check "pf: recording the OK asks the owner at the root and is blocked anywhere e
 check "pf: the project list and the library setting cannot be written by a session" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$REG\"}")" "$PB")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$CLAUDE_PLUGIN_DATA/library\"}")" "$PB")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo /x >> ~/.claude/plugins/data/chief-of-staff-chief-of-staff/projects\"}")" "$PB")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat ~/.claude/plugins/data/chief-of-staff-chief-of-staff/projects\"}")" "$PB")" = 0 ]'
 check "pf: the board list the global panel reads cannot be written by a session (it would join or hide whole boards)" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$CLAUDE_PLUGIN_DATA/boards\"}")" "$PB")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"/Users/x/.claude/plugins/data/chief-of-staff-chief-of-staff/boards\"}")" "$PB")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo /x >> ~/.claude/plugins/data/chief-of-staff-chief-of-staff/boards\"}")" "$PB")" = 2 ]'
 check "pf: registering a folder or setting the library through Bash asks the owner, in any spelling" 'k=0; for c in "sh $here/project.sh init /x" "sh $here/project.sh library /l" "sh project.sh \$cmd /x" "echo init | xargs sh project.sh"; do h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$c\"}")" "$PB/src" | grep -q "permissionDecision\":\"ask" || k=1; done; [ $k = 0 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $here/project.sh list\"}")" "$PB/src")" = 0 ]'
-# the track gate and the rotation read the project folder itself
+# the track gate reads the project folder itself
 sed -i.bak 's/^- \[ \] review-1 /- [x] review-1 /; s/| needs: scope | evidence:$/| needs: scope | evidence: nope.md/' "$PB/TRACK.md"
 check "pf: the turn end checks the project's own TRACK.md" 'hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$PB" >/dev/null; hk "$(ev Stop ",\"stop_hook_active\":false")" "$PB" 2>&1 | grep -q "Track gate"'
 check "pf: TRACK.md and DELIVERY.md of the project are control files, not deliverables" 'hk "$(ev UserPromptSubmit ",\"prompt\":\"go\"")" "$PB" >/dev/null; hk "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$PB/DELIVERY.md\"}")" "$PB" >/dev/null 2>&1; [ ! -f "$CLAUDE_PLUGIN_DATA/turns/s1/deliverable" ]'
