@@ -131,17 +131,20 @@ check "a Read outside the library is silent and records nothing; one inside mark
 check "the note id cache follows notes added and removed" '( . "$here/lib.sh"; cos_ids "$W/knowledge" | grep -qx n1 && : > "$W/knowledge/notes/zz-new.md" && cos_ids "$W/knowledge" | grep -qx zz-new && rm "$W/knowledge/notes/zz-new.md" && ! cos_ids "$W/knowledge" | grep -qx zz-new )'
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
 check "a short turn ends freely" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
-check "web search is blocked before the library" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
+check "web search is never held back, even before the library" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 0 ]'
 h "$(ev PostToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh /x/library.sh search tax\"}")" "$P"
 check "web search is allowed after the library" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 0 ]'
-h "$(ev PostToolUse ",\"tool_name\":\"WebSearch\"")" "$P"
-check "research without specialists or saving cannot end" 'h "$(ev Stop ",\"stop_hook_active\":false")" "$P" 2>&1 | grep -q "specialists skill" && h "$(ev Stop ",\"stop_hook_active\":false")" "$P" 2>&1 | grep -q "saved nothing to the library"'
+check "web research gets one reminder per turn to save to the library, never a block" 'o=$(h "$(ev PostToolUse ",\"tool_name\":\"WebSearch\"")" "$P") && printf "%s" "$o" | grep -q "additionalContext\":\"chief-of-staff: this turn researched the web. Save each new finding" && [ -z "$(h "$(ev PostToolUse ",\"tool_name\":\"WebFetch\"")" "$P")" ]'
+check "research alone ends freely: no specialists, no saved note" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
 check "the gate lets go on the second stop" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":true")" "$P")" = 0 ]'
+h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/brief.md\"}")" "$P"   # a deliverable: research alone no longer makes the turn substantive
 h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher ...\"}")" "$P"
 check "a specialist without the reviewer cannot end" 'h "$(ev Stop ",\"stop_hook_active\":false")" "$P" 2>&1 | grep -q "1 specialist(s) and 0 reviewer(s)"'
 h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: reviewer ...\"}")" "$P"
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$W/knowledge/notes/n9.md\"}")" "$P"
 check "specialists plus a saved note end freely" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 0 ]'
+h "$(ev UserPromptSubmit)" "$P" >/dev/null
+check "research before any library search is reminded to search it first" 'h "$(ev PostToolUse ",\"tool_name\":\"WebSearch\"")" "$P" | grep -q "Search the library for what the company already knows"'
 h "$(ev UserPromptSubmit)" "$P" >/dev/null
 h "$(ev PostToolUse ",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$P/pitch.md\"}")" "$P"
 check "a deliverable without specialists cannot end" '[ "$(rc "$(ev Stop ",\"stop_hook_active\":false")" "$P")" = 2 ]'
@@ -388,7 +391,7 @@ check "the prompt hook brings the notes that bear on the request, with their cla
 check "a library marked slow skips the unasked lookup and says how to search" '( . "$here/lib.sh"; s=$(cos_cache slow "$W/knowledge"); mkdir -p "${s%/*}"; sleep 1; : > "$s" ); o=$(h "$(ev UserPromptSubmit ",\"prompt\":\"what is the tax rate on services?\"")" "$P"); rm -f "$CLAUDE_PLUGIN_DATA"/slow-*; printf "%s" "$o" | grep -q "Library lookup skipped"'
 fm_set "$N/tax-2.md" confidence low
 check "a short prompt brings no library noise" '! h "$(ev UserPromptSubmit ",\"prompt\":\"ok\"")" "$P" | grep -q "Library notes"'
-check "the prompt search does not count as searching" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
+check "the prompt search does not count as searching" 'h "$(ev PostToolUse ",\"tool_name\":\"WebSearch\"")" "$P" | grep -q "Search the library for what the company already knows"'
 check "a brief without its Library: line is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher\"}")" "$P")" = 2 ]'
 check "a brief with its Library: line is allowed" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher Library: [[tax-2]] Ambition: answer many lookups fast, not one | judge: sh check.sh under 3 s\"}")" "$P")" = 0 ]'
 check "ambition: a specialist brief without its Ambition: line is blocked, and says how to fix it" 'h "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher Library: [[tax-2]]\"}")" "$P" 2>&1 | grep -q "Ambition:" && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: researcher Library: [[tax-2]]\"}")" "$P")" = 2 ]'
@@ -444,16 +447,16 @@ check "writing the marker with dd is blocked" '[ "$(rc "$(ev PreToolUse ",\"tool
 # offline: the library setting (<plugin data>/library) points at a missing disk, or at a folder that is not a library
 setlib() { chmod u+w "$CLAUDE_PLUGIN_DATA/library"; printf '%s\n' "$1" > "$CLAUDE_PLUGIN_DATA/library"; chmod 444 "$CLAUDE_PLUGIN_DATA/library"; }
 setlib "$W/library-deleted"
-check "a library deleted from a folder that is still there is broken, not offline" '! L where | grep -q "Library offline" && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
+check "a library deleted from a folder that is still there is broken, not offline" '! L where | grep -q "Library offline"'
 setlib "/Volumes/cos-selftest-no-disk/knowledge"
 check "an unplugged library is reported, not fatal" 'L search tax | grep -q "Library offline"'
 turn >/dev/null
-check "web research goes on while the library is offline" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 0 ]'
+check "web research goes on while the library is offline, with no library reminder" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 0 ] && [ -z "$(h "$(ev PostToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" ]'
 stop >/dev/null
 check "an offline turn is logged" 'tail -n 1 "$W/.protocol.log" | grep -q "offline=1"'
 mkdir -p "$W/emptymount/notes"; setlib "$W/emptymount"
 check "a folder without .library-id is an error, not a library" 'L search tax | grep -q "has no .library-id"'
-check "a broken library does not free web research" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 2 ]'
+check "a broken library does not hold back web research" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"WebSearch\"")" "$P")" = 0 ]'
 check "agents cannot delete the library id file" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm /lib/.library-id\"}")" "$P")" = 2 ]'
 check "agents cannot rewrite the library setting" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo /x > ~/.claude/plugins/data/chief-of-staff/library\"}")" "$P")" = 2 ]'
 setlib "$W/knowledge"
