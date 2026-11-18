@@ -10,7 +10,7 @@
 #                     (track.sh check). One push per turn (stop_hook_active), then it lets go and logs a violation.
 # Silent outside a workspace, unless the owner listed the folder in <plugin data>/everywhere (one absolute path per
 # line, / for all): there the specialists gate runs with the plugin's own role cards (templates/specialists), and
-# nothing of a workspace (library, board, track, rotation) is read or written. Every turn is logged to
+# nothing of a workspace (library, board, track) is read or written. Every turn is logged to
 # <workspace>/.protocol.log, or <plugin data>/protocol.log outside one (the adherence metric).
 . "$(dirname "$0")/lib.sh"
 
@@ -515,29 +515,6 @@ Fix each note (format: $lib/templates/note.md). When a new note is better than a
     [ -n "$gaps" ] && reason="${reason:+$reason }Track gate (${pdir#"$root/"}/TRACK.md) not met:
 $gaps
 Close each item with its proof file (evidence: path relative to the project folder), mark it [-] with why: when it does not apply, or move stage: back. A stage passes only when every item is closed."
-    # Rotation: a conversation past rotate_tokens of context (the last usage the transcript records), or one Claude
-    # Code compacted, has lost or is about to lose detail. Due from then until the project's STATE.md (the worktree's,
-    # in a worktree) is written again, but said once: a turn that ignores it is not told again until 40k tokens later
-    # (it was pushed at every turn end, forever, in a worktree whose handoffs the check did not see). Subagents start
-    # clean: not here.
-    # The STATE.md is the one the session's handoff writes: in a git worktree of the project (where the untracked
-    # marker is not, so root is the main folder) the worktree's. The track gate and the decisions stay on the main
-    # folder: the owner's approvals are never in git, so a worktree has none
-    sf=; rotnag=; [ -n "$project" ] && { cos_workdir "$root" "${CLAUDE_PROJECT_DIR:-$PWD}"; sf=$wd/STATE.md; }
-    if [ -n "$sf" ]; then
-      tp=$(jget transcript_path); tok=0
-      [ -f "$tp" ] && tok=$(tail -c 400000 "$tp" | grep '"type":"assistant"' | grep -v '"isSidechain":true' | grep -o '"usage":{[^}]*}' | tail -n 1 | LC_ALL=C awk -F '[:,}]' '{ for (i = 1; i < NF; i++) if ($i ~ /"(input_tokens|cache_creation_input_tokens|cache_read_input_tokens)"$/) n += $(i + 1) } END { print n + 0 }')
-      lim=$(sed -n 's/^rotate_tokens: *\([0-9][0-9]*\)$/\1/p' "$root/.chief-of-staff" 2>/dev/null | head -n 1); lim=${lim:-140000}
-      last=$(cat "$st.rotated" 2>/dev/null | tr -cd 0-9); [ -n "$last" ] && [ "$tok" -lt "$last" ] && last=   # compacted since: count afresh
-      [ ! -f "$st.rotate" ] && { [ -f "$st.compacted" ] || { [ "$tok" -ge "$lim" ] && { [ -z "$last" ] || [ "$tok" -ge $((last + 40000)) ]; }; }; } &&
-        { : > "$st.rotate"; [ -f "$st/start" ] && touch -r "$st/start" "$st.rotate"; }   # due from the turn's start: a handoff written in this turn counts
-      if [ -f "$st.rotate" ] && [ -f "$sf" ] && [ "$sf" -nt "$st.rotate" ]; then
-        echo "$tok" > "$st.rotated"; rm -f "$st.rotate" "$st.compacted"
-      elif [ -f "$st.rotate" ]; then
-        rel_sf=${sf#"$root/"}; rotnag=$tok
-        reason="${reason:+$reason }Rotation: this conversation is long ($tok tokens of context, limit $lim) or was compacted, so its detail is being lost. Run the handoff skill now: write $rel_sf as the snapshot of now (what is in flight, what was promised, the sessions started, the next action). Then end the answer saying the work continues in a new session in this folder; a thread writes that on its card for the coordinator, and the dispatcher starts it when dispatch: ready."
-      fi
-    fi
     pushed=$(jget stop_hook_active)
     violation=0; [ "$pushed" = true ] && [ -n "$reason" ] && violation=1
     [ -n "$lslow" ] && reason="${reason:+$reason }Not checked this turn (slow disk):
@@ -548,8 +525,6 @@ $lslow"
       "$(printf '%s' "$gaps" | grep -c .)" "${pushed:-false}" "$violation" "$(printf '%s' "$lgaps" | grep -c .)" "$([ $lst = 0 ] && echo 0 || echo 1)" "$(count rejected)" "$(printf '%s' "$lslow" | grep -c .)" >> "$([ -n "$lite" ] && echo "$DATA/protocol.log" || echo "$root/.protocol.log")"
     [ "$pushed" = true ] && exit 0
     [ -n "$reason" ] || exit 0
-    # the rotation is told now: due again only 40k tokens later, handoff or not
-    [ -n "${rotnag:-}" ] && { echo "$rotnag" > "$st.rotated"; rm -f "$st.rotate" "$st.compacted"; }
     echo "$reason" >&2
     exit 2
     ;;

@@ -222,8 +222,8 @@ the same stage shows as "↳ id", and pointing at an item outlines what it needs
 Every hook does nothing outside a project folder, so the plugin does not affect your other projects.
 Opt-in for the rest of your folders: list them in `everywhere` inside the plugin's data folder
 (`~/.claude/plugins/data/chief-of-staff-chief-of-staff/everywhere`, one absolute path per line, `/` for all).
-There the specialists and ambition gate runs with the plugin's own role cards; no library, board, track or
-rotation, and turns are logged to `protocol.log` in the same data folder.
+There the specialists and ambition gate runs with the plugin's own role cards; no library, board or
+track, and turns are logged to `protocol.log` in the same data folder.
 A second opt-in, `knowledge-mcp` in the same data folder, holds the path of a knowledge-mcp `server.py`: at each new
 session, in any folder, the briefing lists the knowledge bases its `discover` found and never offered, and the session
 asks the owner once which to add (each answer is recorded by its id, a no too, and never asked again). Each base is

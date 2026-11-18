@@ -37,8 +37,6 @@ src=$(printf '%s' "$in" | sed -n 's/.*"source" *: *"\([a-z]*\)".*/\1/p' | head -
 data=${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}
 # the next prompt gets the full protocol again: a new start or a compaction dropped it from the context
 [ -n "$sid" ] && mkdir -p "$data/turns" && : > "$data/turns/$sid.full"
-# a compaction lost detail: the turn end asks for the handoff (protocol.sh, rotation)
-[ -n "$sid" ] && [ "$src" = compact ] && : > "$data/turns/$sid.compacted"
 
 US=$(printf '\037'); RS=$(printf '\036')
 TAB=$(printf '\t'); here=$(cd "$(dirname "$0")" && pwd)

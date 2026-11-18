@@ -7,9 +7,7 @@ description: Close a session so the next one starts where this one stopped (I-PA
 
 The next session is a stranger with no memory of this one. Everything it needs is in files.
 
-Run it at the end of a session, and whenever the turn-end hook says the conversation must rotate (its
-context passed `rotate_tokens:` in `.chief-of-staff`, 140000 by default, or Claude Code compacted it). After
-a rotation, end the answer saying the work continues in a new session in this folder.
+Run it at the end of a session.
 
 1. **Update `STATE.md` as a snapshot of now**, not a diary (history lives in git):
    - front matter: `updated` (now, `YYYY-MM-DD HH:MM`: the panel times the handoff from it, not from
