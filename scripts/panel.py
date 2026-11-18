@@ -865,7 +865,7 @@ function render(){
   document.getElementById("overall").className="dot "+d.overall;
   document.getElementById("time").textContent="Updated "+d.time;
   const ws=document.getElementById("ws");
-  ws.textContent=d.workspace;
+  ws.textContent=d.overview?"All projects ("+d.projects.length+")":d.workspace;  // the global panel is not one folder
   const P=document.getElementById("projects");
   if(!d.projects.length)empty(P,"No projects yet. Run /chief-of-staff:new-project in a folder.");else P.replaceChildren(...d.projects.map(p=>{
     const row=el("div","row"),body=el("div","grow");row.append(el("span","dot "+p.color),body);

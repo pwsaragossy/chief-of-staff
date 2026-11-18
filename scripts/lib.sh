@@ -26,6 +26,15 @@ cos_root() {
   done
   return 1
 }
+# cos_workdir ROOT DIR -> sets wd: the git worktree of ROOT's repository that holds DIR (a session working in
+# ROOT/.claude/worktrees/x, where the untracked marker is not, so cos_root finds ROOT), else ROOT. That session's
+# handoffs write the worktree's STATE.md, so that is the one to read. No fork: runs in every hook call
+cos_workdir() { wd=$2
+  while [ -n "$wd" ] && [ "$wd" != "$1" ]; do
+    if [ -f "$wd/.git" ]; then IFS= read -r _g < "$wd/.git"
+      case $_g in "gitdir: $1/.git/worktrees/"*) return 0 ;; esac; fi
+    wd=${wd%/*}; done
+  wd=$1; }
 # cos_data -> the plugin's data folder: CLAUDE_PLUGIN_DATA in a hook; in a shell the model runs (where it is not set),
 # derived from where the plugin is installed (<claude>/plugins/cache/<marketplace>/<plugin>/<version>/scripts ->
 # <claude>/plugins/data/<plugin>-<marketplace>); else ~/.cache/chief-of-staff (a copy run from a checkout)

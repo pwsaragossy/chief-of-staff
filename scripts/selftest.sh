@@ -989,20 +989,31 @@ check "a broken pattern in the guard fails closed" 'grep -q "\[ \$? != 1 \]" "$h
 RP="$T/rot"; mkdir -p "$RP"; sh "$here/project.sh" init "$RP" >/dev/null; sed -e "s/{{PROJECT_NAME}}/rot/" -e "s/{{DATE}}/2026-01-01/" -e "s/{{NEXT_ACTION}}/x/" "$here/../templates/project/STATE.md" > "$RP/STATE.md"
 RT="$W/rot.jsonl"; tok() { printf '{"type":"assistant","message":{"usage":{"input_tokens":2,"cache_creation_input_tokens":1000,"cache_read_input_tokens":%s,"output_tokens":5}}}\n' "$1" >> "$RT"; }
 rs() { printf '{"session_id":"%s","hook_event_name":"Stop","stop_hook_active":false,"transcript_path":"%s"}' "$1" "$RT" | CLAUDE_PROJECT_DIR="$2" sh "$here/protocol.sh" 2>&1; }
+rc1() { rs "$@" >/dev/null; echo $?; }   # one turn end, its exit code
 rsc() { rs "$@" >/dev/null; printf '{"session_id":"%s","hook_event_name":"Stop","stop_hook_active":false,"transcript_path":"%s"}' "$1" "$RT" | CLAUDE_PROJECT_DIR="$2" sh "$here/protocol.sh" >/dev/null 2>&1; echo $?; }
 tok 50000
 check "rotation: a short conversation ends freely" '[ "$(rsc r1 "$RP")" = 0 ]'
 tok 150000
-check "rotation: past 140k tokens the turn cannot end until STATE.md is written" 'rs r1 "$RP" | grep -q "Rotation: this conversation is long (151002 tokens" && [ "$(rsc r1 "$RP")" = 2 ]'
+check "rotation: past 140k tokens the turn end asks for the handoff" '[ "$(rc1 r0 "$RP")" = 2 ] && rs r1 "$RP" | grep -q "Rotation: this conversation is long (151002 tokens"'
 check "rotation: once STATE.md is newer, the turn ends, and the same size does not ask again" 'sleep 1; touch "$RP/STATE.md"; [ "$(rsc r1 "$RP")" = 0 ] && [ "$(rsc r1 "$RP")" = 0 ]'
 tok 195000
-check "rotation: 40k tokens later it is due again" '[ "$(rsc r1 "$RP")" = 2 ]'
-check "rotation: a subagent.s usage is not the conversation.s size" 'printf "{\"type\":\"user\",\"toolUseResult\":{\"usage\":{\"input_tokens\":1,\"cache_read_input_tokens\":10}}}\n" >> "$RT"; rs r1 "$RP" | grep -q "(196002 tokens"'
+check "rotation: 40k tokens later it is due again" '[ "$(rc1 r1 "$RP")" = 2 ]'
+check "rotation: a subagent.s usage is not the conversation.s size" 'printf "{\"type\":\"user\",\"toolUseResult\":{\"usage\":{\"input_tokens\":1,\"cache_read_input_tokens\":10}}}\n" >> "$RT"; rs r4 "$RP" | grep -q "(196002 tokens"'
 check "rotation: a handoff written earlier in the same turn counts" '( printf "{\"session_id\":\"r5\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"x\"}" | CLAUDE_PROJECT_DIR="$RP" sh "$here/protocol.sh" >/dev/null 2>&1; sleep 1; touch "$RP/STATE.md"; sleep 1; [ "$(rsc r5 "$RP")" = 0 ] )'
 RW="$T/rotws"; mkdir -p "$RW"; sh "$here/project.sh" init "$RW" >/dev/null; cp "$RP/STATE.md" "$RW/STATE.md"
-check "rotation: rotate_tokens in the marker sets the limit" ': > "$RT"; tok 60000; [ "$(rsc r2 "$RW")" = 0 ] && chmod u+w "$RW/.chief-of-staff" && printf "rotate_tokens: 50000\n" >> "$RW/.chief-of-staff" && [ "$(rsc r2 "$RW")" = 2 ]'
+check "rotation: rotate_tokens in the marker sets the limit" ': > "$RT"; tok 60000; [ "$(rsc r2 "$RW")" = 0 ] && chmod u+w "$RW/.chief-of-staff" && printf "rotate_tokens: 50000\n" >> "$RW/.chief-of-staff" && [ "$(rc1 r2 "$RW")" = 2 ]'
 check "rotation: a compaction makes it due at any size" ': > "$RT"; tok 10000; printf "{\"session_id\":\"r3\",\"source\":\"compact\"}" | CLAUDE_PROJECT_DIR="$RP" sh "$here/briefing.sh" >/dev/null; rs r3 "$RP" | grep -q "or was compacted" && sleep 1 && touch "$RP/STATE.md" && [ "$(rsc r3 "$RP")" = 0 ] && [ ! -e "$CLAUDE_PLUGIN_DATA/turns/r3.compacted" ]'
-rm -rf "$RP" "$RT" "$RW"
+# delivered once and ignored by a turn with nothing to hand off: quiet until 40k tokens more, not at every turn end
+check "rotation: told once, a later turn of the same size ends freely; 40k tokens later it asks again" ': > "$RT"; tok 150000; [ "$(rc1 r8 "$RP")" = 2 ] && [ "$(rc1 r8 "$RP")" = 0 ] && [ "$(rc1 r8 "$RP")" = 0 ] && tok 190000 && [ "$(rc1 r8 "$RP")" = 2 ]'
+# a session in a git worktree of the project (the marker is not in git, so the hooks find the main folder): its
+# handoff writes the worktree's STATE.md, and that is the one the rotation reads
+RG="$T/rotgit"; RGW="$RG/.claude/worktrees/w"; mkdir -p "$RG"; sh "$here/project.sh" init "$RG" >/dev/null; cp "$RP/STATE.md" "$RG/STATE.md"
+printf '.chief-of-staff\n.claude/\n' > "$RG/.gitignore"
+{ git -C "$RG" init -q && git -C "$RG" add STATE.md .gitignore && git -C "$RG" -c user.name=t -c user.email=t@t commit -qm x && git -C "$RG" worktree add -q "$RGW"; } >/dev/null 2>&1
+check "rotation: in a worktree of the project it asks for the worktree's STATE.md" ': > "$RT"; tok 150000; [ -f "$RGW/STATE.md" ] && [ ! -f "$RGW/.chief-of-staff" ] && rs r6 "$RG/.claude/worktrees/w" | grep -q "write .claude/worktrees/w/STATE.md"'
+check "rotation: a handoff written in the worktree silences it" '( printf "{\"session_id\":\"r7\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"x\"}" | CLAUDE_PROJECT_DIR="$RGW" sh "$here/protocol.sh" >/dev/null 2>&1; sleep 1; touch "$RGW/STATE.md"; sleep 1; [ "$(rc1 r7 "$RGW")" = 0 ] && [ -s "$CLAUDE_PLUGIN_DATA/turns/r7.rotated" ] )'
+check "rotation: the briefing in a worktree reads the worktree's STATE.md" 'fm_set "$RGW/STATE.md" next "worktree next"; b "$RGW" | grep -q "Next action recorded: worktree next"'
+rm -rf "$RP" "$RT" "$RW" "$RG"
 
 # everywhere: the owner's work runs in folders outside any workspace (a repo, ~/brain, a scratch folder), where the
 # hooks were silent, so no specialist was ever asked for. With the opt-in file the specialists gate runs there too,
