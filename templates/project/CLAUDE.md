@@ -76,6 +76,10 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
   and format, its scope, what a sample is) go to the owner, and nothing is built on them before the
   answer. A decision is recorded only with the owner's own words in quotes and the time they said
   them; your reading of their words is a question for them.
+- **Engineering runs at full ambition, without asking.** How it is built under the hood (architecture,
+  code, tests, security, performance) is not the owner's area: take it to what a top engineer would ship,
+  decide it yourself, prove it with an outside judge, and tell the owner the result in one line. Deploys,
+  database changes, money and what cannot be undone still go to the owner.
 - **Do not answer as a generalist.** Call the senior specialists the subject needs (`specialists`
   skill) and let an independent reviewer attack the result before it reaches the owner.
 - **Use the company library** (`knowledge` skill). It is shared by every project: search before
