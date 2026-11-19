@@ -10,6 +10,9 @@ const coord = atom({ plugin: 'chief-of-staff', key: 'coord' } as const, '', { sh
 const here = atom({ plugin: 'chief-of-staff', key: 'here' } as const, '', { shape: 'here-2' })
 // the owner closed the Threads pane by hand: it stays closed until /threads
 const shut = atom({ plugin: 'chief-of-staff', key: 'threadsShut' } as const, false, { shape: 'shut-1' })
+// this chat started a session: it gets the Threads pane as a coordinator does, wherever it runs (a chat outside a
+// project that starts sub-sessions saw them nowhere)
+const started = atom({ plugin: 'chief-of-staff', key: 'startedThreads' } as const, false, { shape: 'started-1' })
 // the Resolved group is one line until the owner opens it: finished work stays out of the way
 const showDone = atom({ plugin: 'chief-of-staff', key: 'showResolved' } as const, false, { shape: 'resolved-1' })
 
@@ -243,7 +246,7 @@ export const register: Register = on => {
   // An open with no ask behind it waits undrawn in a narrow window; the owner's message is an ask, so the
   // coordinator's pane comes up with it, unless the owner closed it.
   on('prompt.submit', async ($, e, next) => {
-    if ((await read($, coord)) && !(await read($, shut)) && !(await $.ui.panes()).some(x => x.id === THREADS && x.isPlaced))
+    if (((await read($, coord)) || (await read($, started))) && !(await read($, shut)) && !(await $.ui.panes()).some(x => x.id === THREADS && x.isPlaced))
       void $.ui.open({ id: THREADS, title: 'Threads' })
     return next(e)
   })
@@ -302,8 +305,16 @@ export const register: Register = on => {
   // A coordinator's thread brief carries its specialist's lines, as an Agent brief does (protocol.sh), and opens
   // with the thread rules. A start with no brief (an offer card, a proposal started by id) has nothing to check.
   on('tool.call', { tool: /start_session$/ }, async ($, e, next) => {
+    // a session started, in any chat: the Threads pane opens (unasked, so a narrow window draws it with the next message)
+    const shown = async (ran: Awaited<ReturnType<typeof next>>) => {
+      if (!ran.deny && !ran.isError && startedId(ran.result) && !(await read($, shut))) {
+        await update($, started, () => true)
+        void $.ui.open({ id: THREADS, title: 'Threads' })
+      }
+      return ran
+    }
     const brief = (e as { prompt?: unknown }).prompt
-    if (typeof brief !== 'string' || !brief.trim() || !(await read($, coord))) return next(e)
+    if (typeof brief !== 'string' || !brief.trim() || !(await read($, coord))) return shown(await next(e))
     // the project's role cards, or the plugin's own (a project folder without specialists/)
     const r = await root($)
     const sp = r && (await $.fs.exists(`${r}/specialists`)) ? `${r}/specialists` : `${$.plugin.root}/templates/specialists`
@@ -312,7 +323,7 @@ export const register: Register = on => {
       : undefined
     const gap = briefGaps(brief, cards)
     if (gap) return { deny: `chief-of-staff: a thread starts with its specialist. Add to the brief ${gap}, then start it again.` }
-    return next({ ...e, prompt: brief.includes(THREAD_RULES) ? brief : `${THREAD_RULES}\n\n${brief}` } as typeof e)
+    return shown(await next({ ...e, prompt: brief.includes(THREAD_RULES) ? brief : `${THREAD_RULES}\n\n${brief}` } as typeof e))
   })
 
   // a thread started, a message sent, a turn ended: the Threads pane reads the app's list again
