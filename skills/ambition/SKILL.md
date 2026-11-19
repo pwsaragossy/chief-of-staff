@@ -42,6 +42,13 @@ Based on Felix Rieseberg, "How to be more ambitious" (altitude, depth, range, an
    smallest that passes the judge: reuse what the project has, and add no abstraction, option or
    feature nobody asked for. The size and the tone are the owner's: a letter the owner wants short
    stays short.
+8. **Engineering runs at full ambition, without asking.** How it is built under the hood
+   (architecture, code, tests, security, performance, tooling, data model) is not the owner's area,
+   and they do not want to be asked about it. Take it to what a top engineer would ship: decide it
+   yourself, prove it with the outside judge (tests, measurements, a security check), and tell the
+   owner the result in one line. Full ambition in code means more correct, robust, secure and tested,
+   never more code, options or features. What the owner will see or use stays theirs, and so do
+   deploys, database changes, money, and anything that costs or cannot be undone.
 
 ## Output
 - First line: the conclusion, including "this does not work as asked".

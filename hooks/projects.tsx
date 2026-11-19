@@ -198,7 +198,8 @@ export const THREAD_RULES =
   'to the coordinator, questions included. Before you build, list the decisions the work depends on; send the ones ' +
   'that shape what the owner will see or use (what gets built, reuse or rebuild, look, format, scope, what a sample ' +
   'is) to the coordinator as questions and build nothing on them before the answer: this brief is not the owner\'s ' +
-  'answer to them. Read DECISIONS.md before you use a shared fact (slogan, amounts, names, ' +
+  'answer to them. How it is built under the hood (architecture, code, tests, security, performance) is yours: take ' +
+  'it to what a top engineer would ship and never ask the owner about it. Read DECISIONS.md before you use a shared fact (slogan, amounts, names, ' +
   'roles); a decision you hear goes to the coordinator, who records it. Follow the specialists skill with the role ' +
   'card below.'
 
