@@ -316,8 +316,10 @@ note tax-2 "Tax rate on services in 2026" 2026-06-01 "Services pay 12 percent si
 wrote "$N/tax-2.md" >/dev/null 2>&1
 check "confidence high without sources is rejected" 'L check "$N/tax-2.md" | grep -q "needs sources"'
 check "graph gives the panel each problem as text (M lines)" 'L graph | grep -q "^M	tax-2	confidence high needs sources"'
-note tax-2 "Tax rate on services in 2026" 2026-06-01 "Services pay 12 percent since 2026 ([[vat-0001]], [[nowhere-0000]])." "none similar"
+mkdir -p "$N/../cards" && printf '# A source card\n' > "$N/../cards/0105.md"
+note tax-2 "Tax rate on services in 2026" 2026-06-01 "Services pay 12 percent since 2026 ([[vat-0001]], [[nowhere-0000]], card [[0105]])." "none similar"
 check "a link to a missing note blocks the turn end" 'stop | grep -q "links to \[\[nowhere-0000\]\], which does not exist"'
+check "a link to another Markdown file of the library folder resolves, without a warning" '! stop | grep -q "\[\[0105\]\]"'
 check "a similar older note nobody compared blocks the turn end" 'stop | grep -q "possible duplicate or conflict: \[\[tax-1\]\]"'
 check "an unrelated note is not called similar" '! stop | grep -q "\[\[tax-10\]\]"'
 note tax-2 "Tax rate on services in 2026" 2026-06-01 "Services pay 12 percent since 2026 ([[vat-0001]])." "[[tax-1]] replaces"

@@ -50,7 +50,11 @@ ext() {
   cos_libs "$root" | while IFS="$(printf '\t')" read -r n p; do
     [ "$n" = "$name" ] && continue
     cos_ids "$p" | awk -v n="$n" -v own="$EXTF.own" 'BEGIN { while ((getline l < own) > 0) O[l] = 1 } $0 != "" && !($0 in O) { print $0 "\t" n }'
-  done > "$EXTF"; rm -f "$EXTF.own"
+  done > "$EXTF"
+  # any other Markdown file inside the library folder (source cards, imports) can be linked by its file name, label "-"
+  find "$lib" -name '.*' -prune -o -path "$lib/notes" -prune -o -type f -name '*.md' -print 2>/dev/null |
+    sed 's|.*/||; s|\.md$||' | awk -v own="$EXTF.own" 'BEGIN { while ((getline l < own) > 0) O[l] = 1 } $0 != "" && !($0 in O) { print $0 "\t-" }' >> "$EXTF"
+  rm -f "$EXTF.own"
   export EXTF
 }
 run() { # MODE [awk -v assignments...] -- runs library.awk over every note

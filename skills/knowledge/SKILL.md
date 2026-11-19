@@ -18,6 +18,9 @@ sh library.sh search <terms in every language the notes may use>
 Read the hits and their `near:` neighbours. `STALE` means past `review_by`: re-check before relying
 on it. Cite notes as `[[id]]` in everything you write, including briefs (`Library: [[id]] ...`) and
 DELIVERY.md (`## Sources`). Search the web only for what the library lacks.
+A link may also name any other Markdown file inside the library folder by its file name (a source card,
+an import): `[[0105]]`. If the library folder has its own intake for raw sources, a link or video to study
+goes through that intake first, and the note cites what it produced.
 
 ## 2. Save what you learn
 ```sh

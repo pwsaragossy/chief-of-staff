@@ -258,7 +258,7 @@ function xcheck(n,   k, i, a, t, m, id, b, j, x, cnt) {
 function xlib(n,   k, a, i, t) {
   if (!active(n)) return
   k = split(OUT[n], a, " ")
-  for (i = 1; i <= k; i++) { t = a[i]; if (!(t in EXTL) || (t in ID2N)) continue
+  for (i = 1; i <= k; i++) { t = a[i]; if (!(t in EXTL) || (t in ID2N) || EXTL[t] == "-") continue
     warn(n, "links to [[" t "]], a note of the library '" EXTL[t] "': the link breaks if that library moves")
   }
 }
