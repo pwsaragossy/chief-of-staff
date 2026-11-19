@@ -129,6 +129,31 @@ test('the coordinator pane comes up with the owner message', async ($, on) => {
   expect(opened).toEqual(['cos-threads', 'cos-threads'])
 })
 
+test('a chat outside any project that starts a session gets the Threads pane, and again with the next message', async ($, on) => {
+  const opened: string[] = []
+  on('store.get', () => ({ value: '' }))
+  on('store.set', () => ({ value: undefined }))
+  on('fs.exists', () => ({ value: false }))
+  on('command.register', () => ({ value: { command: 'x' } }))
+  on('ui.open', (_: any, e: any) => { opened.push(e.id); return { value: { isPlaced: false, reason: 'narrow' } } })
+  on('ui.panes', () => ({ value: [] }))
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  on('prompt.submit', (_: any, e: any) => e)
+  let answer: any = { result: 'Started session local_0a1b2c3d-2222' }
+  on('tool.call', () => answer)
+  await $.session.start({ cwd: '/Users/x/Workspace', surface: 'desktop', isInteractive: true })
+  await $.prompt.submit({ text: 'hi' } as any)
+  expect(opened).toEqual([])
+  answer = { deny: 'refused' }
+  await $.tool.call({ tool: 'mcp__ccd_session__start_session', title: 'X', prompt: 'Do x.' } as any)
+  expect(opened).toEqual([])
+  answer = { result: 'Started session local_0a1b2c3d-2222' }
+  await $.tool.call({ tool: 'mcp__ccd_session__start_session', title: 'X', prompt: 'Do x.' } as any)
+  expect(opened).toEqual(['cos-threads'])
+  await $.prompt.submit({ text: 'next' } as any)
+  expect(opened).toEqual(['cos-threads', 'cos-threads'])
+})
+
 // a project folder at /p/Alpha: marker kind: project, its own board and STATE.md
 function folder(on: any, opts: { thread?: boolean; appDown?: boolean; storeRoot?: string; marker?: boolean; runs?: { argv: readonly string[] }[]; initFails?: boolean; registered?: string[]; opened?: string[] } = {}) {
   let marker = opts.marker ?? true
