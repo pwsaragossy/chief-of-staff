@@ -329,8 +329,10 @@ test('a coordinator thread brief needs its specialist and opens with the thread 
   expect(typeof bare.deny).toBe('string')
   expect(String(bare.deny)).toMatch(/Role card: <role>.*researcher, reviewer/)
   expect(String((await call('Role card: astrologer\nLibrary: x\nAmbition: a panel reviewer funds it | judge: the rubric score')).deny)).toMatch(/no specialists\/astrologer\.md/)
-  expect(String((await call('Role card: researcher\nLibrary: none found for x')).deny)).toMatch(/Ambition:/)
   expect(ran).toEqual([])
+  // no Ambition line is needed: a goal and a judge the brief had to invent pushed threads past the request
+  await call('Role card: researcher\nLibrary: none found for x')
+  expect(ran.pop().prompt).toBe(`${THREAD_RULES}\n\nRole card: researcher\nLibrary: none found for x`)
   await call(ok)
   expect(ran.pop().prompt).toBe(`${THREAD_RULES}\n\n${ok}`)
   await call(`${THREAD_RULES}\n\n${ok}`)
@@ -341,8 +343,10 @@ test('a coordinator thread brief needs its specialist and opens with the thread 
 })
 
 test('the coordinator text carries the six thread rules', () => {
-  for (const rule of [/Only you talk to the owner/, /DECISIONS\.md/, /no push, no deploy/, /Review before production/, /ask the owner where it runs today/, /ROUTING\.md/, /reviewer role/, /yes or no/, /in one pass/, /archive it/])
+  for (const rule of [/Only you talk to the owner/, /DECISIONS\.md/, /no push, no deploy/, /Review before production/, /ask the owner where it runs today/, /ROUTING\.md/, /reviewer role/, /yes or no/, /in one pass/, /archive it/, /Never decide for the owner what shapes what they will see/, /their own words in quotes/])
     expect(COORDINATOR).toMatch(rule)
+  expect(COORDINATOR).not.toMatch(/Ambition:/)
+  expect(THREAD_RULES).toMatch(/list the decisions the work depends on/)
   expect(briefGaps('Role card: utility find the file')).toBe('')
   expect(briefGaps('Role card: /My Drive/ws/specialists/researcher.md Library: [[a]] Ambition: the goal behind it | judge: npm test passes', ['researcher'])).toBe('')
 })

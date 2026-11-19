@@ -4,7 +4,7 @@
 #   PostToolUse       records what the turn did: specialists (Agent), library lookups, web research, saves; after
 #                     web research, one reminder per turn to search and save to the library (never a block)
 #   PreToolUse        on Agent: blocked unless the brief names an existing role card (specialists/<role>.md)
-#   SubagentStop      a specialist cannot finish without its never-skip checklist and its ## Versions
+#   SubagentStop      a specialist cannot finish without its never-skip checklist
 #   Stop              blocks the end of a substantive turn (a deliverable or a long answer) that skipped specialists
 #                     or the reviewer, or left the project's TRACK.md with a gate problem
 #                     (track.sh check). One push per turn (stop_hook_active), then it lets go and logs a violation.
@@ -97,7 +97,8 @@ case $(jget hook_event_name) in
     # The text goes out first, before any slow step, and is marked as seen only once it is out
     if [ -f "$st.full" ] || [ ! -f "$st.seen" ]; then
       pt=$( echo "Chief-of-staff protocol for this request (checked by hooks at the end of the turn):"
-      echo "- A deliverable for other people or a decision that crosses areas goes through the specialists skill: at least one specialist and the independent reviewer, as subagents, each briefed with the line 'Role card: <role>' naming its card in $root/specialists/ (the subagent reads the card itself),$([ -z "$lite" ] && printf " a 'Library:' line,") an 'Owner said:' line with the owner's constraints and corrections word for word, and an 'Ambition: <goal behind the goal> | judge: <outside judge>' line. A new request from the owner goes through the ambition skill first."
+      echo "- A deliverable for other people or a decision that crosses areas goes through the specialists skill: at least one specialist and the independent reviewer, as subagents, each briefed with the line 'Role card: <role>' naming its card in $root/specialists/ (the subagent reads the card itself),$([ -z "$lite" ] && printf " a 'Library:' line,") and an 'Owner said:' line with the owner's constraints and corrections word for word. A new task from the owner (something to build or deliver) goes through the ambition skill first: it offers the bigger version to the owner as an option and never builds past the request. A question is answered at once, without ambition, specialists or a library note; when going deeper would help, the answer ends by offering it."
+      echo "- Before you build, list the decisions the work depends on. The ones that shape what the owner will see or use (what gets built, reuse or rebuild, its look and format, its scope, what a sample is) are the owner's: ask, and build nothing on them before the answer. A decision is recorded only with the owner's own words in quotes and the time they said them."
       cos_fast "$root" && echo "- Hackathon pace (pace: fast): internal work (plans, code, cards) needs one specialist subagent, no reviewer. The independent reviewer runs only on what goes outside: the submission, the video, the README, messages to judges, partners or users. Independent work goes to parallel sessions, not one long turn."
       [ -z "$lite" ] && echo "- Research starts in the library: sh \"$L\" search <terms> (workspace: $root). Web search only for what the library lacks. Every new finding, decision, how-to or option becomes a note: sh \"$L\" new <finding|decision|howto|option|topic> <origin> <title>, then fill it. Hooks check every note."
       echo "- Facts that change (what runs in production, balances, public links, deploy state) are measured again before they are repeated, never copied from STATE.md or a card." )
@@ -214,10 +215,9 @@ $p"; fi ;;
           [ -n "$lite" ] || case $in in *"Library:"*) ;; *)
             echo "Blocked by chief-of-staff: the brief must carry what the library already knows. Add a line 'Library: [[id]] [[id]] ...' with the notes from library.sh search, or 'Library: none found for <terms>'." >&2
             exit 2 ;; esac
-          # a real line, not a placeholder: the goal and the judge both have to say something
-          printf '%s' "$in" | grep -Eq 'Ambition: [^|]{12,}\| *judge: [^"\\]{8,}' && exit 0
-          echo "Blocked by chief-of-staff: a specialist works to the goal behind the request, judged from outside (ambition skill). Add a line 'Ambition: <the goal behind the goal> | judge: <what measures THAT goal: a command that runs, a rule with its source, the arithmetic, or real numbers>'. At most 4 versions; scope beyond the request is a question for the owner, never work." >&2
-          exit 2
+          # no 'Ambition | judge' line is required: a goal and a judge the brief had to invent made a specialist
+          # build past the request (19/11: a panel sample turned into two renders to satisfy its judge)
+          exit 0
         fi
         cards=$(ls "$SPEC" 2>/dev/null | sed -n 's/\.md$//p' | tr '\n' ' ')
         echo "Blocked by chief-of-staff: every subagent brief names its role card. Add the line 'Role card: <role>' (the role name is enough, for example 'Role card: researcher'), and tell the subagent to read $SPEC/<role>.md itself; do not paste the card. Cards: ${cards:-none found}. For a search or file-reading helper, write 'Role card: utility'." >&2
@@ -417,16 +417,7 @@ WS
     case $in in *"Never-skip checklist"*) ;; *)
       echo "Your role card requires a '## Never-skip checklist' section: mark each item of your card's 'Never skip' list as done or not applicable (why). Add it, then finish." >&2
       exit 2 ;; esac
-    # the reviewer judges; every other specialist shows its versions (ambition skill)
-    case $in in *"Role: reviewer"*) exit 0 ;; esac
-    case $in in *"## Versions"*)
-      # each verdict shows what the judge printed or wrote, so no version (failed or passed) is made up
-      # a <placeholder> copied from the role card's output format is no evidence
-      printf '%s' "${in#*'## Versions'}" | grep -Eq '(evidence|passed): *[^ "\\<]' && exit 0
-      echo "Your '## Versions' lines need the judge's evidence: end each with 'evidence: <the command and its output, or the file that shows it>'. A first version that passed is fine as 'v1 passed: <what the judge printed>'; never invent a failed version." >&2
-      exit 2 ;; esac
-    echo "Your brief carries an Ambition line: add a '## Versions' section, one line per version (the lens, what changed, the verdict of the judge named in your brief, and its evidence: the command output or the file). A first version that passed is written 'v1 passed: <what the judge printed>'; then say why that judge measures the goal behind the goal." >&2
-    exit 2
+    exit 0
     ;;
   Stop)
     # a question to the owner is timed from when it was asked (asked:), not from a file date that git resets

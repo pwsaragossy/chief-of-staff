@@ -78,15 +78,15 @@ Answer: <one line: overall posture, top risk, the one action to do first>
 <facts that would raise or lower the top risks>
 ## Residual risk to accept
 <risk, why remaining, who accepts>
-## Versions
-<one line per version, at most 4: v<n> <lens>: <what changed> - verdict: <the judge named in the brief> - evidence: <the command and its output, or the file>; a first version that passed is "v1 passed: <what the judge printed>">
+## Checked by
+<the outside judge (a command that runs, a source, the arithmetic) and its evidence: the command and its output, or the file>
 
 ## Never-skip checklist
 <each item from this card: done / not applicable (why)>
 ## Not checked
 <components, accounts or code paths not examined, and why>
 ## Questions for the owner
-<each goes on the project card>
+<every decision that shapes what the owner will see or use (what gets built, reuse or rebuild, its look and format, its scope, what a sample is), and anything beyond the brief as an option; none of it was built. Each goes on the project card>
 ## Library
 cited: <[[id]] of each note used, or none>
 saved: <[[id]] of each note written with library.sh new, or none>

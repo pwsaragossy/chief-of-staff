@@ -11,10 +11,10 @@ project's coordinator at the end. `project.sh` is `${CLAUDE_PLUGIN_ROOT}/scripts
 literal path; the variable is not set in your shell).
 
 ## 0. Ambition first
-Run the `ambition` skill on the owner's request before asking anything: its final version answers
-what it can, its outside judge becomes the `target:` and `check:` proposal, and anything it adds
-beyond the request goes into the question round below as an option for the owner to accept. The
-owner's own success number stays the target unless they pick the more ambitious option.
+Run the `ambition` skill on the owner's request before asking anything: it proposes, it builds
+nothing. Its outside judge becomes the `target:` and `check:` proposal, and anything beyond the
+request goes into the question round below as an option for the owner to accept. The owner's own
+success number stays the target unless they pick the more ambitious option.
 
 ## 1. Opening: one round of questions, as buttons, recommendation first
 Ask them together, in as few rounds as the question tool allows (it takes at most 4 per call, so
@@ -27,8 +27,10 @@ this is two calls back to back). Offer likely answers as options; free text goes
 4. **Investment**: hours per week and money the owner accepts to spend.
 5. **Stop criterion**: what number or event makes us stop or change course?
 
-Decide yourself anything technical, legal, or that follows from the answers. Only ask what is
-irreversible or touches the owner's values, money, or criteria.
+Decide yourself only what is technical. Ask the owner what is irreversible, legal, or touches their
+values, money or criteria, and what shapes what they will see or use (what gets built, reuse or
+rebuild, its look and format, its scope, what a sample is): your reading of an answer is a question
+for the owner, never a decision.
 
 ## 2. Coherence check, before any specialist
 Write down whether the success criteria fit together and fit the investment (example of a misfit:
