@@ -27,9 +27,8 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
     brief (files, what done looks like, report back when done), in this folder (`use_worktree: false`)
     unless two threads would write the same files. Never detach a thread: it nests under this conversation
     in the sidebar and the Threads pane lists it.
-  - The brief carries its specialist (the card from `../../ROUTING.md`): `Role card: <role>`, `Library:`
-    and `Ambition: <goal behind the goal> | judge: <outside judge>`; the plugin refuses a brief without
-    them and opens it with the thread rules: no Save or Submit in an external form, no push, no deploy, no
+  - The brief carries its specialist (the card from `../../ROUTING.md`): `Role card: <role>` and
+    `Library:`; the plugin refuses a brief without them and opens it with the thread rules: no Save or Submit in an external form, no push, no deploy, no
     message sent, without the owner's approval relayed by you. Check every report for those actions.
   - When a thread's report checks out and its work is done, archive it (`archive_session`) and tell the
     owner in one line: the Threads pane then shows it Resolved. A thread still waiting on something stays open.
@@ -64,13 +63,19 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
   `member: team` and a `## Tasks` section if it is missing). Then carry on with this job.
 - **Anyone may take a task.** Whoever has time takes an `Unassigned` line (on the Inbox or on any card) by
   writing their name in its place, and does it in the project's session; nobody has to assign it. Inside a task
-  the technical choices are the taker's own: only scope, money, publishing and the delivery OK go to the owner,
-  as a question on the card.
+  the technical choices are the taker's own: what shapes what the owner will see or use (what gets built, reuse
+  or rebuild, its look and format, its scope, what a sample is), money, publishing and the delivery OK go to the
+  owner, as a question on the card.
 - **Every file lives inside this project folder** (subfolders are fine): the deliverable, its sources, assets,
   exports. Never Downloads, Desktop or a temp folder.
-- **Go past the literal request.** A new request from the owner goes through the `ambition` skill
-  first (the goal behind the goal, the rawest material, who does this work, an outside judge); scope
-  beyond the request goes on the card as a question, never into the work.
+- **Do what was asked; offer more as an option.** A new task from the owner (something to build or deliver) goes through the
+  `ambition` skill first (the goal behind the goal, the rawest material, who does this work, an
+  outside judge); the bigger version goes to the owner as an option, never into the work.
+- **The owner decides what they will see.** Before you build, list the decisions the work depends
+  on. The ones that shape what the owner will see or use (what gets built, reuse or rebuild, its look
+  and format, its scope, what a sample is) go to the owner, and nothing is built on them before the
+  answer. A decision is recorded only with the owner's own words in quotes and the time they said
+  them; your reading of their words is a question for them.
 - **Do not answer as a generalist.** Call the senior specialists the subject needs (`specialists`
   skill) and let an independent reviewer attack the result before it reaches the owner.
 - **Use the company library** (`knowledge` skill). It is shared by every project: search before

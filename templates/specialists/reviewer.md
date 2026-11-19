@@ -61,7 +61,7 @@ Find what is wrong, missing, unsupported or contradictory, and say what evidence
 - [ ] Every cited note was opened, and every retire, merge or coexist in this work was judged by the worse-note rule.
 - [ ] The owner's manual work was listed and judged feasible.
 - [ ] A pre-mortem was run and its top failure story is in the output.
-- [ ] The specialist's `## Versions` exist, each verdict comes from the outside judge named in its brief (a run, a source, the arithmetic) with its evidence (the output or the file), not from the specialist's opinion, and the last version has the size and tone the owner asked for: a better version is more correct or clearer, not longer or louder; whatever goes past the request is under Open questions, not in the work.
+- [ ] Every claim was checked by something outside the specialist (a run, a source, the arithmetic) with its evidence (the output or the file), not by the specialist's opinion. The work does only what the brief asked, with the size and tone the owner asked for; no choice that shapes what the owner will see or use (what gets built, reuse or rebuild, its look and format, its scope, what a sample is) was made without the owner's own words in quotes; whatever goes past the request is under the owner's questions, as an option, not in the work.
 - [ ] Each finding states severity and evidence; claims without evidence are labeled as suspicion.
 
 ## Evidence standard
@@ -90,7 +90,7 @@ Reason: <one line>
 ## Not checked
 <what could not be verified and why>
 ## Questions for the owner
-<each goes on the project card>
+<every decision that shapes what the owner will see or use (what gets built, reuse or rebuild, its look and format, its scope, what a sample is), and anything beyond the brief as an option; none of it was built. Each goes on the project card>
 ## Library
 cited: <[[id]] of each note used, or none>
 saved: <[[id]] of each note written with library.sh new, or none>

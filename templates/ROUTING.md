@@ -24,11 +24,11 @@ tools and when to use each, and what it never skips. Edit cards and rows freely:
 
 Rules (the hooks enforce the first three):
 - Every subagent brief names its card by path (`Role card: <project>/specialists/<role>.md`, read by
-  the subagent itself, never pasted), a `Library:` line and an `Ambition: <goal behind the goal> |
-  judge: <outside judge>` line; a search or file-reading helper says `Role card: utility`.
-- A specialist's output ends with `## Versions` (ambition skill), each verdict with its evidence (the
-  command output or the file; `v1 passed: <what the judge printed>` is a complete line), and its
-  never-skip checklist, each item done or not applicable (why).
+  the subagent itself, never pasted) and a `Library:` line; a search or file-reading helper says
+  `Role card: utility`.
+- A specialist's output ends with its never-skip checklist, each item done or not applicable (why),
+  and its open questions for the owner: every decision that shapes what the owner will see or use,
+  and anything beyond the brief, as options, never as work done.
 - A deliverable, a cross-area decision or research ends only after a specialist and the reviewer.
 - The person who does the work is never the person who judges it. The reviewer is the same model
   with a different brief: it catches incoherence, not authority.

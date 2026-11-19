@@ -24,21 +24,21 @@ use each, the checks a senior professional never skips, the evidence standard an
      Your summary is not enough: the owner's corrections that reached no brief came back as errors;
    - the line `Library: [[id]] [[id]] ...` with the notes found, or `Library: none found for <terms>`
      (the hook blocks a brief without it), the question, the files to read, and what to deliver;
-   - the line `Ambition: <the goal behind the goal> | judge: <outside judge>` (ambition skill; the
-     hook blocks a brief without it), with the instruction "run the ambition lenses on your own draft,
-     at most 4 versions, and end with ## Versions: one line per version, the lens, the judge's verdict
-     and its evidence (the command and its output, or the file); a first version that passed is
-     'v1 passed: <what the judge printed>'; anything beyond the request goes under Open questions for
-     the owner, not into the work";
+   - the instruction "do only what this brief asks and check it with an outside judge (a command
+     that runs, a source, the arithmetic). Before you build, list the decisions the work depends on;
+     the ones that shape what the owner will see or use (what gets built, reuse or rebuild, its look
+     and format, its scope, what a sample is) are questions for the owner, not choices for you: end
+     with them under Open questions for the owner, with anything beyond the brief as options, and
+     build nothing on them";
    - "research only what is missing; save each new finding with library.sh new and fill its
      Compared: line; cite every note you use as [[id]]; finish with the never-skip checklist of your
      card".
    Run independent specialists in parallel.
 4. **Review.** A separate subagent with `Role card: <project>/specialists/reviewer.md` receives the
    paths of the specialists' role cards and their full outputs (or the files they wrote), not your
-   summary, and the same `Owner said:`, `Library:` and `Ambition: <goal> | judge: <judge>` lines the specialists got
-   (the hook blocks a reviewer brief without them; the reviewer checks each verdict against that judge
-   and each citation against those notes); it reads each card itself. It checks every never-skip item,
+   summary, and the same `Owner said:` and `Library:` lines the specialists got (the hook blocks a reviewer brief
+   without `Library:`; the reviewer checks each citation against those notes, and that no choice
+   that shapes what the owner sees was made without the owner's words); it reads each card itself. It checks every never-skip item,
    attacks the premises, recomputes the numbers and returns a verdict.
    In hackathon pace (`pace: fast` in the project's `.chief-of-staff`, set by the owner) skip this
    step for internal work (plans, code, cards, research for the team); run it on what goes outside:

@@ -93,8 +93,8 @@ Answer: <one line: the design decision or deliverable, for whom, with confidence
 ## What would change the conclusion
 <audience test result, contrast failure, legal or trademark finding, or constraint that flips the choice>
 
-## Versions
-<one line per version, at most 4: v<n> <lens>: <what changed> - verdict: <the judge named in the brief> - evidence: <the command and its output, or the file>; a first version that passed is "v1 passed: <what the judge printed>">
+## Checked by
+<the outside judge (a command that runs, a source, the arithmetic) and its evidence: the command and its output, or the file>
 
 ## Never-skip checklist
 <each item from "Never skip": done / not applicable (why)>
@@ -103,7 +103,7 @@ Answer: <one line: the design decision or deliverable, for whom, with confidence
 <devices, assistive technologies, print proofs, languages, trademark or font-licence checks not done>
 
 ## Open questions for the owner
-<items for the project card>
+<every decision that shapes what the owner will see or use (what gets built, reuse or rebuild, its look and format, its scope, what a sample is), and anything beyond the brief as an option; none of it was built. Each goes on the project card>
 
 ## Library
 cited: <[[id]] of each note used, or none>

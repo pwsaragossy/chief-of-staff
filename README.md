@@ -17,7 +17,7 @@ What it gives you:
   Everything runs on this computer. When the coordinator starts a thread, its row in the chat draws as a
   thread card (title, state, a press that opens it), and the Threads pane lists every thread by state.
   Only the coordinator talks to you and writes `DECISIONS.md`; a thread brief that names no specialist
-  (`Role card:`, `Library:`, `Ambition:`) is refused, and every brief opens with the thread rules: no
+  (`Role card:`, `Library:`) is refused, and every brief opens with the thread rules: no
   Save or Submit in an external form, no push, no deploy, no message sent without your approval.
   Text is reviewed before video or images are rendered, and the coordinator asks where things run
   before it proposes a host.
@@ -59,14 +59,15 @@ What it gives you:
   the briefing show the questions themselves. Items marked `owner: ok`
   (the hackathon's scope freeze and submission) close only with the owner's OK, which the coordinator records
   with `track.sh ok` and the owner approves.
-- **Past the literal request (ambition loop).** Every new request goes through the `ambition` skill:
-  the goal behind the goal, the rawest material, who does this work, and an outside judge that
-  measures that goal, in at most 4 numbered versions. Whoever briefs sets the judge: every specialist
-  brief carries `Ambition: <goal> | judge: <what measures it>`, and a specialist cannot finish
-  without its `## Versions`. Scope beyond the request is a question for the owner, never work.
-  In our test (same vague task, haiku as the worker, a timing check it never saw): 1 pass in 8 runs
-  as asked; 0 in 5 when the worker ran the loop alone (it picked a judge its first draft passed);
-  3 in 3 when a coordinator on sonnet wrote the brief and the judge first.
+- **Ambition proposes, the owner decides.** Every new task goes through the `ambition` skill (a question is answered at once, without it):
+  the goal behind the goal, the rawest material, who does this work, and an outside judge. The bigger
+  version a top professional would deliver reaches the owner as an option with its cost and a
+  recommendation; nothing past the request is built without the owner's answer.
+- **The owner decides what they will see.** Before building, every session lists the decisions the
+  work depends on. The ones that shape what the owner will see or use (what gets built, reuse or
+  rebuild, its look and format, its scope, what a sample is) go to the owner, and nothing is built on
+  them before the answer. A thread asks through the coordinator, which never answers for the owner,
+  and a line in `DECISIONS.md` records only the owner's own words in quotes, with the time.
 - **A hard target and a judge that is not the model.** Every track carries `target:` (a number, taken
   from the criteria, the metric or the raw material) and `check:` (a command that measures it: exit 0
   when met, the value on its last line; or `none (why)`). A project cannot leave stage 1 until both are
@@ -223,7 +224,7 @@ the same stage shows as "↳ id", and pointing at an item outlines what it needs
 Every hook does nothing outside a project folder, so the plugin does not affect your other projects.
 Opt-in for the rest of your folders: list them in `everywhere` inside the plugin's data folder
 (`~/.claude/plugins/data/chief-of-staff-chief-of-staff/everywhere`, one absolute path per line, `/` for all).
-There the specialists and ambition gate runs with the plugin's own role cards; no library, board or
+There the specialists gate runs with the plugin's own role cards; no library, board or
 track, and turns are logged to `protocol.log` in the same data folder.
 A second opt-in, `knowledge-mcp` in the same data folder, holds the path of a knowledge-mcp `server.py`: at each new
 session, in any folder, the briefing lists the knowledge bases its `discover` found and never offered, and the session
@@ -246,8 +247,7 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
   utility` for a helper; an Explore, web-fetch or claude-code-guide subagent is a helper by its type); a
   turn that only edits a file this session already put through specialists and the reviewer is not a new deliverable
   (a Write, or an edit of DECISIONS.md, still is); a .md inside a code repository (git plus a build or test
-  manifest at its top: a skill, a template, docs/) is code, not a deliverable, except its README and DECISIONS.md; a specialist cannot finish without its never-skip checklist and its
-  `## Versions` with the judge's evidence, and its brief needs a `Library:` line; web research gets one reminder per turn to search
+  manifest at its top: a skill, a template, docs/) is code, not a deliverable, except its README and DECISIONS.md; a specialist cannot finish without its never-skip checklist, and its brief needs a `Library:` line; web research gets one reminder per turn to search
   the library (`scripts/library.sh search`) and save what it found, never a block; a note is checked on save and at the end of the turn (links,
   `Compared:`, retirements, notes written by shell commands too); agents cannot edit the project's
   marker;
@@ -373,8 +373,8 @@ What is ours, with no equivalent found in ECC:
   is a word list, not a shell interpreter: it knows common globs (`.o*`, `*-items`), but an agent that
   builds the file name in a shell variable, or with a glob or shell option it does not know, is not
   seen. Then the reviewer and the owner's own read of `.owner-ok` are the last line.
-- Ambition: the hooks check that the `Ambition:` line and `## Versions` exist, not that the judge is
-  a good one; the reviewer checks that, and it is the same model.
+- Owner decisions: no hook can tell which choice shapes what the owner sees; the protocol, the
+  coordinator and the reviewer ask for it, and they are the same model.
 - Target and check: the check runs a shell command written in TRACK.md, so only a session or the coordinator
   on your computer runs it (never a hook), and only a command the owner approved on this computer (the
   approval lives in `.owner-ok`, which is local: one that git tracks, in any letter case, came through git

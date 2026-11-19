@@ -1,71 +1,65 @@
 ---
 name: ambition
-description: Turn a request into the version a top professional would deliver, through numbered versions that something outside the model judges. Central runs it on every new request from the owner before new-project or before handing work to a project; every specialist runs it on its own draft. Also when the owner runs /chief-of-staff:ambition or asks to "go further" or "be more ambitious".
+description: Find the version a top professional would deliver and offer it to the owner as an option, never build it unasked. Central runs it on every new task from the owner (something to build or deliver; a question is answered at once, without it) before new-project or before handing work to a project; a specialist runs it on its own draft to check it against an outside judge. Also when the owner runs /chief-of-staff:ambition or asks to "go further" or "be more ambitious".
 ---
 
-# Ambition loop with an outside judge
+# Ambition: propose, do not build
 
-Doing what was asked and stopping is the lazy default. This loop takes the request to what the best
-professional in the field would deliver, and lets the world, not the model, judge each step.
+Ambition decides what to offer, never what to build. The owner's request is the scope; the bigger
+version a top professional would deliver is a proposal the owner picks or declines. Work past the
+request done without the owner's answer is rework: the owner decides what they will see and use.
 Based on Felix Rieseberg, "How to be more ambitious" (altitude, depth, range, an outside judge).
 
 ## Rules
 1. **Source first.** Read what the request cites (article, link, document, code) before writing.
    State current facts (platform rules, laws where it ships, prices, program requirements) only with
    a source and its date.
-2. **Never judge your own work.** Name the outside judge before v1, in this order of preference:
-   a command that runs (the project's `check:`), a rule or law with its source, the arithmetic
-   (unit economics, cost), real numbers (money in, refunds, users). A fresh-context reviewer is the
-   last resort, because it is the same model. The judge measures the **goal behind the goal**
-   (Altitude), not only that the work runs: "the page renders" is a test; "a first-time visitor
-   signs up in under a minute on a phone" is the judge when the goal is sign-ups.
-3. **Numbered versions**, at most 4, each applying one lens and ending with the judge's verdict:
+2. **Look with four lenses**, to find what to offer, not to build it:
    - **Altitude**: what is the goal behind the goal?
    - **Depth**: what is the rawest material (the data, the code, the primary source) and the tool a
      senior would use on it (a database, a model, a spreadsheet, a benchmark), not prose?
-   - **Range**: which specialists DO this work (turn the noun into a verb)? Brief them.
-   - **Against yourself**: where does this version break? Say it plainly.
-   Every verdict carries its evidence: the command and what it printed, or the file that shows it.
-   Stop when the verdict stops improving. A v1 that passes is written as it happened, `v1 passed:
-   <what the judge printed>`, never padded with invented failed versions; then check the judge
-   measures the goal behind the goal and not something the first draft already met, and raise it
-   if it does not. The weakest point you name becomes the next version, unless fixing it grows the
-   scope (then it is a question for the owner).
-   With a deadline, ship the first working version before the next round; there is no "too small
-   to apply" exception: the cheapest loop is one honest judge that measures the goal.
-4. **A hard target, with cut gates.** Treat the ambitious target as reasonable, and set a ladder of
-   milestones, each with what to do if it fails. The target only comes down with data. The owner's
-   own number is theirs: never raise or lower it yourself; offer the ambitious one as an option.
+   - **Range**: which specialists DO this work (turn the noun into a verb)?
+   - **Against yourself**: where does the request as asked break? Say it plainly.
+3. **The decisions are the owner's.** List the decisions the work depends on. The ones that shape
+   what the owner will see or use (what gets built, reuse or rebuild, its look and format, its scope,
+   what a sample is) are questions for the owner, as are money, signing, accounts, identity and legal
+   decisions. A brief, an old note or your reading of the owner's words is not their answer. A
+   decision is recorded only with the owner's own words in quotes and the time they said them.
+4. **Offer, with a recommendation.** The bigger version goes to the owner as an option next to the
+   request as asked: what they would get, what it costs (time, money, risk), and your
+   recommendation. The owner's own number or target is theirs: never raise or lower it yourself;
+   offer the ambitious one as an option.
 5. **Honest over headline.** Refuse any part that needs a false promise (guaranteed income, a
-   "secret", an illegal clause); say why in one or two lines with the source, and deliver the honest
+   "secret", an illegal clause); say why in one or two lines with the source, and offer the honest
    version that keeps the strength of the hook.
-6. **The owner appears only at gates**: sending in their name, signing, accounts, identity checks,
-   money, legal decisions. Each gate arrives ready to approve in a minute, through the card. Anything
-   that grows the scope beyond the request is one of those questions, never work done.
-7. **Execute.** Once a version is viable, produce the assets (the prompt, the plan, the copy, the
-   code) instead of handing tasks back to the owner.
-8. **Ambition raises the goal and the judge, never the amount of code.** It decides what to build and
-   what proves it worked. The code that meets it is the smallest that passes the judge: reuse what the
-   project has, and add no abstraction, option or feature the judge does not measure. In code, a
-   version improves by passing a harder judge, not by growing.
-   The same holds for writing, video and design: the size and the tone are the owner's. A letter the
-   owner wants short stays short; a version improves by being more correct or clearer, never longer,
-   louder or more ornate.
+6. **Never judge your own work.** What gets built is checked by something outside the model, in
+   this order: a command that runs (the project's `check:`), a rule or law with its source, the
+   arithmetic, real numbers. A fresh-context reviewer is the last resort, because it is the same
+   model. The judge checks the work that was asked or picked; it never requires making something
+   nobody asked for (an extra render, a second version, a bigger build) to prove itself.
+7. **Execute only what was asked or picked.** Once the owner answered, produce the assets (the
+   prompt, the plan, the copy, the code) instead of handing tasks back to the owner. The code is the
+   smallest that passes the judge: reuse what the project has, and add no abstraction, option or
+   feature nobody asked for. The size and the tone are the owner's: a letter the owner wants short
+   stays short.
 
 ## Output
 - First line: the conclusion, including "this does not work as asked".
-- One line per version: lens, what changed, the outside judge's verdict and its evidence (the command
-  output or the file); a v1 that passed is `v1 passed: <what the judge printed>`.
-- The final request, plan or prompt in a code block.
-- The weakest point still left.
+- The request as asked, and what it would deliver.
+- The options beyond it: one line each with what the owner gets, its cost and the source; your
+  recommendation first.
+- The decisions waiting on the owner, one question each.
+- The weakest point of the request as asked.
 - Sources, with dates.
 
 ## Where it runs
-- **Central, on a new request**: the final request feeds new-project (STATE.md section 2), and the
-  judge becomes the proposal for the project's `target:` and `check:` (the owner approves them). For
-  an existing project, the final request and its judge go in the card, as the session's next task.
-- **Specialists**: the brief carries `Ambition: <goal behind the goal> | judge: <outside judge>`
-  (the hooks block a specialist brief without it and a specialist output without `## Versions`).
-  The hooks check that the lines exist; the reviewer checks that each verdict came from the judge.
-  The one who briefs sets the judge, not the one who does the work: a worker left to pick its own
-  judge picks one its first draft already passes.
+- **Not on a question.** A question gets its answer at once, with no lenses, specialists or library
+  note; when going deeper would help, the answer ends by offering it.
+- **Central, on a new task**: the request as asked and the options go to the owner before
+  new-project or before any project work starts. What the owner picks feeds new-project (STATE.md
+  section 2), and the judge becomes the proposal for the project's `target:` and `check:` (the owner
+  approves them). For an existing project, the picked request and its judge go in the card, as the
+  session's next task.
+- **Specialists**: a specialist does the work in its brief, checks it with the outside judge, and
+  ends its output with the options beyond the brief and the decisions it found, as questions. It
+  never builds them on its own.
