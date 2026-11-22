@@ -88,6 +88,9 @@ case $(jget hook_event_name) in
   UserPromptSubmit)
     rm -f "$st"/*
     : > "$st/start"   # notes modified after this are the turn's notes (whatever tool or path wrote them)
+    # the commit the turn starts from: a screen file put back to it is no change (screens.sh changed); a commit id,
+    # never a commit time, which anyone can set
+    [ -z "$lite" ] && git -C "$root" rev-parse -q --verify HEAD > "$st/head" 2>/dev/null
     # A subagent run in the background reports back as a new prompt, so the turn that applies its report would
     # count no specialist. Such a turn is credited with the background specialists started in the last 3 hours,
     # even when the owner wrote in between; the owner's own prompt gets no credit. A notice from another plugin
@@ -256,7 +259,10 @@ $REVIEW_HOW" >&2
         case $(jget tool_name) in
           Bash)
             # opening a page or a local server in the owner's browser (open, xdg-open, start) is showing the screen
-            if [ -n "$project" ] && printf '%s' "$lc" | grep -Eq '(^|[^a-z0-9_.-])(open|xdg-open|start)( +-[a-z]+)* +[^;&|]*(localhost|127\.0\.0\.1|0\.0\.0\.0|\.html?([^a-z]|$))'; then
+            # ponytail: a word list, not a shell parser; the Artifact and SendUserFile blocks are the hard part
+            rl=$(cd "$root" && pwd -P | tr 'A-Z' 'a-z')
+            if [ -n "$project" ] && printf '%s' "$lc" | grep -Eq '(^|[^a-z0-9_.-])(open|xdg-open|gio +open|start|sensible-browser|x-www-browser|firefox|chromium|google-chrome|webbrowser|open +location|osascript)([^a-z0-9_.-]|$)' &&
+              printf '%s' "$lc" | grep -Eq "localhost|127\\.[0-9]|0\\.0\\.0\\.0|\\[::1?\\]|https?://(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|[^/\"]*\\.local([:/\"]|$))|\\.html?([^a-z]|$)|$(printf '%s' "$rl" | sed 's/[][\\.*^$+?(){}|]/\\\\&/g')"; then
               why=$(sh "$SC" state "$root") || { echo "Blocked by chief-of-staff: this opens a screen for the owner, and the project's screens are not cleared to reach the owner: $why
 $REVIEW_HOW" >&2; exit 2; }
             fi
@@ -555,7 +561,7 @@ Close each item with its proof file (evidence: path relative to the project fold
       # screen code a shell command changed this turn (a heredoc, sed -i, a script): recorded like an Edit, and held
       # to the design gate the Edit tool meets before it writes
       if [ -f "$st/start" ]; then
-        chg=$(cos_limit 1 sh "$SC" changed "$root" "$st/start") || chg=
+        chg=$(cos_limit 1 sh "$SC" changed "$root" "$st/start" "$st/head") || chg=
         held=$(printf '%s\n' "$chg" | while IFS= read -r f; do [ -n "$f" ] || continue
           w=$(sh "$SC" gate "$root" "$f") || [ $? != 1 ] || printf '%s (%s) ' "${f#"$root/"}" "$w"; done)
         [ -n "$held" ] && sgaps="This turn changed screen code by a shell command while its design is not done: $held. No screen is built before its design: undo those changes (git checkout -- <file>) or keep them only under design/ as mockups, and run the designer as a subagent ('Role card: designer'): library first, 1-2 real reference apps with links, then the design, and close the design item in TRACK.md with it as evidence (a 'References:' section and a 'Library:' line)."

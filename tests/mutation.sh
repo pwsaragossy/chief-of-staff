@@ -58,7 +58,7 @@ mutate "a review of an older picture clears a newer screen" scripts/screens.sh "
 mutate "a review the session wrote itself stands" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
   'if [ -n "$rv" ] && [ "$reviewers" -lt 1 ]' 'if false'
 mutate "screen code written by a shell command goes unseen" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
-  'chg=$(cos_limit 1 sh "$SC" changed "$root" "$st/start") || chg=' 'chg='
+  'chg=$(cos_limit 1 sh "$SC" changed "$root" "$st/start" "$st/head") || chg=' 'chg='
 mutate "a screen not cleared lets go on the second stop" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
   '[ -n "$sgaps" ] && [ "$(count screenpush)" -lt 2 ] && {' 'false && {'
 echo "caught=$caught missed=$missed"; [ "$missed" = 0 ]

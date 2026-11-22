@@ -5,7 +5,8 @@
 #   gate    <project_dir> <file>  0 the design is done (or marked not applicable); 1 it is not (prints why);
 #                                 3 no design item of TRACK.md covers the file (the hooks only ask for the designer)
 #   touch   <project_dir> <file>  records a change of a screen file (its mtime), for the review gate
-#   changed <project_dir> <since> screen files changed after the file <since> (ctime), outside design/; records them
+#   changed <project_dir> <since> [<head>]  screen files changed after the file <since> (ctime), outside design/;
+#                                 records them. <head> holds the commit id the turn started from
 #   review  <file>                checks a review in design/reviews/: prints its verdict (pass or fail); 1 + problems
 #   state   <project_dir>         0 every screen change has a passing review newer than it; 1 + why not
 # A design item is a TRACK.md item with id ui-spec or a "screens:" field (path patterns of the product's screens,
@@ -95,15 +96,16 @@ EOF
     exit 0 ;;
   changed)
     [ -f "${3:-}" ] || exit 0
-    # a file put back as HEAD (git checkout) is no change, unless a commit was made this turn
-    hc=$(git -C "$dir" log -1 --format=%ct 2>/dev/null); since=$(mtime "$3")
+    # a file put back as it was when the turn started (git checkout) is no change: only while HEAD is still the commit
+    # the turn started from (a commit made this turn can carry the new screen code)
+    h0=$(cat "${4:-/nonexistent}" 2>/dev/null); hn=$(git -C "$dir" rev-parse -q --verify HEAD 2>/dev/null)
     find "$dir" \( -name node_modules -o -name .git -o -name dist -o -name build -o -name .venv -o -name venv -o \
       -name __pycache__ -o -name .next -o -name Pods -o -name DerivedData -o -path "$dir/design" -o -name tests -o -name test \) -prune -o \
       -type f -cnewer "$3" \( -name '*.html' -o -name '*.htm' -o -name '*.css' -o -name '*.scss' -o -name '*.sass' -o -name '*.less' \
       -o -name '*.jsx' -o -name '*.tsx' -o -name '*.vue' -o -name '*.svelte' -o -name '*.astro' -o -name '*.swift' -o -name '*.kt' \
       -o -name '*.dart' -o -name '*.js' -o -name '*.mjs' -o -name '*.ts' \) -print 2>/dev/null | head -n 200 |
     while IFS= read -r f; do isui "$f" </dev/null || continue
-      [ -n "$hc" ] && [ "$hc" -lt "$since" ] && git -C "$dir" ls-files --error-unmatch -- "$f" >/dev/null 2>&1 &&
+      [ -n "$h0" ] && [ "$h0" = "$hn" ] && git -C "$dir" ls-files --error-unmatch -- "$f" >/dev/null 2>&1 &&
         git -C "$dir" diff --quiet HEAD -- "$f" 2>/dev/null && continue
       printf '%s\n' "$f"; sh "$0" touch "$dir" "$f"; done ;;
   review)

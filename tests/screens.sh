@@ -88,6 +88,10 @@ sleep 1; SID=u2b; h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$Q" >/dev/null
 check "a passing review newer than every screen change clears it" '[ "$(rc "$(art "$Q/index.html")" "$Q")" = 0 ] && [ "$(rc "$(send "$Q/shots/ours.png")" "$Q")" = 0 ] && [ "$(rc "$(stop "Abre http://localhost:3013")" "$Q")" = 0 ] && sh "$S/screens.sh" state "$Q"'
 touch -t 202601010300 "$Q/index.html"; h "$(pw "$Q/index.html" "x" Edit)" "$Q" >/dev/null
 check "an edit after the passing review holds the screen again, and so does opening it in the owner.s browser" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"open http://localhost:3013\"}")" "$Q" 2>&1 | grep -q "this opens a screen for the owner"'
+for c in "open -a Safari http://192.168.0.4:3000" "osascript -e \\\"open location \\\\\\\"http://[::1]:5173\\\\\\\"\\\"" "python3 -m webbrowser http://app.local:3000" "open $Q/index.html"; do
+  check "a browser launcher aimed at the screen is held: $c" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$c\"}")" "$Q" 2>&1 | grep -q "this opens a screen for the owner"'
+done
+check "a launcher aimed elsewhere, and a server URL in another command, pass" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"open https://example.com\"}")" "$Q")" = 0 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"curl -s http://localhost:3013/api\"}")" "$Q")" = 0 ]'
 check "an edit after the passing review holds the screen again" 'h "$(art "$Q/index.html")" "$Q" 2>&1 | grep -q "index.html changed after the newest passing review"'
 
 # who writes the review: the independent reviewer subagent
@@ -124,6 +128,9 @@ if command -v git >/dev/null; then
   sleep 1; SID=u8; h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$P" >/dev/null; sleep 1
   echo '<b>' > "$P/content/kept.html"; git -C "$P" checkout -q -- content/kept.html
   check "screen code a shell command changed and put back (git checkout) is no change" '! h "$(stop "ok")" "$P" 2>&1 | grep -q "by a shell command"'
+  echo '<b>' > "$P/content/kept.html"; git -C "$P" -c user.name=t -c user.email=t@t commit -qam z
+  GIT_COMMITTER_DATE="2001-01-01T00:00:00" git -C "$P" -c user.name=t -c user.email=t@t commit -q --amend --no-edit
+  check "screen code a shell command wrote and committed this turn, even with an old commit date, is a change" 'h "$(stop "ok")" "$P" 2>&1 | grep -q "content/kept.html"'
 fi
 
 # the designer names its references
