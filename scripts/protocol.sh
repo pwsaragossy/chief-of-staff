@@ -46,6 +46,10 @@ realp() { d=$1 r=; k=0
   while [ -L "$d" ] && [ $k -lt 20 ]; do t=$(readlink "$d"); case $t in /*) d=$t ;; *) d=${d%/*}/$t ;; esac; k=$((k+1)); done   # a symlinked file
   while [ ! -d "$d" ]; do r="/${d##*/}$r"; d=${d%/*}; [ -n "$d" ] || d=/; done
   case $r in */..|*/../*|*/.|*/./*) return 0 ;; esac; printf '%s%s' "$(cd "$d" && pwd -P)" "$r"; }
+# inroot FILE: FILE resolved (.., symlinks, letter case, accents as the disk spells them) under the project folder;
+# fails when it is not inside it. The screen gates compare by this path, never by how the tool spelled it
+inroot() { case $1 in /*) ;; *) return 1 ;; esac; _p=$(realp "$1"); [ -n "$_p" ] || return 1
+  _rr=$(cd "$root" && pwd -P) || return 1; case $_p in "$_rr"/*) printf '%s' "$_p" ;; *) return 1 ;; esac; }
 # the project this session works in: the project folder itself (none in a folder listed in everywhere)
 project=; pdir=; [ -z "$lite" ] && { project=${root##*/}; pdir=$root; }
 # the role cards: the workspace's own, or the plugin's (a project folder without specialists/, or a folder listed in everywhere)
@@ -208,13 +212,13 @@ $p"; fi ;;
     # screens: a review is checked as it is written (an incomplete one is rejected now, while the reviewer has it in
     # context); a change of screen code is recorded for the review gate, and once per turn the session is told what
     # a screen needs before the owner sees it (one JSON per hook: not on a write that already got the notice above)
-    if [ -z "$lite" ] && [ "${ok:-}" = 1 ]; then case $fp0 in
-      "$root"/design/reviews/*.md)
-        p=$(sh "$SC" review "$fp0") || { echo x >> "$st/rejected.count"; echo "Screen review rejected: fix ${fp0#"$root/"} now. It needs:
+    if [ -z "$lite" ] && [ "${ok:-}" = 1 ] && sfp=$(inroot "$fp0"); then rr=$(cd "$root" && pwd -P); case $sfp in
+      "$rr"/design/reviews/*.md)
+        p=$(sh "$SC" review "$sfp") || { echo x >> "$st/rejected.count"; echo "Screen review rejected: fix ${sfp#"$rr/"} now. It needs:
 $p" >&2; exit 2; } ;;
-      "$root"/*) if printf '%s' "$in" | sh "$SC" isui "$fp0"; then sh "$SC" touch "$root" "$fp0"
+      *) if printf '%s' "$in" | sh "$SC" isui "$sfp"; then sh "$SC" touch "$root" "$sfp"
           if [ ! -f "$st/screens" ] && [ -z "${nd:-}" ]; then : > "$st/screens"
-            printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"chief-of-staff: this turn changes screen code (%s). A screen reaches the owner only after two subagents: the designer (Role card: designer) searched the library and named 1-2 real apps the screen follows, and the independent reviewer (Role card: reviewer) compared the screen side by side with them and wrote design/reviews/<YYYY-MM-DD HHMM> <screen>.md with Verdict: pass, References: and Side by side: (two saved screenshots, this screen and the reference). If no designer named those apps for this screen yet, run the designer now, before more screen code. Showing the screen before a passing review (an Artifact, a file sent, a link or a localhost address in the answer) is blocked."}}\n' "$(printf '%s' "${fp0#"$root/"}" | tr -d '"\\\000-\037')"
+            printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"chief-of-staff: this turn changes screen code (%s). A screen reaches the owner only after two subagents: the designer (Role card: designer) searched the library and named 1-2 real apps the screen follows, and the independent reviewer (Role card: reviewer) compared the screen side by side with them and wrote design/reviews/<YYYY-MM-DD HHMM> <screen>.md with Verdict: pass, References: and Side by side: (two saved screenshots, this screen and the reference). If no designer named those apps for this screen yet, run the designer now, before more screen code. Showing the screen before a passing review (an Artifact, a file sent, a link or a localhost address in the answer) is blocked."}}\n' "$(printf '%s' "${sfp#"$rr/"}" | tr -d '"\\\000-\037')"
           fi
         fi ;; esac; fi
     ;;
@@ -251,6 +255,11 @@ $REVIEW_HOW" >&2
         lc=$(printf '%s' "$in" | tr 'A-Z' 'a-z' | cos_fold)
         case $(jget tool_name) in
           Bash)
+            # opening a page or a local server in the owner's browser (open, xdg-open, start) is showing the screen
+            if [ -n "$project" ] && printf '%s' "$lc" | grep -Eq '(^|[^a-z0-9_.-])(open|xdg-open|start)( +-[a-z]+)* +[^;&|]*(localhost|127\.0\.0\.1|0\.0\.0\.0|\.html?([^a-z]|$))'; then
+              why=$(sh "$SC" state "$root") || { echo "Blocked by chief-of-staff: this opens a screen for the owner, and the project's screens are not cleared to reach the owner: $why
+$REVIEW_HOW" >&2; exit 2; }
+            fi
             # ponytail: a word list, not a shell parser; the files are also read-only on disk.
             # A command that names them and could write them is blocked
             blk=
@@ -422,15 +431,15 @@ WS
           *) # the library's git data and the plugin's own files. The path is resolved (.., symlinks, letter case) before it is compared
              fp=$(printf '%s' "$in" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1)
              # no screen is built before its design: screen code waits while a design item of TRACK.md is not done
-             # (a block, not a reminder: in real use a thread built the screens across several turns with the design
-             # item open, and a turn-end push lets go on the second stop). Mockups under design/ are the designer's
-             case $fp in "$root"/*) if printf '%s' "$in" | sh "$SC" isui "$fp"; then
-               why=$(sh "$SC" gate "$root" "$fp") || [ $? != 1 ] || {
-                 echo "Blocked by chief-of-staff: ${fp#"$root/"} is screen code, and its design is not done: $why
+             # (a block, not a reminder: screens can be built over several turns, and a turn-end push lets go on the
+             # second stop). Mockups under design/ are the designer's. A path with .. parts is blocked further below
+             if sfp=$(inroot "$fp") && printf '%s' "$in" | sh "$SC" isui "$sfp"; then
+               why=$(sh "$SC" gate "$root" "$sfp") || [ $? != 1 ] || {
+                 echo "Blocked by chief-of-staff: ${sfp#"$(cd "$root" && pwd -P)/"} is screen code, and its design is not done: $why
 No screen is built before its design. Run the designer as a subagent ('Role card: designer'). It searches the library first (and the project's own collection of design references, if it keeps one), names 1-2 real apps the screens will follow (name, link, a saved screenshot of each), and writes the design: flows, every state (empty, loading, error, first use), tokens, and mockups under design/, the only place screen files may be written before the design is done. Then close the design item in TRACK.md with that file as evidence: it holds a 'References:' section (the apps, with links) and a 'Library:' line. The screen code continues after that.
 If this file is not a screen of the product (a video composition, a deck, a report), write the product's screen paths on the design item: '| screens: <path pattern>, <path pattern>'." >&2
                  exit 2; }
-             fi ;; esac
+             fi
              case $fp in /*) rp=$(real "$fp")
                [ -n "$rp" ] || { echo "Blocked by chief-of-staff: write $fp by its plain path, without . or .. parts." >&2; exit 2; } ;; *) rp= ;; esac
              o=$(cos_libs "$root" | while IFS="$TAB" read -r n q; do [ -d "$q" ] || continue
@@ -541,8 +550,8 @@ Fix each note (format: $lib/templates/note.md). When a new note is better than a
     [ -n "$gaps" ] && reason="${reason:+$reason }Track gate (${pdir#"$root/"}/TRACK.md) not met:
 $gaps
 Close each item with its proof file (evidence: path relative to the project folder), mark it [-] with why: when it does not apply, or move stage: back. A stage passes only when every item is closed."
+    sgaps=
     if [ -n "$project" ]; then
-      sgaps=
       # screen code a shell command changed this turn (a heredoc, sed -i, a script): recorded like an Edit, and held
       # to the design gate the Edit tool meets before it writes
       if [ -f "$st/start" ]; then
@@ -573,7 +582,11 @@ $lslow"
       "$(date '+%F %T')" "$(date +%s)" "$sid" "${project:--}" "$substantive" "$agents" "$specialists" "$reviewers" \
       "$([ -f "$st/library" ] && echo 1 || echo 0)" "$([ -f "$st/web" ] && echo 1 || echo 0)" "$([ -f "$st/saved" ] && echo 1 || echo 0)" \
       "$(printf '%s' "$gaps" | grep -c .)" "${pushed:-false}" "$violation" "$(printf '%s' "$lgaps" | grep -c .)" "$([ $lst = 0 ] && echo 0 || echo 1)" "$(count rejected)" "$(printf '%s' "$lslow" | grep -c .)" >> "$([ -n "$lite" ] && echo "$DATA/protocol.log" || echo "$root/.protocol.log")"
-    [ "$pushed" = true ] && exit 0
+    # a screen that is not cleared still holds the second stop, twice more at most (a block that never lets go could
+    # trap a session that cannot run the reviewer); every other reason lets go on the second stop
+    if [ "$pushed" = true ]; then
+      [ -n "$sgaps" ] && [ "$(count screenpush)" -lt 2 ] && { mark screenpush; echo "Still not cleared: $sgaps" >&2; exit 2; }
+      exit 0; fi
     [ -n "$reason" ] || exit 0
     echo "$reason" >&2
     exit 2

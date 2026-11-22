@@ -263,12 +263,15 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
   run the designer: library first, 1-2 real reference apps, then the design, with mockups under `design/`, which is
   never held. Screen code a shell command wrote is caught at the end of the turn (pushed once). A project with no
   design item is not held: once per turn it is told what a screen needs. **No screen to the owner before its
-  review**: every change of a screen file is recorded; an `Artifact` publish or a `SendUserFile` of a page or a
-  picture is blocked until the newest review in `design/reviews/` says `Verdict: pass` and is newer than every
-  change, and an answer that points at a screen (a localhost address, a page, a screenshot) is pushed once. A review
-  is rejected on save without `Verdict:`, a `References:` section with links and a `Side by side:` section naming
-  two saved screenshots that exist (this screen and the reference); one written in a turn that ran no reviewer
-  subagent is made void. A designer subagent cannot finish without a `References:` section.
+  review**: every change of a screen file is recorded; an `Artifact` publish, a `SendUserFile` of a page or a
+  picture, and a shell `open` of a page or a local server are blocked until the newest review in `design/reviews/`
+  says `Verdict: pass`, is newer than every change and holds a screenshot taken after the last change. An answer
+  that points at a screen (a localhost address, a page, a screenshot) is pushed at the end of the turn, and that push
+  holds the second stop too, twice at most. A review is rejected on save without `Verdict:`, a `References:` section
+  with links and a `Side by side:` section naming two different, non-empty saved screenshots (this screen and the
+  reference); one written in a turn that ran no reviewer subagent is made void. Paths are compared as the disk
+  resolves them (`..`, symlinks, letter case), and a design item's evidence is one file of the project named by a
+  plain relative path. A designer subagent cannot finish without a `References:` section.
   `sh scripts/screens.sh state <project>` says where the project stands.
 - The same Stop hook runs `scripts/track.sh check` in a project session: a stage below `stage:` with
   an open item, an item marked done whose proof file does not exist or whose prerequisites are
@@ -368,9 +371,11 @@ What is ours, with no equivalent found in ECC:
 - The screen gates know a screen file by its extension (and, for scripts and native code, by a UI framework in its
   text), and a shown screen by the tool (`Artifact`, `SendUserFile`) or by words in the answer. A screen opened in
   the browser pane to check one's own work (`preview_start`) is not blocked: that is how the builder and the
-  reviewer see it. Pointing the owner at a screen in the answer is pushed once per turn, not locked. A shell command
-  that writes screen code is caught at the end of the turn, not before. The review gate trusts file times: a screen
-  changed in the same second as its review counts as reviewed.
+  reviewer see it, and the owner can see that pane. Pointing the owner at a screen in the answer is pushed at most
+  three times per turn, not locked. A shell command that writes screen code is caught at the end of the turn, not
+  before. The review gate checks the review's form and its times, not its judgement: the newest passing review clears
+  every screen of the project, and a design item's evidence is checked for references and the library, not for
+  quality. A screen changed in the same second as its review counts as changed after it.
 - A track gate checks that a proof file exists, not what it says. An agent can still write a
   thin file; the stage's reviewer item, which can never be skipped, is where that is caught.
 - The role cards' sources were checked once by a reviewer on 2026-10-22; a few dates and versions

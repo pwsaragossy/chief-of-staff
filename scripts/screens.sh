@@ -14,7 +14,7 @@
 # line, or marked [-] with why: (no screens here). Mockups go under design/, which the design gate never holds.
 . "$(dirname "$0")/lib.sh"
 
-cmd=$1; dir=${2:-}; [ -d "$dir" ] && dir=$(cd "$dir" && pwd)
+cmd=$1; dir=${2:-}; [ -d "$dir" ] && dir=$(cd "$dir" && pwd -P)
 IMG='png|jpe?g|webp|gif'
 
 # isui FILE: by extension; a script or native source counts when it uses a UI framework (new text or file on disk)
@@ -37,9 +37,10 @@ block() { awk -v w="$2" 'BEGIN { w = tolower(w); F = "^[*_]*(verdict|references?
   on { print }' "$1"; }
 
 # refs FILE_OR_DIR: the design evidence names a reference app with a link, and the library
-refs() { _f=$1
-  [ -d "$_f" ] && _f=$(grep -ril '^[#*_ ]*references\{0,1\}[*_ ]*:\{0,1\}' "$_f" 2>/dev/null | grep -i '\.md$' | head -n 1)
-  [ -n "$_f" ] && [ -f "$_f" ] || { echo "its evidence file is missing"; return 1; }
+# (one regular file inside the project, by a plain relative path: an empty evidence: or a folder proves nothing)
+refs() { case $1 in ''|/*|../*|*/../*|*/..|./*|*/./*) echo "its evidence is not a file of the project named by a plain relative path"; return 1 ;; esac
+  _f=$dir/$1
+  [ -f "$_f" ] || { echo "its evidence file $1 is missing"; return 1; }
   _r=0
   block "$_f" 'references?' | grep -Eq 'https?://' ||
     { echo "its evidence ${_f#"$dir/"} has no 'References:' section with a link (the 1-2 real apps the screens follow)"; _r=1; }
@@ -53,7 +54,7 @@ shots() { _b=$(block "$1" 'side by side')
     printf '%s\n' "$_b" | grep -oE "\`[^\`]+\\.($IMG)\`" | tr -d '\`'
     printf '%s\n' "$_b" | grep -oE "[^][ ()\`\"<>|]+\\.($IMG)"; } 2>/dev/null |
   while IFS= read -r _i; do for _c in "$_i" "$2/$_i" "$3/$_i"; do
-    case $_c in (/*) [ -f "$_c" ] && { printf '%s\n' "$_c"; break; } ;; esac; done; done; }
+    case $_c in (/*) [ -s "$_c" ] && { printf '%s\n' "$_c"; break; } ;; esac; done; done; }
 
 log() { cos_cache screens "$dir"; }
 mtime() { date -r "$1" +%s 2>/dev/null || date +%s; }
@@ -62,7 +63,7 @@ case $cmd in
   isui) isui "$2" ;;
   gate)
     rel=${3#"$dir/"}; [ -f "$dir/TRACK.md" ] || exit 3
-    case $rel in design/*) exit 0 ;; esac
+    case $rel in */../*|../*|*/./*|./*) ;; design/*) exit 0 ;; esac   # design/../app.html is not a mockup
     US=$(printf '\037'); hit=; why=
     items=$(awk '{ sub(/\r$/, "") } /^- \[.\] / {
         m = substr($0, 4, 1); k = split(substr($0, 7), f, / \| /); id = f[1]; gsub(/^ +| +$/, "", id); ev = sc = ""; s = 0
@@ -78,7 +79,7 @@ case $cmd in
       hit=1
       case $m in
         -) ;;
-        x) w=$(refs "$dir/$ev") || why="${why}$id is closed, but $(printf '%s' "$w" | tr '\n' ';' | sed 's/;$//; s/;/; and /g'). "  ;;
+        x) w=$(refs "$ev") || why="${why}$id is closed, but $(printf '%s' "$w" | tr '\n' ';' | sed 's/;$//; s/;/; and /g'). "  ;;
         *) why="${why}the design item $id in TRACK.md is open. " ;;
       esac
     done <<EOF
@@ -94,12 +95,17 @@ EOF
     exit 0 ;;
   changed)
     [ -f "${3:-}" ] || exit 0
+    # a file put back as HEAD (git checkout) is no change, unless a commit was made this turn
+    hc=$(git -C "$dir" log -1 --format=%ct 2>/dev/null); since=$(mtime "$3")
     find "$dir" \( -name node_modules -o -name .git -o -name dist -o -name build -o -name .venv -o -name venv -o \
-      -name __pycache__ -o -name .next -o -name Pods -o -name DerivedData -o -name design -o -name tests -o -name test \) -prune -o \
+      -name __pycache__ -o -name .next -o -name Pods -o -name DerivedData -o -path "$dir/design" -o -name tests -o -name test \) -prune -o \
       -type f -cnewer "$3" \( -name '*.html' -o -name '*.htm' -o -name '*.css' -o -name '*.scss' -o -name '*.sass' -o -name '*.less' \
       -o -name '*.jsx' -o -name '*.tsx' -o -name '*.vue' -o -name '*.svelte' -o -name '*.astro' -o -name '*.swift' -o -name '*.kt' \
-      -o -name '*.dart' -o -name '*.js' -o -name '*.mjs' -o -name '*.ts' \) -print 2>/dev/null | head -n 50 |
-    while IFS= read -r f; do isui "$f" </dev/null && { printf '%s\n' "$f"; sh "$0" touch "$dir" "$f"; }; done ;;
+      -o -name '*.dart' -o -name '*.js' -o -name '*.mjs' -o -name '*.ts' \) -print 2>/dev/null | head -n 200 |
+    while IFS= read -r f; do isui "$f" </dev/null || continue
+      [ -n "$hc" ] && [ "$hc" -lt "$since" ] && git -C "$dir" ls-files --error-unmatch -- "$f" >/dev/null 2>&1 &&
+        git -C "$dir" diff --quiet HEAD -- "$f" 2>/dev/null && continue
+      printf '%s\n' "$f"; sh "$0" touch "$dir" "$f"; done ;;
   review)
     f=$2; [ -f "$f" ] || { echo "no such file"; exit 1; }; d=${f%/*}; root=${d%/design/reviews*}; p=
     v=$(sed -n 's/\r$//; s/^[#*_ ]*[Vv]erdict[*_ ]*: *[*_]*\([A-Za-z]*\).*/\1/p' "$f" | head -n 1 | tr 'A-Z' 'a-z')
@@ -110,8 +116,9 @@ EOF
     block "$f" 'references?' | grep -Eq 'https?://' || p="$p- a 'References:' section with the link of each reference app the designer named
 "
     # the side by side: at least two saved screenshots that exist (this screen and the reference), by path
-    n=$(shots "$f" "$d" "$root" | sort -u | wc -l | tr -d ' ')
-    [ "${n:-0}" -ge 2 ] || p="$p- a 'Side by side:' section naming at least two saved screenshots that exist: this screen and the reference app (found $n)
+    # distinct by content: one picture named twice, or two empty files, is no comparison
+    n=$(shots "$f" "$d" "$root" | while IFS= read -r i; do cksum < "$i"; done | sort -u | wc -l | tr -d ' ')
+    [ "${n:-0}" -ge 2 ] || p="$p- a 'Side by side:' section naming at least two different saved screenshots that exist: this screen and the reference app (found $n)
 "
     [ -z "$p" ] && { echo "$v"; exit 0; }
     printf '%s' "$p"; exit 1 ;;
@@ -125,7 +132,12 @@ EOF
     rel=${r#"$dir/"}
     v=$(sh "$0" review "$r") || { echo "the newest review, $rel, is not complete:"; printf '%s\n' "$v"; exit 1; }
     [ "$v" = fail ] && { echo "the newest review, $rel, failed: fix the screen and review it again"; exit 1; }
-    [ "$last" -le "$(mtime "$r")" ] && exit 0
+    # the review is newer than every change (same second counts as after), and one of its screenshots, this screen's
+    # own, was taken after the last change: a review of an older picture does not clear a newer screen
+    if [ "$last" -lt "$(mtime "$r")" ]; then
+      d=${r%/*}; fresh=$(shots "$r" "$d" "$dir" | while IFS= read -r i; do [ "$(mtime "$i")" -ge "$last" ] && echo y; done | head -n 1)
+      [ -n "$fresh" ] && exit 0
+      echo "the newest passing review, $rel, has no screenshot taken after the last change of ${lf#"$dir/"}"; exit 1; fi
     echo "${lf#"$dir/"} changed after the newest passing review, $rel"; exit 1 ;;
   *) echo "usage: screens.sh isui|gate|touch|changed|review|state ..." >&2; exit 2 ;;
 esac

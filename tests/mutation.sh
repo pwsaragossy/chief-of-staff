@@ -42,13 +42,23 @@ mutate "project.sh trust runs without asking" scripts/protocol.sh "the guard ask
 mutate "a background launch is not credited" scripts/protocol.sh "the turn that applies a background report is credited" \
   "*'\"status\":\"async_launched\"'*|*'\"status\": \"async_launched\"'*|" ""
 mutate "screen code is written before its design" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
-  'why=$(sh "$SC" gate "$root" "$fp") || [ $? != 1 ] || {' 'why=; true || {'
+  'why=$(sh "$SC" gate "$root" "$sfp") || [ $? != 1 ] || {' 'why=; true || {'
 mutate "a design item closed with a stub opens screen code" scripts/screens.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
-  'x) w=$(refs "$dir/$ev") || why=' 'x) w=$(true) || why='
+  'x) w=$(refs "$ev") || why=' 'x) w=$(true) || why='
+mutate "design/../ passes as a mockup" scripts/screens.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
+  'case $rel in */../*|../*|*/./*|./*) ;; design/*) exit 0 ;; esac' 'case $rel in design/*) exit 0 ;; esac'
 mutate "a screen is shown before its review" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
   'why=$(sh "$SC" state "$root") && exit 0' 'exit 0'
+mutate "opening a screen in the owner's browser is not held" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
+  'why=$(sh "$SC" state "$root") || { echo "Blocked by chief-of-staff: this opens a screen' 'why=$(true) || { echo "Blocked by chief-of-staff: this opens a screen'
+mutate "empty or repeated screenshots pass as a side by side" scripts/screens.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
+  'do cksum < "$i"; done | sort -u' 'do echo "$i$RANDOM"; done | sort -u'
+mutate "a review of an older picture clears a newer screen" scripts/screens.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
+  '[ -n "$fresh" ] && exit 0' 'exit 0'
 mutate "a review the session wrote itself stands" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
   'if [ -n "$rv" ] && [ "$reviewers" -lt 1 ]' 'if false'
 mutate "screen code written by a shell command goes unseen" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
   'chg=$(cos_limit 1 sh "$SC" changed "$root" "$st/start") || chg=' 'chg='
+mutate "a screen not cleared lets go on the second stop" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
+  '[ -n "$sgaps" ] && [ "$(count screenpush)" -lt 2 ] && {' 'false && {'
 echo "caught=$caught missed=$missed"; [ "$missed" = 0 ]

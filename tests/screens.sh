@@ -42,8 +42,14 @@ check "an Edit and a MultiEdit of screen code wait too" '[ "$(rc "$(w "$P/conten
 check "the designer writes mockups under design/" '[ "$(rc "$(w "$P/design/home.html" "<div>")" "$P")" = 0 ]'
 check "text, tests and plain scripts are not screen code" '[ "$(rc "$(w "$P/out/notes.md" "x")" "$P")" = 0 ] && [ "$(rc "$(w "$P/src/util.ts" "export const a = 1")" "$P")" = 0 ] && [ "$(rc "$(w "$P/src/Home.test.tsx" "x")" "$P")" = 0 ] && [ "$(rc "$(w "$P/tests/page.html" "x")" "$P")" = 0 ]'
 check "native and script files count when they use a UI framework" '[ "$(rc "$(w "$P/App/HomeView.swift" "import SwiftUI")" "$P")" = 2 ] && [ "$(rc "$(w "$P/web/main.js" "document.createElement(1)")" "$P")" = 2 ] && [ "$(rc "$(w "$P/App/Model.swift" "struct A {}")" "$P")" = 0 ]'
+check "a path through design/.. is not a mockup, through the hook and to screens.sh itself" '[ "$(rc "$(w "$P/design/../content/app.html" "x")" "$P")" = 2 ] && sh "$S/screens.sh" gate "$P" "$P/design/../content/app.html" >/dev/null; [ $? = 1 ]'
 check "a file outside the project folder is not held" '[ "$(rc "$(w "$T/elsewhere/app.html" "x")" "$P")" = 0 ]'
 echo 'A spec with no references.' > "$P/out/ui.md"
+printf 'References: https://example.com\nLibrary: none\n' > "$P/README.md"
+for e in "" "out" "/etc/hosts" "../app/README.md"; do
+  track "- [x] ui-spec | Screens | card: designer | needs: flows | evidence: $e"
+  check "a design item closed with evidence '$e' (empty, a folder, outside, ..) holds" '[ "$(rc "$(w "$P/content/app.html" "x")" "$P")" = 2 ]'
+done; rm -f "$P/README.md"
 track '- [x] ui-spec | Screens | card: designer | needs: flows | evidence: out/ui.md'
 check "a design item closed with a stub still holds: it must name reference apps with links and the library" 'o=$(h "$(w "$P/content/app.html" "x")" "$P" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "no .References:. section with a link" && printf "%s" "$o" | grep -q "no .Library:. line"'
 printf 'References:\n- Linear: https://linear.app (shots/linear.png)\n' > "$P/out/ui.md"
@@ -62,20 +68,26 @@ check "outside a project the gates are silent" '[ "$(rc "$(w "$T/loose/a.html" "
 
 # the review gate
 SID=u2; h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$Q" >/dev/null
-mkdir -p "$Q/design/reviews" "$Q/shots"; : > "$Q/shots/ours.png"; : > "$Q/shots/linear.png"
+mkdir -p "$Q/design/reviews" "$Q/shots"; echo ours > "$Q/shots/ours.png"; echo linear > "$Q/shots/linear.png"
 echo '<div>' > "$Q/index.html"; touch -t 202601010000 "$Q/index.html"; h "$(pw "$Q/index.html" "x")" "$Q" >/dev/null
 check "a changed screen with no review is not shown: an Artifact, a file sent" 'o=$(h "$(art "$Q/index.html")" "$Q" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "holds no review of the screens" && printf "%s" "$o" | grep -q "Role card: reviewer" && printf "%s" "$o" | grep -q "side by side" && [ "$(rc "$(send "$Q/shots/ours.png")" "$Q")" = 2 ]'
 check "what is not a page or a picture, and an Artifact read or list, pass" '[ "$(rc "$(send "$Q/report.md")" "$Q")" = 0 ] && [ "$(rc "$(art "$Q/index.html" ",\"action\":\"list\"")" "$Q")" = 0 ]'
 check "an answer that points the owner at the screen cannot end before the review" 'o=$(h "$(stop "Pronto: abre http://localhost:3013")" "$Q" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "This answer points at a screen" && ! h "$(stop "Feito, sem tela.")" "$Q" 2>&1 | grep -q "points at a screen"'
 printf 'Verdict: pass\n' > "$Q/design/reviews/2026-01-01 0100 home.md"
-check "an incomplete review is rejected as it is written, and does not clear the screen" 'o=$(h "$(pw "$Q/design/reviews/2026-01-01 0100 home.md" "x")" "$Q" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "Screen review rejected" && printf "%s" "$o" | grep -q "References:" && printf "%s" "$o" | grep -q "two saved screenshots" && [ "$(rc "$(art "$Q/index.html")" "$Q")" = 2 ]'
+check "an incomplete review is rejected as it is written, and does not clear the screen" 'o=$(h "$(pw "$Q/design/reviews/2026-01-01 0100 home.md" "x")" "$Q" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "Screen review rejected" && printf "%s" "$o" | grep -q "References:" && printf "%s" "$o" | grep -q "two different saved screenshots" && [ "$(rc "$(art "$Q/index.html")" "$Q")" = 2 ]'
 review() { printf 'Reviewing: home\nVerdict: %s\nReferences:\n- Linear: https://linear.app\nSide by side:\n- [ours](shots/ours.png) | `shots/linear.png`\n' "$1" > "$Q/design/reviews/$2.md"; touch -t "$3" "$Q/design/reviews/$2.md"; }
+: > "$Q/shots/empty1.png"; : > "$Q/shots/empty2.png"
+printf 'Verdict: pass\nReferences: https://linear.app\nSide by side: shots/empty1.png | shots/empty2.png\n' > "$Q/design/reviews/x1.md"
+printf 'Verdict: pass\nReferences: https://linear.app\nSide by side: shots/ours.png | `./shots/ours.png`\n' > "$Q/design/reviews/x2.md"
+check "a review of empty pictures, or of one picture named twice, compares nothing and is rejected" '! sh "$S/screens.sh" review "$Q/design/reviews/x1.md" >/dev/null && sh "$S/screens.sh" review "$Q/design/reviews/x2.md" | grep -q "found 1"'
+rm -f "$Q/design/reviews/x1.md" "$Q/design/reviews/x2.md"
 review fail "2026-01-01 0100 home" 202601010100
 check "a failed review keeps the screen from the owner" 'h "$(art "$Q/index.html")" "$Q" 2>&1 | grep -q "failed: fix the screen and review it again"'
 review pass "2026-01-01 0200 home" 202601010200
 sleep 1; SID=u2b; h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$Q" >/dev/null   # a new turn: these reviews stand for the reviewer's
 check "a passing review newer than every screen change clears it" '[ "$(rc "$(art "$Q/index.html")" "$Q")" = 0 ] && [ "$(rc "$(send "$Q/shots/ours.png")" "$Q")" = 0 ] && [ "$(rc "$(stop "Abre http://localhost:3013")" "$Q")" = 0 ] && sh "$S/screens.sh" state "$Q"'
 touch -t 202601010300 "$Q/index.html"; h "$(pw "$Q/index.html" "x" Edit)" "$Q" >/dev/null
+check "an edit after the passing review holds the screen again, and so does opening it in the owner.s browser" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"open http://localhost:3013\"}")" "$Q" 2>&1 | grep -q "this opens a screen for the owner"'
 check "an edit after the passing review holds the screen again" 'h "$(art "$Q/index.html")" "$Q" 2>&1 | grep -q "index.html changed after the newest passing review"'
 
 # who writes the review: the independent reviewer subagent
@@ -85,7 +97,15 @@ check "a review written by the session itself is void and does not clear the scr
 SID=u4; h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$Q" >/dev/null; sleep 1
 review pass "2026-01-01 0500 home" 202601010500; touch "$Q/design/reviews/2026-01-01 0500 home.md"
 h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: reviewer. Library: none found for home\"}")" "$Q" >/dev/null
-check "a review the reviewer subagent wrote stands and clears the screen" '[ "$(rc "$(stop "ok")" "$Q")" = 0 ] && ! grep -q "^Void: " "$Q/design/reviews/2026-01-01 0500 home.md" && [ "$(rc "$(art "$Q/index.html")" "$Q")" = 0 ]'
+check "a review the reviewer subagent wrote stands and clears the screen" '[ "$(rc "$(stop "ok")" "$Q")" = 0 ] && ! grep -q "^Void: " "$Q/design/reviews/2026-01-01 0500 home.md" && [ "$(rc "$(art "$Q/index.html")" "$Q")" = 0 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"open http://localhost:3013\"}")" "$Q")" = 0 ]'
+touch -t 202601010600 "$Q/index.html"; h "$(pw "$Q/index.html" "x" Edit)" "$Q" >/dev/null; touch -t 202601010550 "$Q/shots/ours.png" "$Q/shots/linear.png"
+review pass "2026-01-01 0700 home" 202601010700
+check "a passing review whose screenshots are all older than the last change does not clear it" 'h "$(art "$Q/index.html")" "$Q" 2>&1 | grep -q "has no screenshot taken after the last change of index.html"'
+echo ours2 > "$Q/shots/ours.png"; touch -t 202601010650 "$Q/shots/ours.png"
+check "a fresh screenshot of the screen in the review clears it" '[ "$(rc "$(art "$Q/index.html")" "$Q")" = 0 ]'
+SID=u4b; h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$Q" >/dev/null
+touch -t 202601010800 "$Q/index.html"; h "$(pw "$Q/index.html" "x" Edit)" "$Q" >/dev/null
+check "a screen that is not cleared holds the second stop too, twice at most, then lets go" 'a=$(rc "$(stop "Abre http://localhost:3013")" "$Q"); b=$(rc "$(ev Stop ",\"stop_hook_active\":true,\"last_assistant_message\":\"Abre http://localhost:3013\"")" "$Q"); c=$(rc "$(ev Stop ",\"stop_hook_active\":true,\"last_assistant_message\":\"Abre http://localhost:3013\"")" "$Q"); d=$(rc "$(ev Stop ",\"stop_hook_active\":true,\"last_assistant_message\":\"Abre http://localhost:3013\"")" "$Q"); [ "$a$b$c$d" = 2220 ] || { echo "$a$b$c$d"; false; }'
 
 # screen code written by a shell command meets the same design gate at the end of the turn
 track '- [ ] ui-spec | Screens | card: designer | needs: flows | evidence:'
@@ -95,6 +115,16 @@ check "screen code a shell command wrote while the design is open cannot end the
 check "and it is recorded for the review gate" 'h "$(art "$P/content/shell.html")" "$P" 2>&1 | grep -q "content/shell.html changed and design/reviews/ holds no review"'
 SID=u6; h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$P" >/dev/null; sleep 1; echo '<p>' > "$P/design/mock.html"
 check "a mockup a shell command wrote under design/ is the designer's" '! h "$(stop "ok")" "$P" 2>&1 | grep -q "by a shell command"'
+mkdir -p "$P/src/design"; SID=u7; h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$P" >/dev/null; sleep 1; echo 'x' > "$P/src/design/B.tsx"
+check "a folder named design deeper in the project is not the designer's" 'h "$(stop "ok")" "$P" 2>&1 | grep -q "src/design/B.tsx"'
+rm -f "$P/src/design/B.tsx" "$P/content/shell.html"
+if command -v git >/dev/null; then
+  git -C "$P" init -q && git -C "$P" -c user.name=t -c user.email=t@t add content && git -C "$P" -c user.name=t -c user.email=t@t commit -qm x content 2>/dev/null
+  echo '<div>' > "$P/content/kept.html"; git -C "$P" add content/kept.html; git -C "$P" -c user.name=t -c user.email=t@t commit -qm y
+  sleep 1; SID=u8; h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$P" >/dev/null; sleep 1
+  echo '<b>' > "$P/content/kept.html"; git -C "$P" checkout -q -- content/kept.html
+  check "screen code a shell command changed and put back (git checkout) is no change" '! h "$(stop "ok")" "$P" 2>&1 | grep -q "by a shell command"'
+fi
 
 # the designer names its references
 check "a designer cannot finish without its references" 'o=$(h "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: designer ## Never-skip checklist ok\"")" "$P" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "1-2 real apps"'
