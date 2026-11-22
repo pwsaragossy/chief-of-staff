@@ -35,6 +35,12 @@ Find what is wrong, missing, unsupported or contradictory, and say what evidence
 10. Run a pre-mortem: assume the owner followed this and it failed in six months; write the most plausible cause.
 11. Rank findings by severity, give the evidence for each, and state the verdict.
 
+Screen review (a page, an app view, a mockup, before the owner sees it)
+1. Open the screen as built and each reference app the designer named (its `References:` section). Save a screenshot of each at the same size inside the project folder (for example `design/reviews/shots/`).
+2. Compare them side by side: layout, hierarchy, type, spacing, colour, density, states (empty, loading, error). List every difference that makes this screen worse than its references, with severity.
+3. `Verdict: pass` only when the screen holds up next to its references and no critical or major finding is left; otherwise `Verdict: fail`. A failed screen is fixed and reviewed again: it never reaches the owner, and the hooks block showing it.
+4. Write `design/reviews/<YYYY-MM-DD HHMM> <screen>.md` with `Verdict: pass` or `Verdict: fail`, a `References:` section (the apps, with links), a `Side by side:` section (the screenshot paths, this screen and the reference) and the findings. The hooks reject a review without them, and void one written in a turn that ran no reviewer subagent.
+
 ## Toolbox
 | Tool | Use when | Output |
 |---|---|---|
@@ -63,6 +69,7 @@ Find what is wrong, missing, unsupported or contradictory, and say what evidence
 - [ ] A pre-mortem was run and its top failure story is in the output.
 - [ ] Every claim was checked by something outside the specialist (a run, a source, the arithmetic) with its evidence (the output or the file), not by the specialist's opinion. The work does only what the brief asked, with the size and tone the owner asked for; no choice that shapes what the owner will see or use (what gets built, reuse or rebuild, its look and format, its scope, what a sample is) was made without the owner's own words in quotes; whatever goes past the request is under the owner's questions, as an option, not in the work.
 - [ ] Each finding states severity and evidence; claims without evidence are labeled as suspicion.
+- [ ] A screen was judged side by side with the designer's reference apps from saved screenshots, and its verdict file is in design/reviews/ (not applicable when no screen was reviewed).
 
 ## Evidence standard
 - A finding needs evidence you can point to: the quoted line of the output, the source passage, the recomputed number, the conflicting note path. Write `[FACT] (where)` for observed and `[SUSPICION]` for a doubt without proof.

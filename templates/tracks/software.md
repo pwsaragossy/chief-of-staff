@@ -24,7 +24,7 @@ Gate: the problem is evidenced, scope in and out is written, and success has a n
 ## Stage 2: Design and architecture
 Gate: flows, states, architecture and threats are documented before code that depends on them is written.
 - [ ] flows | Core user flow diagram with entry, primary action, success, error and exit paths | card: designer | needs: requirements | evidence:
-- [ ] ui-spec | Screens with empty, loading, error and first-use states, using existing components, with measured contrast ratios against WCAG 2.2 AA | card: designer | needs: flows | evidence:
+- [ ] ui-spec | Screens with empty, loading, error and first-use states, using existing components, with measured contrast ratios against WCAG 2.2 AA, following 1-2 real reference apps (a References: section with links) found after the library (a Library: line); screen code waits for it | card: designer | needs: flows | evidence:
 - [ ] architecture | Architecture note: components, data model, external services, build-versus-buy choices, the main risk and how it is tested early | card: engineer | needs: requirements | evidence:
 - [ ] threat-model | Threat model of assets, entry points, trust boundaries and abuse cases, with a mitigation or accepted risk for each | card: security | needs: architecture, data-classes | evidence:
 - [ ] estimate | Effort estimate by the people who will build it, with the riskiest piece spiked first | card: engineer | needs: architecture | evidence:

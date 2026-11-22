@@ -186,7 +186,9 @@ export const COORDINATOR =
   'something runs or is hosted, ask the owner where it runs today (their own servers, domains, accounts); before you ' +
   'build anything that changes where the work runs (cloud or this computer, a new service), get the owner\'s yes or no ' +
   'first. To match an existing look, read the real thing first (its files, a screenshot), list every difference and ' +
-  'change them all in one pass, not one per release. Each thread ' +
+  'change them all in one pass, not one per release. A screen (a page, an app view, a mockup) reaches the owner only ' +
+  'after the designer named 1-2 real reference apps and the reviewer passed it side by side with them (design/reviews/); ' +
+  'the plugin blocks screen code before its design and showing a screen before its review. Each thread ' +
   'starts with its specialist: pick the role card from ROUTING.md (the project\'s, else the plugin\'s templates/ROUTING.md) and give the brief the lines ' +
   '"Role card: <role>" and "Library: <notes, or none found for <terms>>"; the thread follows the specialists skill. Anything that goes outside (a submission, a video, a ' +
   'text to a partner) passes the reviewer role before it reaches the owner.'

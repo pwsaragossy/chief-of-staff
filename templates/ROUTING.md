@@ -13,6 +13,7 @@ tools and when to use each, and what it never skips. Edit cards and rows freely:
 | law, contracts, IP, privacy, regulation | `legal` (AI prepares, a licensed human signs) | `reviewer` |
 | marketing, positioning, channels, launch | `marketing` | `reviewer` |
 | design: brand identity, logo, interface, deck | `designer` | `reviewer` |
+| a screen: built, changed, or about to be shown to the owner | `designer` first (library, 1-2 real reference apps, the design), then the screen code | `reviewer` side by side with those apps, verdict in `design/reviews/` |
 | risk, security, privacy, operational failure | `security` | `reviewer` |
 | opening a new project | `new-project` skill, in the project's own folder, which copies a track to TRACK.md | coherence check of the success criteria |
 | the next deliverable of a project | the role card named on its line in TRACK.md | the stage's `review-<n>` item |

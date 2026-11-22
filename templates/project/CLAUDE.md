@@ -40,7 +40,9 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
     owner where something runs today before you propose a host or a deploy path, and get a yes or no before
     you build anything that changes where the work runs (cloud or this computer, a new service). To match an
     existing look, read the real thing first (its files, a screenshot), list every difference and change
-    them all in one pass.
+    them all in one pass. A screen (a page, an app view, a mockup) reaches the owner only after the
+    `designer` named 1-2 real reference apps and the `reviewer` passed it side by side with them
+    (`design/reviews/`); the plugin blocks screen code before its design and showing a screen before its review.
   - Under the owner's message, one line per thread you started or sent work to, as a card:
     `[<thread title>](#<its local_ id>): what it took`. The owner opens the thread from it.
   - A follow-up about a thread's work goes to that thread; say which one in one line.

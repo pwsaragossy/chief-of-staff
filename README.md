@@ -254,6 +254,22 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
   a substantive turn (a deliverable file or a long answer) cannot end without a
   specialist and the reviewer; research alone is not substantive. Each push happens once per
   turn. Every turn is logged to `<project>/.protocol.log`, the adherence record.
+- Screens (`scripts/screens.sh`, called by `protocol.sh`), in a project folder. **No screen code before its
+  design**: a Write or Edit of a file that renders a screen (html, css, jsx, tsx, vue, svelte, astro; swift, kotlin,
+  dart, js or ts that use a UI framework; not tests) is blocked while the project's design item is not done. A design
+  item is a TRACK.md item with id `ui-spec` or a `screens:` field (path patterns of the product's screens, so a video
+  composition or a deck is not held); it is done when closed with evidence that holds a `References:` section (1-2
+  real apps, with links) and a `Library:` line, or marked not applicable with `why:`. The block tells the agent to
+  run the designer: library first, 1-2 real reference apps, then the design, with mockups under `design/`, which is
+  never held. Screen code a shell command wrote is caught at the end of the turn (pushed once). A project with no
+  design item is not held: once per turn it is told what a screen needs. **No screen to the owner before its
+  review**: every change of a screen file is recorded; an `Artifact` publish or a `SendUserFile` of a page or a
+  picture is blocked until the newest review in `design/reviews/` says `Verdict: pass` and is newer than every
+  change, and an answer that points at a screen (a localhost address, a page, a screenshot) is pushed once. A review
+  is rejected on save without `Verdict:`, a `References:` section with links and a `Side by side:` section naming
+  two saved screenshots that exist (this screen and the reference); one written in a turn that ran no reviewer
+  subagent is made void. A designer subagent cannot finish without a `References:` section.
+  `sh scripts/screens.sh state <project>` says where the project stands.
 - The same Stop hook runs `scripts/track.sh check` in a project session: a stage below `stage:` with
   an open item, an item marked done whose proof file does not exist or whose prerequisites are
   open, a not-applicable item without a reason, a reviewer item marked not applicable, a stage
@@ -349,6 +365,12 @@ What is ours, with no equivalent found in ECC:
 - The near-duplicate file notice compares names only, among files with the same extension (letter case,
   separators and a final s ignored), and never blocks: it asks the agent to check whether one duplicates the other.
 - The hooks check that specialists and the reviewer ran, not that they were good.
+- The screen gates know a screen file by its extension (and, for scripts and native code, by a UI framework in its
+  text), and a shown screen by the tool (`Artifact`, `SendUserFile`) or by words in the answer. A screen opened in
+  the browser pane to check one's own work (`preview_start`) is not blocked: that is how the builder and the
+  reviewer see it. Pointing the owner at a screen in the answer is pushed once per turn, not locked. A shell command
+  that writes screen code is caught at the end of the turn, not before. The review gate trusts file times: a screen
+  changed in the same second as its review counts as reviewed.
 - A track gate checks that a proof file exists, not what it says. An agent can still write a
   thin file; the stage's reviewer item, which can never be skipped, is where that is caught.
 - The role cards' sources were checked once by a reviewer on 2026-10-22; a few dates and versions

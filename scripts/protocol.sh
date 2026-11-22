@@ -37,6 +37,9 @@ rel=${CLAUDE_PROJECT_DIR:-$PWD}; rel=${rel#"$root"}; rel=${rel#/}
 if [ -n "$lite" ]; then lname=; lib=/nonexistent-library; lst=1
 else lname=$(cos_libname "$root" "${CLAUDE_PROJECT_DIR:-$PWD}"); lib=$(cos_libpath "$root" "$lname"); lst=$?; fi
 L="$(dirname "$0")/library.sh"; TAB=$(printf '\t')
+# screens: the design gate before screen code, the review gate before the owner sees a screen (screens.sh)
+SC="$(dirname "$0")/screens.sh"
+REVIEW_HOW="Run the independent reviewer as a subagent ('Role card: reviewer'). It opens the screen and the 1-2 reference apps the designer named, saves a screenshot of each, compares them side by side (layout, hierarchy, type, spacing, states) and writes design/reviews/<YYYY-MM-DD HHMM> <screen>.md with 'Verdict: pass' or 'Verdict: fail', a 'References:' section (the apps, with links) and a 'Side by side:' section (the paths of the saved screenshots, this screen and the reference). A screen that fails is fixed and reviewed again; it never reaches the owner. Where things stand: sh \"$SC\" state <project folder>."
 # a path with .., symlinks and letter case resolved (macOS ignores case); "" when a part that does not exist yet holds ..
 real() { realp "$1" | tr 'A-Z' 'a-z'; }
 realp() { d=$1 r=; k=0
@@ -179,7 +182,7 @@ $p"; fi ;;
               # jget stops at , } or a quote: trust fp only if the raw input closes the string right after it. The
               # project's own TRACK.md / DELIVERY.md, its settings and Claude's memory (an owner preference) are not deliverables
               case $in in *"\"file_path\":\"$fp\""*|*"\"file_path\": \"$fp\""*)
-                case $fp in "$root/TRACK.md"|"$root/DELIVERY.md"|*/CLAUDE.md|*/.claude/*|"$root/specialists/"*|"$root/ROUTING.md") ctl=1 ;;
+                case $fp in "$root/TRACK.md"|"$root/DELIVERY.md"|*/CLAUDE.md|*/.claude/*|"$root/specialists/"*|"$root/ROUTING.md"|"$root/design/reviews/"*) ctl=1 ;;
                   # a .md inside a code repository (git, plus a build or test manifest at its top) is code or its docs,
                   # covered by its own tests: a skill, a template, docs/. Its README goes public and DECISIONS.md holds
                   # guarded decisions, so both still count; a letter or a deck outside a code repository always counts
@@ -202,6 +205,18 @@ $p"; fi ;;
         function k(s) { s = tolower(s); sub(/\.[a-z0-9]+$/, "", s); gsub(/[^a-z0-9]/, "", s); sub(/s$/, "", s); return s }
         BEGIN { t = k(ENVIRON["B"]); x = e(ENVIRON["B"]) } $0 != ENVIRON["B"] && length(t) > 2 && e($0) == x && k($0) == t { print; exit }' | tr -d '"\\\000-\037')
       [ -n "$nd" ] && printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"chief-of-staff: %s has nearly the same name as %s in the same folder: check whether one duplicates the other."}}\n' "$(printf '%s' "${fp0##*/}" | tr -d '"\\\000-\037')" "$nd" ;; esac; fi
+    # screens: a review is checked as it is written (an incomplete one is rejected now, while the reviewer has it in
+    # context); a change of screen code is recorded for the review gate, and once per turn the session is told what
+    # a screen needs before the owner sees it (one JSON per hook: not on a write that already got the notice above)
+    if [ -z "$lite" ] && [ "${ok:-}" = 1 ]; then case $fp0 in
+      "$root"/design/reviews/*.md)
+        p=$(sh "$SC" review "$fp0") || { echo x >> "$st/rejected.count"; echo "Screen review rejected: fix ${fp0#"$root/"} now. It needs:
+$p" >&2; exit 2; } ;;
+      "$root"/*) if printf '%s' "$in" | sh "$SC" isui "$fp0"; then sh "$SC" touch "$root" "$fp0"
+          if [ ! -f "$st/screens" ] && [ -z "${nd:-}" ]; then : > "$st/screens"
+            printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"chief-of-staff: this turn changes screen code (%s). A screen reaches the owner only after two subagents: the designer (Role card: designer) searched the library and named 1-2 real apps the screen follows, and the independent reviewer (Role card: reviewer) compared the screen side by side with them and wrote design/reviews/<YYYY-MM-DD HHMM> <screen>.md with Verdict: pass, References: and Side by side: (two saved screenshots, this screen and the reference). If no designer named those apps for this screen yet, run the designer now, before more screen code. Showing the screen before a passing review (an Artifact, a file sent, a link or a localhost address in the answer) is blocked."}}\n' "$(printf '%s' "${fp0#"$root/"}" | tr -d '"\\\000-\037')"
+          fi
+        fi ;; esac; fi
     ;;
   PreToolUse)
     case $(jget tool_name) in
@@ -221,6 +236,14 @@ $p"; fi ;;
         fi
         cards=$(ls "$SPEC" 2>/dev/null | sed -n 's/\.md$//p' | tr '\n' ' ')
         echo "Blocked by chief-of-staff: every subagent brief names its role card. Add the line 'Role card: <role>' (the role name is enough, for example 'Role card: researcher'), and tell the subagent to read $SPEC/<role>.md itself; do not paste the card. Cards: ${cards:-none found}. For a search or file-reading helper, write 'Role card: utility'." >&2
+        exit 2 ;;
+      Artifact|SendUserFile)   # a page or a picture put in front of the owner: a screen goes only after its review passed
+        [ -n "$project" ] || exit 0
+        case $(jget action) in ''|publish) ;; *) exit 0 ;; esac
+        case $(printf '%s' "$in" | tr 'A-Z' 'a-z') in *.html\"*|*.htm\"*|*.png\"*|*.jpg\"*|*.jpeg\"*|*.webp\"*|*.gif\"*) ;; *) exit 0 ;; esac
+        why=$(sh "$SC" state "$root") && exit 0
+        echo "Blocked by chief-of-staff: the project's screens are not cleared to reach the owner: $why
+$REVIEW_HOW" >&2
         exit 2 ;;
       Write|Edit|MultiEdit|Bash)   # the marker says where the library lives: only the owner edits it
         [ -n "$lite" ] && exit 0
@@ -398,6 +421,16 @@ WS
             fi ;;
           *) # the library's git data and the plugin's own files. The path is resolved (.., symlinks, letter case) before it is compared
              fp=$(printf '%s' "$in" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1)
+             # no screen is built before its design: screen code waits while a design item of TRACK.md is not done
+             # (a block, not a reminder: in real use a thread built the screens across several turns with the design
+             # item open, and a turn-end push lets go on the second stop). Mockups under design/ are the designer's
+             case $fp in "$root"/*) if printf '%s' "$in" | sh "$SC" isui "$fp"; then
+               why=$(sh "$SC" gate "$root" "$fp") || [ $? != 1 ] || {
+                 echo "Blocked by chief-of-staff: ${fp#"$root/"} is screen code, and its design is not done: $why
+No screen is built before its design. Run the designer as a subagent ('Role card: designer'). It searches the library first (and the project's own collection of design references, if it keeps one), names 1-2 real apps the screens will follow (name, link, a saved screenshot of each), and writes the design: flows, every state (empty, loading, error, first use), tokens, and mockups under design/, the only place screen files may be written before the design is done. Then close the design item in TRACK.md with that file as evidence: it holds a 'References:' section (the apps, with links) and a 'Library:' line. The screen code continues after that.
+If this file is not a screen of the product (a video composition, a deck, a report), write the product's screen paths on the design item: '| screens: <path pattern>, <path pattern>'." >&2
+                 exit 2; }
+             fi ;; esac
              case $fp in /*) rp=$(real "$fp")
                [ -n "$rp" ] || { echo "Blocked by chief-of-staff: write $fp by its plain path, without . or .. parts." >&2; exit 2; } ;; *) rp= ;; esac
              o=$(cos_libs "$root" | while IFS="$TAB" read -r n q; do [ -d "$q" ] || continue
@@ -417,6 +450,10 @@ WS
     case $in in *"Never-skip checklist"*) ;; *)
       echo "Your role card requires a '## Never-skip checklist' section: mark each item of your card's 'Never skip' list as done or not applicable (why). Add it, then finish." >&2
       exit 2 ;; esac
+    # a design follows real references: the designer names the 1-2 apps (or brands) it follows, found after the library
+    case $in in *"Role: designer"*) case $in in *[Rr]eferences:*) ;; *)
+      echo "A design names its references: add a 'References:' section with the 1-2 real apps (or brands) the design follows, each with its link and a saved screenshot path, chosen after searching the library. Add it, then finish." >&2
+      exit 2 ;; esac ;; esac
     exit 0
     ;;
   Stop)
@@ -504,6 +541,30 @@ Fix each note (format: $lib/templates/note.md). When a new note is better than a
     [ -n "$gaps" ] && reason="${reason:+$reason }Track gate (${pdir#"$root/"}/TRACK.md) not met:
 $gaps
 Close each item with its proof file (evidence: path relative to the project folder), mark it [-] with why: when it does not apply, or move stage: back. A stage passes only when every item is closed."
+    if [ -n "$project" ]; then
+      sgaps=
+      # screen code a shell command changed this turn (a heredoc, sed -i, a script): recorded like an Edit, and held
+      # to the design gate the Edit tool meets before it writes
+      if [ -f "$st/start" ]; then
+        chg=$(cos_limit 1 sh "$SC" changed "$root" "$st/start") || chg=
+        held=$(printf '%s\n' "$chg" | while IFS= read -r f; do [ -n "$f" ] || continue
+          w=$(sh "$SC" gate "$root" "$f") || [ $? != 1 ] || printf '%s (%s) ' "${f#"$root/"}" "$w"; done)
+        [ -n "$held" ] && sgaps="This turn changed screen code by a shell command while its design is not done: $held. No screen is built before its design: undo those changes (git checkout -- <file>) or keep them only under design/ as mockups, and run the designer as a subagent ('Role card: designer'): library first, 1-2 real reference apps with links, then the design, and close the design item in TRACK.md with it as evidence (a 'References:' section and a 'Library:' line)."
+        # a screen review is the independent reviewer's: one written this turn with no reviewer subagent run (here or
+        # in the background in the last 3 hours) is made void, so it never clears a screen
+        rv=$(find "$root/design/reviews" -name '*.md' -type f -cnewer "$st/start" 2>/dev/null)
+        if [ -n "$rv" ] && [ "$reviewers" -lt 1 ] && ! awk -v now="$(date +%s)" '$2 == "reviewer" && now - $1 < 10800 { f = 1 } END { exit !f }' "$st.bg" 2>/dev/null; then
+          printf '%s\n' "$rv" | while IFS= read -r f; do grep -qi '^void:' "$f" || printf '\nVoid: written without the independent reviewer subagent (%s)\n' "$(date '+%F %H:%M')" >> "$f"; done
+          sgaps="${sgaps:+$sgaps }A screen review in design/reviews/ was written this turn without the independent reviewer subagent, so it is void. $REVIEW_HOW"
+        fi
+      fi
+      # a screen pointed at the owner (a localhost address, a page, a screenshot) before its review passed
+      if printf '%s' "$in" | grep -Eqi 'localhost:[0-9]|127\.0\.0\.1|0\.0\.0\.0:[0-9]|\.html?([^a-z]|$)|\.(png|jpe?g|webp)([^a-z]|$)|screenshot'; then
+        w=$(sh "$SC" state "$root") || sgaps="${sgaps:+$sgaps }This answer points at a screen, and the project's screens are not cleared to reach the owner: $w
+$REVIEW_HOW Then rewrite the answer: a screen that failed is not shown."
+      fi
+      [ -n "$sgaps" ] && reason="${reason:+$reason }$sgaps"
+    fi
     pushed=$(jget stop_hook_active)
     violation=0; [ "$pushed" = true ] && [ -n "$reason" ] && violation=1
     [ -n "$lslow" ] && reason="${reason:+$reason }Not checked this turn (slow disk):

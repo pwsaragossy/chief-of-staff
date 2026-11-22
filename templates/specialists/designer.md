@@ -15,6 +15,7 @@ Turn a clear strategy into a visual and interaction system that is distinct, con
 - Competitor and category visuals, captured with date, to find what to avoid and what is a category convention.
 - Constraints: platform guidelines, existing brand or design system, deadline, budget, formats required (print, app icon, social, favicon), languages and scripts.
 - Naming status: the identity is designed around a name that is final, or the name is flagged as provisional.
+- For screens: the library and the project's own collection of design references first, then 1-2 real apps that do the same job well, each with its link and a saved screenshot. The screens follow them; they are the yardstick the reviewer holds the built screen against.
 - Search the library first: `library.sh search "<topic>"`. Existing research, briefs and decisions come before new work.
 - Anything missing goes on the project card as a question to the owner. Never invent audience facts or preferences.
 
@@ -32,6 +33,7 @@ Brand identity
 10. Write usage rules: do and don't examples, mis-use cases, co-branding, file inventory and naming, who to ask.
 
 Interface design
+0. Before any screen: search the library (and the project's collection of design references), then name 1-2 real apps that do the same job well, each with its link and a saved screenshot, in a `References:` section; add a `Library:` line with what the library held. Mockups go under `design/` in the project folder; screen code waits until the design item of TRACK.md is closed with this file as evidence (the hooks block screen code before that).
 1. Start from the task flows from product (entry, primary action, success). Design the flow before screens.
 2. Specify every state per component and screen: default, hover, focus, active, disabled, loading, empty, error, success, first-use.
 3. Reuse the platform's or existing system's patterns; invent a new pattern only with a reason written down.
@@ -67,6 +69,7 @@ Interface design
 - [ ] Fonts have a confirmed licence for each use, and fallbacks are named.
 - [ ] Colour values are given as exact codes, not described in words.
 - [ ] Usage rules include at least three mis-use examples.
+- [ ] Screens follow 1-2 real reference apps named after the library search, each with link and saved screenshot, in a `References:` section of the design evidence, next to a `Library:` line.
 - [ ] Interface flows show empty, loading, error and first-use states, not only the happy path.
 - [ ] Interactive elements have a visible focus state, a keyboard path, and a target of at least 24 by 24 CSS pixels (WCAG 2.2 criterion 2.5.8).
 - [ ] Information is never carried by colour alone.
@@ -86,6 +89,9 @@ Interface design
 ```
 Role: designer
 Answer: <one line: the design decision or deliverable, for whom, with confidence>
+References:
+- <real app or brand the design follows>: <link> (<saved screenshot path>)
+Library: <[[id]] of the notes searched first, or none found for <terms>>
 
 ## Analysis
 <strategy link; directions explored and why one won; for identity: logo system, colour table with contrast ratios, type spec, usage rules; for interface: flows, state inventory, tokens, accessibility findings; assets delivered with paths>
@@ -118,6 +124,7 @@ saved: <[[id]] of each note written with library.sh new, or none>
 - Fonts used without a licence for the actual use (web, app, print, embedding).
 - Mark resembles a known mark in the category (no similarity search done) or the name was not checked before the logo was drawn.
 - Guidelines show only correct usage; no mis-use cases, no file inventory.
+- Screens follow no named reference app, or the references were picked without searching the library first.
 - Interface shows only the happy path; no error, empty, loading or first-use states.
 - Accessibility treated as a final polish: no focus states, small targets, colour-only status, no text-scaling check.
 - Tokens are raw values or screen-specific, so a theme or platform change breaks the system.

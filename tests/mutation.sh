@@ -6,7 +6,7 @@ R=$(cd "$(dirname "$0")/.." && pwd)
 caught=0; missed=0
 mutate() { # name file test-substring python-old python-new
   [ -n "${ONLY:-}" ] && case $1 in *"$ONLY"*) ;; *) return ;; esac
-  t=$(mktemp -d); cp -R "$R/scripts" "$R/templates" "$R/skills" "$R/hooks" "$R/README.md" "$t/"
+  t=$(mktemp -d); cp -R "$R/scripts" "$R/templates" "$R/skills" "$R/hooks" "$R/tests" "$R/README.md" "$t/"
   python3 - "$t/$2" "$4" "$5" <<'PY' || { echo "MUTATION NOT APPLIED: $1"; missed=$((missed + 1)); rm -rf "$t"; return; }
 import sys
 p, a, b = sys.argv[1:]
@@ -41,4 +41,14 @@ mutate "project.sh trust runs without asking" scripts/protocol.sh "the guard ask
   "project\\\\.sh +((init|library|trust)" "project\\\\.sh +((init|library)"
 mutate "a background launch is not credited" scripts/protocol.sh "the turn that applies a background report is credited" \
   "*'\"status\":\"async_launched\"'*|*'\"status\": \"async_launched\"'*|" ""
+mutate "screen code is written before its design" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
+  'why=$(sh "$SC" gate "$root" "$fp") || [ $? != 1 ] || {' 'why=; true || {'
+mutate "a design item closed with a stub opens screen code" scripts/screens.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
+  'x) w=$(refs "$dir/$ev") || why=' 'x) w=$(true) || why='
+mutate "a screen is shown before its review" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
+  'why=$(sh "$SC" state "$root") && exit 0' 'exit 0'
+mutate "a review the session wrote itself stands" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
+  'if [ -n "$rv" ] && [ "$reviewers" -lt 1 ]' 'if false'
+mutate "screen code written by a shell command goes unseen" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
+  'chg=$(cos_limit 1 sh "$SC" changed "$root" "$st/start") || chg=' 'chg='
 echo "caught=$caught missed=$missed"; [ "$missed" = 0 ]
