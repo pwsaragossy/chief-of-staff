@@ -7,8 +7,15 @@ cd "$(dirname "$0")/.." || exit 1
 base=$(git log -1 --format=%h --grep='^Release ')
 changed=$( { git diff --name-only "${base:-HEAD}"; git ls-files --others --exclude-standard; } | sort -u)
 echo "changed since ${base:-HEAD}:"; printf '  %s\n' $changed
-claude plugin validate . >/dev/null || { echo "FAIL claude plugin validate"; exit 1; }
-claude plugin test . || exit 1
+if command -v claude >/dev/null 2>&1; then
+  claude plugin validate . >/dev/null || { echo "FAIL claude plugin validate"; exit 1; }
+  claude plugin test . || exit 1
+elif command -v grok >/dev/null 2>&1; then
+  grok plugin validate . >/dev/null || { echo "FAIL grok plugin validate"; exit 1; }
+  echo "claude plugin test skipped: projects.tsx needs the claude CLI"
+else
+  echo "FAIL: neither claude nor grok is on PATH"; exit 1
+fi
 if [ "${ALL:-}" = 1 ] || printf '%s\n' "$changed" | grep -Eq '^(scripts/|templates/|skills/|hooks/hooks\.json$|README\.md$)'; then
   log=$(mktemp); sh scripts/selftest.sh > "$log" 2>&1; r=$?; grep '^FAIL' "$log"; tail -n 1 "$log"; rm -f "$log"; exit $r
 fi

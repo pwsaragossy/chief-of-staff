@@ -2,7 +2,7 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|resume|clear|compact",
+        "matcher": "startup|resume|clear|compact|new|load",
         "hooks": [
           {
             "type": "command",
@@ -25,7 +25,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "AskUserQuestion",
+        "matcher": "AskUserQuestion|ask_user_question|AskQuestion",
         "hooks": [
           {
             "type": "command",
@@ -35,7 +35,7 @@
         ]
       },
       {
-        "matcher": "Agent|Write|Edit|MultiEdit|Bash",
+        "matcher": "Agent|Task|spawn_subagent|Write|Edit|MultiEdit|write|search_replace|hashline_edit|StrReplace|Bash|run_terminal_command|run_terminal_cmd|Shell",
         "hooks": [
           {
             "type": "command",
@@ -47,7 +47,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Agent|WebSearch|WebFetch|Write|Edit|MultiEdit|Bash|Read|Grep|Glob",
+        "matcher": "Agent|Task|spawn_subagent|WebSearch|WebFetch|web_search|web_fetch|open_page|open_page_with_find|Write|Edit|MultiEdit|write|search_replace|hashline_edit|StrReplace|Bash|run_terminal_command|run_terminal_cmd|Shell|Read|read_file|hashline_read|Grep|grep|hashline_grep|Glob|list_dir",
         "hooks": [
           {
             "type": "command",
@@ -75,6 +75,17 @@
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/protocol.sh\"",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/briefing.sh\"",
+            "timeout": 10
           }
         ]
       }

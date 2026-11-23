@@ -5,7 +5,7 @@ description: Open the panel — in the chat (overview.sh, also on a phone) or th
 
 # Open the panel
 
-The panel is `${CLAUDE_PLUGIN_ROOT}/scripts/panel.py` (copy that literal path; the variable is not
+The panel is `${CLAUDE_PLUGIN_ROOT}/scripts/panel.py` (`${GROK_PLUGIN_ROOT}` on Grok; copy that literal path; the variable is not
 set in your shell). It needs `python3` (standard library only) and runs on this computer only.
 
 0. The owner on a phone (Remote Control): the chat is the panel, since the web panel listens on this

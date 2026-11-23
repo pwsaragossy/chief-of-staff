@@ -10,7 +10,8 @@ dir=${CLAUDE_PROJECT_DIR:-$PWD}
 kbases() {
   km=$(head -n 1 "${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}/knowledge-mcp" 2>/dev/null | tr -d '\000-\037')
   [ -f "$km" ] || return 0
-  case $(printf '%s' "$in" | sed -n 's/.*"source" *: *"\([a-z]*\)".*/\1/p' | head -n 1) in startup|clear|'') ;; *) return 0 ;; esac
+  case $(printf '%s' "$in" | sed -n 's/.*"hook_event_name" *: *"\([A-Za-z]*\)".*/\1/p' | head -n 1) in PostCompact) return 0 ;; esac
+  case $(printf '%s' "$in" | sed -n 's/.*"source" *: *"\([a-z]*\)".*/\1/p' | head -n 1) in startup|clear|new|'') ;; *) return 0 ;; esac
   l=$(cd "$dir" 2>/dev/null && cos_limit 4 python3 "$km" discover 2>/dev/null | head -n 8 | tr -d '\000-\011\013-\037' |
     sed -n 's/^{"path": "[^"]*", "label": "\([^"]*\)", "kind": "\([^"]*\)", "files": \([0-9]*\), "id": "\([0-9a-f]\{10\}\)"}$/- \1 (\2, \3 files) [id \4]/p' |
     tr -d '$`\\;|&<>{}' | cut -c1-200)   # only the id goes into a command; a folder name is shown, never run
@@ -34,6 +35,9 @@ fm() { fm_get "$1" "$2" | tr -d '\000-\037' | cut -c1-160; }
 kbases
 sid=$(printf '%s' "$in" | sed -n 's/.*"session_id" *: *"\([A-Za-z0-9_-]*\)".*/\1/p' | head -n 1)
 src=$(printf '%s' "$in" | sed -n 's/.*"source" *: *"\([a-z]*\)".*/\1/p' | head -n 1)
+# Grok starts a session with new or load, and compacts with PostCompact. Claude uses startup, resume, clear, compact.
+case $(printf '%s' "$in" | sed -n 's/.*"hook_event_name" *: *"\([A-Za-z]*\)".*/\1/p' | head -n 1) in PostCompact) src=compact ;; esac
+case $src in new) src=startup ;; load) src=resume ;; esac
 data=${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}
 # the next prompt gets the full protocol again: a new start or a compaction dropped it from the context
 [ -n "$sid" ] && mkdir -p "$data/turns" && : > "$data/turns/$sid.full"
@@ -122,4 +126,15 @@ reverify() {
   gb=$(grabs); [ -n "$gb" ] && { out "Up for grabs (anyone may take one: write your name in place of Unassigned):"; out "$gb"; }
   cos_limit 2 sh "$(dirname "$0")/library.sh" brief "$p" | tr -d '\000-\011\013-\037'
   oldteam
-} | awk '{ n += length($0) + 1; if (n > 1900) { print "(briefing truncated: read the board and STATE.md for the rest)"; exit } print }'
+  # Grok drops plain SessionStart text and every allowing UserPromptSubmit. The briefing has to be a systemMessage.
+  if [ -n "${GROK_PLUGIN_ROOT:-}" ] || printf '%s' "$in" | grep -q '"hookEventName"'; then
+    out "Grok: this briefing is the session context. Prompt-hook text is not added. A specialist brief still needs a Role card and a Library line, and a deliverable or a long answer still needs a specialist and the reviewer."
+  fi
+} | awk '{ n += length($0) + 1; if (n > 1900) { print "(briefing truncated: read the board and STATE.md for the rest)"; exit } print }' |
+if [ -n "${GROK_PLUGIN_ROOT:-}" ] || printf '%s' "$in" | grep -q '"hookEventName"'; then
+  awk 'BEGIN { printf "%s", "{\"systemMessage\":\"" }
+    { gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); if (NR > 1) printf "\\n"; printf "%s", $0 }
+    END { print "\"}" }'
+else
+  cat
+fi

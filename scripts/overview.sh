@@ -19,8 +19,8 @@ fi
 now=$(date +%s); today=$(date +%F); soon=$(date -v+7d +%F 2>/dev/null || date -d '+7 days' +%F)
 for b in "$@"; do
   for f in "$b"/*.md; do [ -f "$f" ] || continue
-    # mtime in seconds: BSD stat, then GNU
-    m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f")
+    # mtime in seconds: GNU stat, then BSD. GNU stat -f is --file-system and still prints, so it must not run first.
+    m=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null)
     printf '%s\t%s\n' "$m" "$f"
   done
 done | LC_ALL=C awk -F '\t' -v rows="$rows" -v now="$now" -v today="$today" -v soon="$soon" '

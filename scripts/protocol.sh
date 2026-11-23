@@ -15,6 +15,11 @@
 . "$(dirname "$0")/lib.sh"
 
 in=$(cat)
+in=$(printf '%s' "$in" | cos_alias_tools)
+# Cursor names the file "path". The gates read file_path. Copy it only when that key is absent.
+case $in in *'"file_path"'*) ;;
+  *'"tool_name":"Write"'*|*'"tool_name": "Write"'*|*'"tool_name":"Edit"'*|*'"tool_name": "Edit"'*|*'"tool_name":"MultiEdit"'*|*'"tool_name": "MultiEdit"'*)
+    in=$(printf '%s' "$in" | sed 's/"path" *: *"/"file_path":"/') ;; esac
 DATA=${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}
 # everywhere DIR -> the plugin's templates folder (it holds specialists/) when DIR is under a folder the owner listed
 everywhere() { [ -f "$DATA/everywhere" ] || return 1
@@ -420,6 +425,9 @@ WS
     exit 0
     ;;
   Stop)
+    # Grok also fires Stop when the session ends. That fire cannot continue the turn, and it must not stamp
+    # cards or log a violation. Claude does not send these reasons.
+    case $in in *'"reason":"channel_closed"'*|*'"reason": "channel_closed"'*|*'"reason":"shutdown"'*|*'"reason": "shutdown"'*) exit 0 ;; esac
     # a question to the owner is timed from when it was asked (asked:), not from a file date that git resets
     # an open question (a line under "For the owner to decide") that a project session wrote this turn makes its
     # card wait on the owner, even when the agent forgot the status: the coordinator moves answered lines to "## Decided"

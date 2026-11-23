@@ -1,6 +1,6 @@
 # chief-of-staff
 
-An AI chief of staff for [Claude Code](https://code.claude.com): a small company of agents that
+An AI chief of staff for [Claude Code](https://code.claude.com) and [Grok](https://x.ai): a small company of agents that
 works for one owner.
 
 What it gives you:
@@ -117,6 +117,24 @@ claude plugin update chief-of-staff@chief-of-staff
 ```
 
 With a local marketplace (a clone added by path), run `git pull` in the clone first.
+
+Grok Build loads the same plugin. Add the marketplace, install it, and trust it (hooks stay off until you do):
+
+```sh
+grok plugin marketplace add pwsaragossy/chief-of-staff
+grok plugin install chief-of-staff --trust
+```
+
+Update later with `grok plugin marketplace update` and `grok plugin update chief-of-staff`. Then open Grok in any folder and run `/chief-of-staff:setup`. `${CLAUDE_PLUGIN_ROOT}` and `${GROK_PLUGIN_ROOT}` are the plugin folder. Slash commands fill them. Export `CLAUDE_PLUGIN_DATA` from `${GROK_PLUGIN_DATA}` before a script when the shell does not already have it.
+
+What reaches Grok, and what does not:
+
+- Session start uses `new` and `load` (Claude's `startup`, `resume`, `clear` and `compact` never match). The briefing is a `systemMessage`. Grok drops plain SessionStart text, and it drops an allowing UserPromptSubmit, so the per-prompt protocol text is not injected. The stop and pre-tool gates still run.
+- Tool names are translated before the gates (`web_search`, `web_fetch`, `open_page`, `spawn_subagent`, `search_replace`, `write`, `run_terminal_command`, `read_file`, `ask_user_question`, and the Cursor names). Research stays a reminder, not a block, the same as on Claude since 0.12.11.
+- `PostCompact` resets the turn the way a compaction does. It does not ask for a new session. Grok does not show that hook's `systemMessage`, and it drops the next prompt's protocol text, so after a compaction the model is not briefed again. The stop and pre-tool gates still run. Rotation left in 0.12.11.
+- `hooks/projects.tsx` is Claude's module runtime (the Threads pane). On Grok the shell ask-guard still blocks `ask_user_question` outside the coordinator.
+- The dispatcher runs `grok -p` when `COS_ENGINE=grok`, when `CLAUDE_BIN` is grok, or when `claude` is not on PATH. The unattended run gets read and edit tools only (`--max-turns 40` stands in for the dollar budget, which Grok does not take).
+- `sh scripts/check.sh` uses `grok plugin validate` when the claude CLI is absent. `claude plugin test` (the `projects.tsx` module) still needs claude.
 
 Then open Claude Code in any folder and run `/chief-of-staff:setup`. It looks at your computer first,
 asks one question: where the company library goes (your Obsidian vault, iCloud Drive, Dropbox, Google
@@ -263,7 +281,7 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
 
 ## The dispatcher (off by default)
 
-`scripts/dispatcher.sh <project folder>` runs `claude -p` in each project whose `STATE.md` says
+`scripts/dispatcher.sh <project folder>` runs `claude -p` (or `grok -p` with `COS_ENGINE=grok`) in each project whose `STATE.md` says
 `status: in-progress` and `dispatch: ready`. The `handoff` skill sets `ready` only when the next
 action needs nobody. Guard rails:
 
@@ -322,6 +340,7 @@ What is ours, with no equivalent found in ECC:
 
 ## Known limits
 
+- **Grok** injects the session briefing only as a `systemMessage`, and drops UserPromptSubmit stdout, so the model does not see the per-prompt protocol text. A compaction's `PostCompact` briefing is not shown either. The gates still block. A Grok transcript is not Claude's, so the token half of an old rotation check would not have fired. That check is gone. `hooks/projects.tsx` does not run, so the Threads pane is Claude Code only.
 - **Cloud sessions** (Claude Code on the web) do not load plugins installed on your machine, so
   neither hook runs there. The rules still reach a cloud session only through the `CLAUDE.md` files,
   and only if the project folder is that session's repository.
