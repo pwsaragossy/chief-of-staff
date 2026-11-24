@@ -6,6 +6,7 @@ description: Close a session so the next one starts where this one stopped (I-PA
 # Handoff: close so the next session can continue
 
 The next session is a stranger with no memory of this one. Everything it needs is in files.
+Scripts are in `${CLAUDE_PLUGIN_ROOT}/scripts` (`${GROK_PLUGIN_ROOT}` on Grok). Copy that path into the command, and export `CLAUDE_PLUGIN_DATA` to `${GROK_PLUGIN_DATA}` when the shell does not have it.
 
 Run it at the end of a session.
 
