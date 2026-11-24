@@ -232,7 +232,7 @@ $p" >&2; exit 2; } ;;
         p=$(sh "$SC" options "$sfp"); pr=$?
         if [ ! -f "$st/web" ]; then p="${p:+$p
 }- fresh web research: this turn ran no web search before writing it (the library and memory never replace it): search the web for what the top of the market shipped in the last months, then write the proposal again"; pr=1
-        elif [ -z "$(sh "$SC" searches "$sfp" | wnorm | while IFS= read -r q; do [ -n "$q" ] && grep -qxF "$q" "$st/webq" 2>/dev/null && { echo 1; break; }; done)" ]; then p="${p:+$p
+        elif [ -z "$(sh "$SC" searches "$sfp" | wnorm | while IFS= read -r q; do [ -n "$q" ] && grep -qxF -e "$q" -- "$st/webq" 2>/dev/null && { echo 1; break; }; done)" ]; then p="${p:+$p
 }- Searches: at least one search this turn ran for this piece, written exactly as it ran (the query, or the link fetched)"; pr=1; fi
         rd=$(sed -n 's/\r$//; s/^[*_ -]*[Rr]esearched[*_ ]*: *\([0-9-]*\).*/\1/p' "$sfp" | head -n 1)
         [ "$rd" = "$(date +%F)" ] || { p="${p:+$p
@@ -275,6 +275,7 @@ $p" >&2; exit 2; } ;;
         # a page or file that carries references the reviewer has not cleared does not reach the owner either
         ul=$(sh "$SC" unreviewed "$root" 2>/dev/null)
         if [ -n "$ul" ]; then
+          case $in in *'\u'*|*'\/'*) echo "Blocked by chief-of-staff: references in design/options/ are not cleared by the independent reviewer yet, and this call names its file with JSON escapes the check cannot read. Write the path plainly, or run the reviewer first. $SYSTEM_HOW" >&2; exit 2 ;; esac
           printf '%s' "$in" | grep -Eo '"[^"]+\.[A-Za-z0-9]{1,5}"' | tr -d '"' | while IFS= read -r f; do
             case $f in /*) ;; *) f="$root/$f" ;; esac; [ -f "$f" ] || continue
             for u in $ul; do grep -qF "$u" "$f" 2>/dev/null || continue
@@ -429,10 +430,12 @@ WS
               if printf '%s\n' "$nq" | grep -Eq "track\\.sh +($DYN|ok([^a-z0-9_.-]|\$))|[^ ]\\.sh +ok([^a-z0-9_.-]|\$)|track\\.sh$FEED|<+ *[^ ;&|]*track\\.sh|${FROM}track\\.sh *([)\`;&|]|\$)"; then
                 # the session's own folder comes from Claude Code, not from the shell: a cd cannot fake the coordinator
                 isowner || { echo "Blocked by chief-of-staff: only the project's coordinator (the owner's conversation at the root of the project folder) records the owner's OK. Write the request on the project's card; the coordinator asks the owner. (To read track.sh, use the Read or Grep tool.)" >&2; exit 2; }
-                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this records YOUR OK on a project step (scope freeze, submission, your pick of a design-system piece, or the target and check, which approves and later runs the check command shown in its output). Only approve if you gave that OK.'"$(dp=$(printf '%s\n' "$nq" | grep -oE 'design:[a-z0-9-]+' | head -n 1 | cut -c8-)
+                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this records YOUR OK on a project step (scope freeze, submission, your pick of a design-system piece, or the target and check, which approves and later runs the check command shown in its output). Only approve if you gave that OK.'"$(dp=$(printf '%s\n' "$nq" | sed -nE 's/.*track\.sh +ok +[^ ;&|]+ +design:([a-z0-9-]+)([ ;&|]|$).*/\1/p' | head -n 1)
+                  [ "$(printf '%s\n' "$nq" | grep -oE 'design:' | wc -l | tr -d ' ')" -gt 1 ] || case $nq in (*[\;\&\|]*) true ;; (*) false ;; esac && dp=
+                  [ -z "$dp" ] && case $nq in (*design:*) printf ' This command names a design-system piece in a way the plugin cannot read for sure (more than one piece, or more than one command): do not approve it; ask for one plain track.sh ok <project> design:<piece> <your words>.' ;; esac
                   [ -n "$dp" ] && printf ' You are approving piece %s. The pick written in design/SYSTEM.md: %s. The words recorded as yours: %s. Approve only if that is the option you chose and what you said.' "$dp" \
                     "$(awk -v p="$dp" '/^## / { s = tolower(substr($0, 4)); gsub(/[^a-z0-9]+/, "-", s); gsub(/^-+|-+$/, "", s); on = (s == p) } on && tolower($0) ~ /^pick[*_ ]*:/ { sub(/^[^:]*: */, ""); print; exit }' "$root/design/SYSTEM.md" 2>/dev/null | tr -d '"\\\000-\037' | cut -c1-300)" \
-                    "$(printf '%s\n' "$nq" | sed -n "s/.*design:$dp *//p" | head -n 1 | tr -d '"\\\000-\037' | cut -c1-300)")$(case $nq in (*untrack*) printf ' If it is an untrack: it takes your OK files out of git (they came through git, so they are not trusted), keeps them out and rebuilds the list of steps that need your OK, recording no OK.' ;; esac)"'"}}'; exit 0
+                    "$(printf '%s\n' "$nq" | sed -nE "s/.*track\\.sh +ok +[^ ]+ +design:$dp *//p" | head -n 1 | tr -d '"\\\000-\037' | cut -c1-300)")$(case $nq in (*untrack*) printf ' If it is an untrack: it takes your OK files out of git (they came through git, so they are not trusted), keeps them out and rebuilds the list of steps that need your OK, recording no OK.' ;; esac)"'"}}'; exit 0
               fi
               # a script called with a list of words (subprocess.run([sh,track.sh,ok]), spawn(sh,[library.sh,use])):
               # no space after its name, so its subcommand may be any later word. A plain grep runs nothing (not with a

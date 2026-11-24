@@ -49,6 +49,10 @@ check "a proposal written in a turn that ran no web search is rejected" 'o=$(h "
 web weather
 check "a web search the proposal does not list (one about something else) does not count as its research" 'o=$(h "$(pw "$D/design/options/typography.md")" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "at least one search this turn ran for this piece"'
 web typography
+cp "$D/design/options/typography.md" "$T/prop.md"
+awk '/^- best typography 2026$/ { print "- -v"; print "- anything else"; next } { print }' "$T/prop.md" > "$D/design/options/typography.md"
+check "a search listed as an option flag (-v) is read as text, not as an option" '[ "$(rc "$(pw "$D/design/options/typography.md")")" = 2 ]'
+cp "$T/prop.md" "$D/design/options/typography.md"
 check "after the search it lists, a complete proposal is taken" '[ "$(rc "$(pw "$D/design/options/typography.md")")" = 0 ]'
 prop "$D/design/options/x.md" typography "$today" "$(ago 1)"
 check "one option is not a choice" 'sh "$S/screens.sh" options "$D/design/options/x.md" | grep -q "2 or 3 sections"'
@@ -79,6 +83,7 @@ rm -f "$D/design/options/colors.md"
 turn d3
 printf '<a href="https://example.com/typography-a">A</a>' > "$D/design/opts.html"
 check "a page carrying references the reviewer has not cleared is not published or sent" 'o=$(h "$(ev PreToolUse ",\"tool_name\":\"Artifact\",\"tool_input\":{\"file_path\":\"$D/design/opts.html\"}")" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "has not cleared (https://example.com/typography-a)" && [ "$(rc "$(send "$D/design/options/typography.md")")" = 2 ]'
+check "a path written with JSON escapes is not let through while references wait for review" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Artifact\",\"tool_input\":{\"file_path\":\"$D/design/opts\\u002ehtml\"}")")" = 2 ]'
 check "references shown to the owner before their review cannot end the turn" 'o=$(h "$(stop "Option A: https://example.com/typography-a")" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "references the independent reviewer has not cleared (https://example.com/typography-a"'
 R="$D/design/reviews/options/$today 1000 typography.md"
 orev "$R" design/options/typography.md pass "https://example.com/typography-a | status 200 | dated $(ago 1) | keep: top studio"
@@ -110,6 +115,7 @@ orev "$F" design/options/typography.md fail "https://example.com/typography-a | 
 check "a pick whose newest reference review failed is refused" 'o=$(ok typography 2>&1); [ $? != 0 ] && printf "%s" "$o" | grep -q "failed: replace the rejected references"'
 rm -f "$F"
 check "the hook asks the owner before a pick is recorded" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $S/track.sh ok $D design:typography Option A\"}")" | grep -q "your pick of a design-system piece" && h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $S/track.sh ok $D design:typography Option A\"}")" | grep -q "You are approving piece typography. The pick written in design/SYSTEM.md: Option A, https://example.com/typography-a. The words recorded as yours: option a"'
+check "a command that names two pieces, or chains commands, is flagged to the owner instead of described" 'o=$(h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo design:colors; sh $S/track.sh ok $D design:typography Option A\"}")"); printf "%s" "$o" | grep -q "cannot read for sure" && ! printf "%s" "$o" | grep -q "You are approving piece"'
 check "the coordinator records the owner.s pick; the piece is closed" 'ok typography "$D" "A, the serif" | grep -q "the owner picks design:typography" && sh "$S/track.sh" owned "$D" | grep -q "^design:typography	"'
 check "screens still wait for the other pieces" 'o=$(h "$(w "$D/web/app.html" "<div>")" 2>&1); [ $? = 2 ] && ! printf "%s" "$o" | grep -q "typography is" && printf "%s" "$o" | grep -q "colors is open"'
 for p in colors components motion; do sys $p "Status: not applicable|Why: a test fixture"; ok $p "$D" "not needed" >/dev/null; done
