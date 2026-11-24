@@ -282,7 +282,7 @@ $p" >&2; exit 2; } ;;
               echo "Blocked by chief-of-staff: ${f#"$root/"} shows the owner a reference the independent reviewer has not cleared ($u): the owner sees only references whose reviewer opened every link and passed them (design/reviews/options/, newer than the proposal). Run the reviewer first. $SYSTEM_HOW" >&2; exit 2; done
           done || exit 2
         fi
-        case $(printf '%s' "$in" | tr 'A-Z' 'a-z') in *.html\"*|*.htm\"*|*.png\"*|*.jpg\"*|*.jpeg\"*|*.webp\"*|*.gif\"*|*.mp4\"*|*.mov\"*|*.webm\"*|*.m4v\"*|*.mkv\"*) ;; *) exit 0 ;; esac
+        case $(printf '%s' "$in" | tr 'A-Z' 'a-z') in *.html\"*|*.htm\"*|*.png\"*|*.jpg\"*|*.jpeg\"*|*.webp\"*|*.gif\"*|*.avif\"*|*.svg\"*|*.pdf\"*|*.mp4\"*|*.mov\"*|*.webm\"*|*.m4v\"*|*.mkv\"*) ;; *) exit 0 ;; esac
         why=$(sh "$SC" state "$root") && exit 0
         echo "Blocked by chief-of-staff: the project's screens are not cleared to reach the owner: $why
 $REVIEW_HOW" >&2
@@ -297,7 +297,7 @@ $REVIEW_HOW" >&2
             # ponytail: a word list, not a shell parser; the Artifact and SendUserFile blocks are the hard part
             rl=$(cd "$root" && pwd -P | tr 'A-Z' 'a-z')
             if [ -n "$project" ] && printf '%s' "$lc" | grep -Eq '(^|[^a-z0-9_.-])(open|xdg-open|gio +open|start|sensible-browser|x-www-browser|firefox|chromium|google-chrome|webbrowser|open +location|osascript)([^a-z0-9_.-]|$)' &&
-              printf '%s' "$lc" | grep -Eq "localhost|127\\.[0-9]|0\\.0\\.0\\.0|\\[::1?\\]|https?://(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|[^/\"]*\\.local([:/\"]|$))|\\.html?([^a-z]|$)|\\.(mp4|mov|webm|m4v|mkv)([^a-z0-9]|$)|$(printf '%s' "$rl" | sed 's/[][\\.*^$+?(){}|]/\\\\&/g')"; then
+              printf '%s' "$lc" | grep -Eq "localhost|127\\.[0-9]|0\\.0\\.0\\.0|\\[::1?\\]|https?://(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|[^/\"]*\\.local([:/\"]|$))|\\.html?([^a-z]|$)|\\.(png|jpe?g|webp|gif|avif|svg|pdf|mp4|mov|webm|m4v|mkv)([^a-z0-9]|$)|$(printf '%s' "$rl" | sed 's/[][\\.*^$+?(){}|]/\\\\&/g')"; then
               why=$(sh "$SC" state "$root") || { echo "Blocked by chief-of-staff: this opens a screen for the owner, and the project's screens are not cleared to reach the owner: $why
 $REVIEW_HOW" >&2; exit 2; }
             fi
@@ -629,7 +629,7 @@ Close each item with its proof file (evidence: path relative to the project fold
       ul=$(sh "$SC" unreviewed "$root" 2>/dev/null | while IFS= read -r u; do [ -n "$u" ] && case $in in (*"$u"*) printf '%s ' "$u" ;; esac; done)
       [ -n "$ul" ] && sgaps="${sgaps:+$sgaps }This answer shows the owner references the independent reviewer has not cleared ($ul): the owner sees only references whose reviewer opened every link and passed them (design/reviews/options/, newer than the proposal). Run the reviewer, then show the options again."
       # a screen or a video pointed at the owner (a localhost address, a page, a screenshot, a video) before its review passed
-      if printf '%s' "$in" | grep -Eqi 'localhost:[0-9]|127\.0\.0\.1|0\.0\.0\.0:[0-9]|\.html?([^a-z]|$)|\.(png|jpe?g|webp|mp4|mov|webm|m4v|mkv)([^a-z0-9]|$)|screenshot'; then
+      if printf '%s' "$in" | grep -Eqi 'localhost:[0-9]|127\.0\.0\.1|0\.0\.0\.0:[0-9]|\.html?([^a-z]|$)|\.(png|jpe?g|webp|gif|avif|svg|pdf|mp4|mov|webm|m4v|mkv)([^a-z0-9]|$)|screenshot'; then
         w=$(sh "$SC" state "$root") || sgaps="${sgaps:+$sgaps }This answer points at a screen, and the project's screens are not cleared to reach the owner: $w
 $REVIEW_HOW Then rewrite the answer: a screen that failed is not shown."
       fi

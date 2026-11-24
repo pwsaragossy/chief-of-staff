@@ -263,10 +263,10 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
   run the designer: fresh web research first, 1-2 real reference apps, then the design, with mockups under `design/`, which is
   never held. Screen code a shell command wrote is caught at the end of the turn (pushed once). A project with no
   design item is not held: once per turn it is told what a screen needs. **No screen to the owner before its
-  review**: every change of a screen file is recorded; an `Artifact` publish, a `SendUserFile` of a page or a
-  picture, and a shell `open` of a page or a local server are blocked until the newest review in `design/reviews/`
+  review**: every change of a screen file is recorded; an `Artifact` publish, a `SendUserFile` of a page, a
+  picture, a drawing (svg) or a pdf, and a shell `open` of any of them or of a local server are blocked until the newest review in `design/reviews/`
   says `Verdict: pass`, is newer than every change and holds a screenshot taken after the last change. An answer
-  that points at a screen (a localhost address, a page, a screenshot) is pushed at the end of the turn, and that push
+  that points at a screen (a localhost address, a page, a picture, a drawing, a pdf) is pushed at the end of the turn, and that push
   holds the second stop too, twice at most. A review is rejected on save without `Verdict:`, a `References:` section
   with links and a `Side by side:` section naming two different, non-empty saved screenshots (this screen and the
   reference); one written in a turn that ran no reviewer subagent is made void. Paths are compared as the disk

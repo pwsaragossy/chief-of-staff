@@ -61,6 +61,12 @@ mutate "screen code written by a shell command goes unseen" scripts/protocol.sh 
   'chg=$(cos_limit 1 sh "$SC" changed "$root" "$st/start" "$st/head") || chg=' 'chg='
 mutate "a screen not cleared lets go on the second stop" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
   '[ -n "$sgaps" ] && [ "$(count screenpush)" -lt 2 ] && {' 'false && {'
+mutate "a drawing or a pdf is sent before the review" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
+  '*.avif\"*|*.svg\"*|*.pdf\"*|' ''
+mutate "a drawing or a pdf opens in the owner's viewer before the review" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
+  '(png|jpe?g|webp|gif|avif|svg|pdf|mp4|mov|webm|m4v|mkv)([^a-z0-9]|$)|$(printf' '(png|jpe?g|webp|gif|avif|mp4|mov|webm|m4v|mkv)([^a-z0-9]|$)|$(printf'
+mutate "an answer pointing at a pdf ends before the review" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
+  'gif|avif|svg|pdf|mp4|mov|webm|m4v|mkv)([^a-z0-9]|$)|screenshot' 'gif|avif|svg|mp4|mov|webm|m4v|mkv)([^a-z0-9]|$)|screenshot'
 DS="design system: the owner picks each piece from 2-3 recent references the reviewer opened before screens or videos are built"
 mutate "an open design-system piece lets screen code through" scripts/screens.sh "$DS" \
   '[ $sr = 1 ] && why="$sw. "' ':'
