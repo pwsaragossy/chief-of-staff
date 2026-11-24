@@ -260,7 +260,7 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
   item is a TRACK.md item with id `ui-spec` or a `screens:` field (path patterns of the product's screens, so a deck
   is not held; an item with a `video:` field holds video files the same way); it is done when closed with evidence that holds a `References:` section (1-2
   real apps, with links) and a `Library:` line, or marked not applicable with `why:`. The block tells the agent to
-  run the designer: library first, 1-2 real reference apps, then the design, with mockups under `design/`, which is
+  run the designer: fresh web research first, 1-2 real reference apps, then the design, with mockups under `design/`, which is
   never held. Screen code a shell command wrote is caught at the end of the turn (pushed once). A project with no
   design item is not held: once per turn it is told what a screen needs. **No screen to the owner before its
   review**: every change of a screen file is recorded; an `Artifact` publish, a `SendUserFile` of a page or a
@@ -281,14 +281,15 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
   in four steps the hooks hold: (1) its specialist (`designer`, or the new `tone`, `rhythm` and `script` cards) writes
   `design/options/<piece>.md` with 2-3 references, each with its exact link, a date at most `refs-max-months` (the
   project's setting, default 6) before the research, and what we take; the proposal is rejected on save without a
-  web search in the same turn or with today's date missing, and voided at the end of a turn that ran none; (2) the
+  web search in the same turn that its `Searches:` list names exactly, or with today's date missing, and voided at the end of a turn that ran none; (2) the
   reviewer writes `design/reviews/options/<YYYY-MM-DD HHMM> <piece>.md` with every link, its HTTP status and keep or
-  reject (a pass keeps every link; a review written with no reviewer subagent is void); an answer that shows the
-  owner links not yet cleared is pushed back; (3) the owner picks, and only the coordinator records it with
+  reject (a pass keeps every link, each with a 2xx status after redirects; a review written with no reviewer subagent is void); an answer that shows the
+  owner links not yet cleared is pushed back, and a page or file carrying them is not published or sent; (3) the owner picks, and only the coordinator records it with
   `track.sh ok <project> design:<piece> <words>`, which the owner approves, after `screens.sh piece` confirms the
   proposal, its passing review newer than it, a `Pick:` naming one of its links and research under a month old;
   (4) the OK freezes the piece above its `### Applied` part and its proposal (a sha256): any change needs a new OK.
-  Deleting `design/SYSTEM.md` does not open the gate in a project whose CLAUDE.md names it or that holds an OK on
+  Each kind always needs its own pieces, so deleting one from the file or changing its `For:` line holds the gate
+  again. Deleting `design/SYSTEM.md` does not open the gate in a project whose CLAUDE.md names it or that holds an OK on
   a piece. A designer, tone, rhythm or script subagent cannot finish without `References:` and a web search in its
   turn. A role card the plugin ships reaches a project that keeps its own `specialists/` folder (the project's card
   wins when both exist). Agents write nothing in the plugin's data folder. A project with no design system and no
@@ -391,7 +392,8 @@ What is ours, with no equivalent found in ECC:
 - The hooks check that specialists and the reviewer ran, not that they were good.
 - The design-system gates check that each reference has a link, a date inside the window and a line in the
   reviewer's file with its status, not that the reviewer opened it or that the work is the best: the reviewer's card
-  holds that. The web search they require is any search in the same turn, not one about that piece. A video is known
+  holds that. The web search they require is one the proposal names, run in the same turn, not proof it found the best work.
+  An answer that describes the options without their links is not caught. A video is known
   by its composition markers or its file extension; a video made another way is held only by a `video:` item.
 - The screen gates know a screen file by its extension (and, for scripts and native code, by a UI framework in its
   text), and a shown screen by the tool (`Artifact`, `SendUserFile`) or by words in the answer. A screen opened in

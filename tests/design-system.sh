@@ -46,13 +46,17 @@ check "mockups under design/ are free" '[ "$(rc "$(w "$D/design/mock.html" "<div
 # the proposal: fresh web research, 2-3 references, each with link, date and what we take
 prop "$D/design/options/typography.md" typography "$today" "$(ago 1)" "$(ago 2)"
 check "a proposal written in a turn that ran no web search is rejected" 'o=$(h "$(pw "$D/design/options/typography.md")" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "this turn ran no web search"'
-web type
-check "after a web search, a complete proposal is taken" '[ "$(rc "$(pw "$D/design/options/typography.md")")" = 0 ]'
+web weather
+check "a web search the proposal does not list (one about something else) does not count as its research" 'o=$(h "$(pw "$D/design/options/typography.md")" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "at least one search this turn ran for this piece"'
+web typography
+check "after the search it lists, a complete proposal is taken" '[ "$(rc "$(pw "$D/design/options/typography.md")")" = 0 ]'
 prop "$D/design/options/x.md" typography "$today" "$(ago 1)"
 check "one option is not a choice" 'sh "$S/screens.sh" options "$D/design/options/x.md" | grep -q "2 or 3 sections"'
 prop "$D/design/options/x.md" typography "$today" "$(ago 1)" "$(ago 2)" "$(ago 3)"
 printf '\n## Option D: four\nLink: https://example.com/d\nDate: %s\nWhat we take: x\n' "$(ago 1)" >> "$D/design/options/x.md"
 check "four options are too many" 'sh "$S/screens.sh" options "$D/design/options/x.md" | grep -q "found 4"'
+prop "$D/design/options/x.md" x "$today" "$(date +%Y-%m)-00" "$(ago 1)"
+check "an impossible date (day 00) is not a date" 'sh "$S/screens.sh" options "$D/design/options/x.md" | grep -q "option 1"'
 prop "$D/design/options/x.md" typography "$today" "$(ago 1)" "$(ago 8)"
 check "a reference older than 6 months before the research is rejected" 'o=$(h "$(pw "$D/design/options/x.md")" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "option 2: dated .*more than 6 months before the research"'
 prop "$D/design/options/x.md" typography "$yesterday" "$(ago 1)" "$(ago 2)"
@@ -73,6 +77,8 @@ rm -f "$D/design/options/colors.md"
 
 # the reference review: the reviewer opens every link before the owner sees any
 turn d3
+printf '<a href="https://example.com/typography-a">A</a>' > "$D/design/opts.html"
+check "a page carrying references the reviewer has not cleared is not published or sent" 'o=$(h "$(ev PreToolUse ",\"tool_name\":\"Artifact\",\"tool_input\":{\"file_path\":\"$D/design/opts.html\"}")" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "has not cleared (https://example.com/typography-a)" && [ "$(rc "$(send "$D/design/options/typography.md")")" = 2 ]'
 check "references shown to the owner before their review cannot end the turn" 'o=$(h "$(stop "Option A: https://example.com/typography-a")" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "references the independent reviewer has not cleared (https://example.com/typography-a"'
 R="$D/design/reviews/options/$today 1000 typography.md"
 orev "$R" design/options/typography.md pass "https://example.com/typography-a | status 200 | dated $(ago 1) | keep: top studio"
@@ -80,12 +86,14 @@ check "a review that leaves a link unopened is rejected as it is written" 'o=$(h
 orev "$R" design/options/typography.md pass "https://example.com/typography-a | status 200 | keep" "https://example.com/typography-b | status 200 | reject: weak, a template"
 check "a pass that rejects a link contradicts itself" 'sh "$S/screens.sh" optreview "$R" | grep -q "Verdict: pass, but https://example.com/typography-b is rejected"'
 orev "$R" design/options/typography.md pass "https://example.com/typography-a | status 200 | keep" "https://example.com/typography-b | status 404 | keep"
-check "a link that did not open (404) cannot pass" 'sh "$S/screens.sh" optreview "$R" | grep -q "did not open (status 404)"'
+check "a link that did not open (404) cannot pass" 'sh "$S/screens.sh" optreview "$R" | grep -q "did not open (status 404"'
+orev "$R" design/options/typography.md pass "https://example.com/typography-a | status 200 | keep" "https://example.com/typography-b | status 301 | keep"
+check "a redirect is not an opened page: the reviewer follows it and gives the final status" 'sh "$S/screens.sh" optreview "$R" | grep -q "did not open (status 301; follow a redirect"'
 orev "$R" design/options/typography.md pass "https://example.com/typography-a | keep" "https://example.com/typography-bb | status 200 | keep"
 check "each link has its status, and a longer address is not the same link" 'o=$(sh "$S/screens.sh" optreview "$R"); printf "%s" "$o" | grep -q "typography-a: its status" && printf "%s" "$o" | grep -q "typography-b is not in Links checked"'
-orev "$R" design/options/typography.md pass "https://example.com/typography-a | status 200 | $(ago 1) | keep: shipped by a top foundry" "https://example.com/typography-b | status 301 | $(ago 2) | keep: current"
+orev "$R" design/options/typography.md pass "https://example.com/typography-a | status 200 | $(ago 1) | keep: shipped by a top foundry" "https://example.com/typography-b | status 200 | $(ago 2) | keep: current"
 check "a review written by the session itself is void at the end of the turn" '[ "$(rc "$(pw "$R")")" = 0 ] && o=$(h "$(stop "ok")" 2>&1); [ $? = 2 ] && grep -q "^Void: " "$R" && sh "$S/screens.sh" unreviewed "$D" | grep -q typography-a'
-turn d4; orev "$R" design/options/typography.md pass "https://example.com/typography-a | status 200 | $(ago 1) | keep: shipped by a top foundry" "https://example.com/typography-b | status 301 | $(ago 2) | keep: current"; reviewer
+turn d4; orev "$R" design/options/typography.md pass "https://example.com/typography-a | status 200 | $(ago 1) | keep: shipped by a top foundry" "https://example.com/typography-b | status 200 | $(ago 2) | keep: current"; reviewer
 check "a review by the reviewer subagent stands, and the owner may see the references" '[ "$(rc "$(stop "Option A: https://example.com/typography-a")")" = 0 ] && ! grep -q "^Void: " "$R" && [ -z "$(sh "$S/screens.sh" unreviewed "$D")" ]'
 
 # the owner's pick
@@ -101,11 +109,17 @@ F="$D/design/reviews/options/$(date +%F) 2359 typography.md"; sleep 1
 orev "$F" design/options/typography.md fail "https://example.com/typography-a | status 200 | $(ago 1) | keep: current" "https://example.com/typography-b | status 200 | $(ago 2) | reject: weak"
 check "a pick whose newest reference review failed is refused" 'o=$(ok typography 2>&1); [ $? != 0 ] && printf "%s" "$o" | grep -q "failed: replace the rejected references"'
 rm -f "$F"
-check "the hook asks the owner before a pick is recorded" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $S/track.sh ok $D design:typography Option A\"}")" | grep -q "your pick of a design-system piece"'
+check "the hook asks the owner before a pick is recorded" 'h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $S/track.sh ok $D design:typography Option A\"}")" | grep -q "your pick of a design-system piece" && h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sh $S/track.sh ok $D design:typography Option A\"}")" | grep -q "You are approving piece typography. The pick written in design/SYSTEM.md: Option A, https://example.com/typography-a. The words recorded as yours: option a"'
 check "the coordinator records the owner.s pick; the piece is closed" 'ok typography "$D" "A, the serif" | grep -q "the owner picks design:typography" && sh "$S/track.sh" owned "$D" | grep -q "^design:typography	"'
 check "screens still wait for the other pieces" 'o=$(h "$(w "$D/web/app.html" "<div>")" 2>&1); [ $? = 2 ] && ! printf "%s" "$o" | grep -q "typography is" && printf "%s" "$o" | grep -q "colors is open"'
 for p in colors components motion; do sys $p "Status: not applicable|Why: a test fixture"; ok $p "$D" "not needed" >/dev/null; done
 check "not applicable needs its Why and the owner too, and then screens open" '[ "$(rc "$(w "$D/web/app.html" "<div>")")" = 0 ]'
+cp "$D/design/SYSTEM.md" "$T/keep.md"
+awk '/^## / { on = (tolower(substr($0, 4)) == "components") } !on' "$T/keep.md" > "$D/design/SYSTEM.md"
+check "deleting a piece the screens need holds them again" 'h "$(w "$D/web/app.html" "<div>")" 2>&1 | grep -q "components is missing"'
+awk '/^## / { on = (tolower(substr($0, 4)) == "colors") } on && /^For:/ { print "For: print"; next } { print }' "$T/keep.md" > "$D/design/SYSTEM.md"
+check "a piece the screens need still counts when its For: line is changed" '[ "$(rc "$(w "$D/web/app.html" "<div>")")" = 2 ]'
+cp "$T/keep.md" "$D/design/SYSTEM.md"
 check "video still waits for tone, rhythm and script" 'h "$(w "$D/video/index.html" "<div data-composition-id=\\\"m\\\">")" 2>&1 | grep -q "not done for video: tone is open; rhythm is open; script is open"'
 awk '/^## / { t = ($0 == "## Typography") } t && /^What we take:$/ { $0 = "What we take: the serif for titles" } { print }' "$D/design/SYSTEM.md" > "$T/s.md"; cp "$T/s.md" "$D/design/SYSTEM.md"
 check "a picked piece changed after the owner.s OK holds screens again" 'h "$(w "$D/web/app.html" "<div>")" 2>&1 | grep -q "typography changed after the owner.s OK"'

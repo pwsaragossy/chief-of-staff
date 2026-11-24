@@ -40,7 +40,7 @@ L="$(dirname "$0")/library.sh"; TAB=$(printf '\t')
 # screens: the design gate before screen code, the review gate before the owner sees a screen (screens.sh)
 SC="$(dirname "$0")/screens.sh"
 REVIEW_HOW="Run the independent reviewer as a subagent ('Role card: reviewer'). It opens the screen and the 1-2 reference apps the designer named, saves a screenshot of each, compares them side by side (layout, hierarchy, type, spacing, states) and writes design/reviews/<YYYY-MM-DD HHMM> <screen>.md with 'Verdict: pass' or 'Verdict: fail', a 'References:' section (the apps, with links) and a 'Side by side:' section (the paths of the saved screenshots, this screen and the reference). A screen that fails is fixed and reviewed again; it never reaches the owner. Where things stand: sh \"$SC\" state <project folder>."
-SYSTEM_HOW="Nothing on a screen or in a video is built before the owner picked its design system, piece by piece, in design/SYSTEM.md (template: $(cd "$(dirname "$0")/../templates/design" && pwd -P)/SYSTEM.md): typography, colours, components, motion for screens; tone, rhythm and script, with typography, colours and motion, for video. For each open piece: (1) its specialist as a subagent (Role card: designer for the visual pieces; tone, rhythm or script for the video ones) first runs a fresh web search of what the top of the market shipped in the last months (the library and memory never replace it) and writes design/options/<piece>.md: Piece:, Researched: <today>, Searches: (the searches run), then 2-3 sections '## Option <letter>: <name>', each with Link: (the exact page: the component on its gallery, the screen of a real app, the video at its timestamp), Date: (when that work was published or last updated) and What we take:; (2) the independent reviewer as a subagent (Role card: reviewer) opens every link and writes design/reviews/options/<YYYY-MM-DD HHMM> <piece>.md with Options:, Verdict: and Links checked: (per link: status <HTTP code>, the date on the page, keep or reject and why); it rejects an old, weak or broken reference; (3) the coordinator shows the owner the reviewed options only, the owner picks, the coordinator writes Status: chosen, Options: and Pick: (the picked link) in the piece and records the owner's OK: sh \"$(dirname "$0")/track.sh\" ok <project folder> design:<piece> <the owner's words>. Nobody else picks between the references. After that, screens and videos follow the system without asking again; something the system does not cover becomes a new open piece. Where things stand: sh \"$SC\" system <project folder> screens|video."
+SYSTEM_HOW="Nothing on a screen or in a video is built before the owner picked its design system, piece by piece, in design/SYSTEM.md (template: $(cd "$(dirname "$0")/../templates/design" && pwd -P)/SYSTEM.md): typography, colours, components, motion for screens; tone, rhythm and script, with typography, colours and motion, for video. For each open piece: (1) its specialist as a subagent (Role card: designer for the visual pieces; tone, rhythm or script for the video ones) first runs a fresh web search of what the top of the market shipped in the last months (the library and memory never replace it) and writes design/options/<piece>.md: Piece:, Researched: <today>, Searches: (each search run this turn, exactly as typed, or the link fetched), then 2-3 sections '## Option <letter>: <name>', each with Link: (the exact page: the component on its gallery, the screen of a real app, the video at its timestamp), Date: (when that work was published or last updated) and What we take:; (2) the independent reviewer as a subagent (Role card: reviewer) opens every link and writes design/reviews/options/<YYYY-MM-DD HHMM> <piece>.md with Options:, Verdict: and Links checked: (per link: status <HTTP code>, the date on the page, keep or reject and why); it rejects an old, weak or broken reference; (3) the coordinator shows the owner the reviewed options only, the owner picks, the coordinator writes Status: chosen, Options: and Pick: (the picked link) in the piece and records the owner's OK: sh \"$(dirname "$0")/track.sh\" ok <project folder> design:<piece> <the owner's words>. Nobody else picks between the references. After that, screens and videos follow the system without asking again; something the system does not cover becomes a new open piece. Where things stand: sh \"$SC\" system <project folder> screens|video."
 # a path with .., symlinks and letter case resolved (macOS ignores case); "" when a part that does not exist yet holds ..
 real() { realp "$1" | tr 'A-Z' 'a-z'; }
 realp() { d=$1 r=; k=0
@@ -63,6 +63,8 @@ card() { [ -f "$SPEC/$1.md" ] && { printf '%s' "$SPEC/$1.md"; return 0; }; [ -f 
 isowner() { cos_owner "$root" "${CLAUDE_PROJECT_DIR:-$PWD}"; }
 
 # Flat JSON field (hook input is compact JSON); good enough for ids, names and booleans.
+# wnorm: a search or link as compared (lower case, quotes and outer spaces dropped, spaces collapsed)
+wnorm() { tr 'A-Z' 'a-z' | sed "s/[\`\"']//g; s/^[[:space:]]*//; s/[[:space:]]*\$//; s/[[:space:]][[:space:]]*/ /g"; }
 jget() { printf '%s' "$in" | sed -n "s/.*\"$1\" *: *\"\{0,1\}\([^\",}]*\).*/\1/p" | head -n 1; }
 # the role a brief names: "Role card: <role>", or the card's path "Role card: <root>/specialists/<role>.md", which
 # the subagent reads itself (pasting 8-12 KB cards into every brief crowded out the task). A path elsewhere names no card
@@ -158,6 +160,8 @@ case $(jget hook_event_name) in
           [ "$role" = reviewer ] && m=reviewer || m=specialist; echo "$(date +%s) $m" >> "$st.bg" ;; esac ;; esac
         mark agent ;;
       WebSearch|WebFetch) mark web
+        # what was searched or fetched, so a proposal's Searches: can be matched to a search this turn really ran
+        printf '%s\n' "$in" | sed -nE 's/.*"(query|url)" *: *"(([^"\\]|\\.)*)".*/\2/p' | head -n 1 | wnorm >> "$st/webq" 2>/dev/null
         # research is never held back: once per turn, a project with a library is reminded to search it and to
         # keep what the research found (a block here made research cost more than a short answer that skipped it)
         if [ -z "$lite" ] && [ $lst = 0 ] && [ ! -f "$st/webnote" ]; then : > "$st/webnote"
@@ -226,8 +230,10 @@ $p"; fi ;;
 $p" >&2; exit 2; } ;;
       "$rr"/design/options/*.md)   # a proposal: fresh web research this turn, 2-3 references with link, date, what we take
         p=$(sh "$SC" options "$sfp"); pr=$?
-        [ -f "$st/web" ] || { p="${p:+$p
-}- fresh web research: this turn ran no web search before writing it (the library and memory never replace it): search the web for what the top of the market shipped in the last months, then write the proposal again"; pr=1; }
+        if [ ! -f "$st/web" ]; then p="${p:+$p
+}- fresh web research: this turn ran no web search before writing it (the library and memory never replace it): search the web for what the top of the market shipped in the last months, then write the proposal again"; pr=1
+        elif [ -z "$(sh "$SC" searches "$sfp" | wnorm | while IFS= read -r q; do [ -n "$q" ] && grep -qxF "$q" "$st/webq" 2>/dev/null && { echo 1; break; }; done)" ]; then p="${p:+$p
+}- Searches: at least one search this turn ran for this piece, written exactly as it ran (the query, or the link fetched)"; pr=1; fi
         rd=$(sed -n 's/\r$//; s/^[*_ -]*[Rr]esearched[*_ ]*: *\([0-9-]*\).*/\1/p' "$sfp" | head -n 1)
         [ "$rd" = "$(date +%F)" ] || { p="${p:+$p
 }- Researched: today's date, $(date +%F): the research behind it runs now"; pr=1; }
@@ -266,7 +272,16 @@ $p" >&2; exit 2; } ;;
       Artifact|SendUserFile)   # a page, a picture or a video put in front of the owner: only after its review passed
         [ -n "$project" ] || exit 0
         case $(jget action) in ''|publish) ;; *) exit 0 ;; esac
-        case $(printf '%s' "$in" | tr 'A-Z' 'a-z') in *.html\"*|*.htm\"*|*.png\"*|*.jpg\"*|*.jpeg\"*|*.webp\"*|*.gif\"*|*.mp4\"*|*.mov\"*|*.webm\"*|*.m4v\"*) ;; *) exit 0 ;; esac
+        # a page or file that carries references the reviewer has not cleared does not reach the owner either
+        ul=$(sh "$SC" unreviewed "$root" 2>/dev/null)
+        if [ -n "$ul" ]; then
+          printf '%s' "$in" | grep -Eo '"[^"]+\.[A-Za-z0-9]{1,5}"' | tr -d '"' | while IFS= read -r f; do
+            case $f in /*) ;; *) f="$root/$f" ;; esac; [ -f "$f" ] || continue
+            for u in $ul; do grep -qF "$u" "$f" 2>/dev/null || continue
+              echo "Blocked by chief-of-staff: ${f#"$root/"} shows the owner a reference the independent reviewer has not cleared ($u): the owner sees only references whose reviewer opened every link and passed them (design/reviews/options/, newer than the proposal). Run the reviewer first. $SYSTEM_HOW" >&2; exit 2; done
+          done || exit 2
+        fi
+        case $(printf '%s' "$in" | tr 'A-Z' 'a-z') in *.html\"*|*.htm\"*|*.png\"*|*.jpg\"*|*.jpeg\"*|*.webp\"*|*.gif\"*|*.mp4\"*|*.mov\"*|*.webm\"*|*.m4v\"*|*.mkv\"*) ;; *) exit 0 ;; esac
         why=$(sh "$SC" state "$root") && exit 0
         echo "Blocked by chief-of-staff: the project's screens are not cleared to reach the owner: $why
 $REVIEW_HOW" >&2
@@ -281,7 +296,7 @@ $REVIEW_HOW" >&2
             # ponytail: a word list, not a shell parser; the Artifact and SendUserFile blocks are the hard part
             rl=$(cd "$root" && pwd -P | tr 'A-Z' 'a-z')
             if [ -n "$project" ] && printf '%s' "$lc" | grep -Eq '(^|[^a-z0-9_.-])(open|xdg-open|gio +open|start|sensible-browser|x-www-browser|firefox|chromium|google-chrome|webbrowser|open +location|osascript)([^a-z0-9_.-]|$)' &&
-              printf '%s' "$lc" | grep -Eq "localhost|127\\.[0-9]|0\\.0\\.0\\.0|\\[::1?\\]|https?://(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|[^/\"]*\\.local([:/\"]|$))|\\.html?([^a-z]|$)|\\.(mp4|mov|webm|m4v)([^a-z0-9]|$)|$(printf '%s' "$rl" | sed 's/[][\\.*^$+?(){}|]/\\\\&/g')"; then
+              printf '%s' "$lc" | grep -Eq "localhost|127\\.[0-9]|0\\.0\\.0\\.0|\\[::1?\\]|https?://(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|[^/\"]*\\.local([:/\"]|$))|\\.html?([^a-z]|$)|\\.(mp4|mov|webm|m4v|mkv)([^a-z0-9]|$)|$(printf '%s' "$rl" | sed 's/[][\\.*^$+?(){}|]/\\\\&/g')"; then
               why=$(sh "$SC" state "$root") || { echo "Blocked by chief-of-staff: this opens a screen for the owner, and the project's screens are not cleared to reach the owner: $why
 $REVIEW_HOW" >&2; exit 2; }
             fi
@@ -414,7 +429,10 @@ WS
               if printf '%s\n' "$nq" | grep -Eq "track\\.sh +($DYN|ok([^a-z0-9_.-]|\$))|[^ ]\\.sh +ok([^a-z0-9_.-]|\$)|track\\.sh$FEED|<+ *[^ ;&|]*track\\.sh|${FROM}track\\.sh *([)\`;&|]|\$)"; then
                 # the session's own folder comes from Claude Code, not from the shell: a cd cannot fake the coordinator
                 isowner || { echo "Blocked by chief-of-staff: only the project's coordinator (the owner's conversation at the root of the project folder) records the owner's OK. Write the request on the project's card; the coordinator asks the owner. (To read track.sh, use the Read or Grep tool.)" >&2; exit 2; }
-                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this records YOUR OK on a project step (scope freeze, submission, your pick of a design-system piece, or the target and check, which approves and later runs the check command shown in its output). Only approve if you gave that OK.'"$(case $nq in (*untrack*) printf ' If it is an untrack: it takes your OK files out of git (they came through git, so they are not trusted), keeps them out and rebuilds the list of steps that need your OK, recording no OK.' ;; esac)"'"}}'; exit 0
+                echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"chief-of-staff: this records YOUR OK on a project step (scope freeze, submission, your pick of a design-system piece, or the target and check, which approves and later runs the check command shown in its output). Only approve if you gave that OK.'"$(dp=$(printf '%s\n' "$nq" | grep -oE 'design:[a-z0-9-]+' | head -n 1 | cut -c8-)
+                  [ -n "$dp" ] && printf ' You are approving piece %s. The pick written in design/SYSTEM.md: %s. The words recorded as yours: %s. Approve only if that is the option you chose and what you said.' "$dp" \
+                    "$(awk -v p="$dp" '/^## / { s = tolower(substr($0, 4)); gsub(/[^a-z0-9]+/, "-", s); gsub(/^-+|-+$/, "", s); on = (s == p) } on && tolower($0) ~ /^pick[*_ ]*:/ { sub(/^[^:]*: */, ""); print; exit }' "$root/design/SYSTEM.md" 2>/dev/null | tr -d '"\\\000-\037' | cut -c1-300)" \
+                    "$(printf '%s\n' "$nq" | sed -n "s/.*design:$dp *//p" | head -n 1 | tr -d '"\\\000-\037' | cut -c1-300)")$(case $nq in (*untrack*) printf ' If it is an untrack: it takes your OK files out of git (they came through git, so they are not trusted), keeps them out and rebuilds the list of steps that need your OK, recording no OK.' ;; esac)"'"}}'; exit 0
               fi
               # a script called with a list of words (subprocess.run([sh,track.sh,ok]), spawn(sh,[library.sh,use])):
               # no space after its name, so its subcommand may be any later word. A plain grep runs nothing (not with a
@@ -487,7 +505,7 @@ Mockups under design/ are free; screen and video code continue once the pieces h
     case $in in *"Never-skip checklist"*) ;; *)
       echo "Your role card requires a '## Never-skip checklist' section: mark each item of your card's 'Never skip' list as done or not applicable (why). Add it, then finish." >&2
       exit 2 ;; esac
-    # a design follows real references: the designer names the 1-2 apps (or brands) it follows, found after the library
+    # a design follows real references: the designer names the 1-2 apps (or brands) it follows, found by fresh web research
     case $in in *"Role: designer"*|*"Role: tone"*|*"Role: rhythm"*|*"Role: script"*)
       case $in in *[Rr]eferences:*) ;; *)
       echo "Design work names its references: add a 'References:' section with the real works it follows or proposes (each with its exact link and its date), found by fresh web research. Add it, then finish." >&2
@@ -606,7 +624,7 @@ Close each item with its proof file (evidence: path relative to the project fold
       ul=$(sh "$SC" unreviewed "$root" 2>/dev/null | while IFS= read -r u; do [ -n "$u" ] && case $in in (*"$u"*) printf '%s ' "$u" ;; esac; done)
       [ -n "$ul" ] && sgaps="${sgaps:+$sgaps }This answer shows the owner references the independent reviewer has not cleared ($ul): the owner sees only references whose reviewer opened every link and passed them (design/reviews/options/, newer than the proposal). Run the reviewer, then show the options again."
       # a screen or a video pointed at the owner (a localhost address, a page, a screenshot, a video) before its review passed
-      if printf '%s' "$in" | grep -Eqi 'localhost:[0-9]|127\.0\.0\.1|0\.0\.0\.0:[0-9]|\.html?([^a-z]|$)|\.(png|jpe?g|webp|mp4|mov|webm|m4v)([^a-z0-9]|$)|screenshot'; then
+      if printf '%s' "$in" | grep -Eqi 'localhost:[0-9]|127\.0\.0\.1|0\.0\.0\.0:[0-9]|\.html?([^a-z]|$)|\.(png|jpe?g|webp|mp4|mov|webm|m4v|mkv)([^a-z0-9]|$)|screenshot'; then
         w=$(sh "$SC" state "$root") || sgaps="${sgaps:+$sgaps }This answer points at a screen, and the project's screens are not cleared to reach the owner: $w
 $REVIEW_HOW Then rewrite the answer: a screen that failed is not shown."
       fi

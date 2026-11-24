@@ -11,7 +11,7 @@ use each, the checks a senior professional never skips, the evidence standard an
 
 1. **Pick** from the project's `ROUTING.md` (else the plugin's) the cards the subject needs, usually one or two plus the
    reviewer. If no card fits, write one in the same format first (`specialists/<role>.md`).
-2. **Search the library first** (`knowledge` skill); the prompt hook already lists notes that may
+2. **Search the library first** (`knowledge` skill; design work starts with fresh web research instead); the prompt hook already lists notes that may
    bear on the request. What it returns goes into every brief, so no specialist redoes research the
    project already has. Design work is the exception: a design-system piece, a screen or a video starts with fresh
    web research of the last months (below), which the library and memory never replace.

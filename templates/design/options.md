@@ -1,7 +1,7 @@
 Piece: <typography | colors | components | motion | tone | rhythm | script | a new piece>
 Researched: <YYYY-MM-DD, the day the web research ran>
 Searches:
-- <each web search run for this proposal, as typed>
+- <each web search run for this proposal, exactly as typed, or the link fetched: the hook matches one to a search this turn ran>
 Library: <[[id]] of the notes that bear on it, or none found for <terms>; the library adds context, it never replaces the search>
 
 ## Option A: <short name>

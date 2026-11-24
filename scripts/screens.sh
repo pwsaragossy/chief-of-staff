@@ -116,7 +116,7 @@ okpath() { case $1 in design/options/*.md) case $1 in *..*|*/./*|*//*|*' '*|*'	'
 # links FILE: the Link: address of each option of a proposal, in order
 links() { awk '{ sub(/\r$/, ""); t = $0; sub(/^[*_ -]+/, "", t); l = tolower(t) } tolower($0) ~ /^##+ *option/ { k++ }
   k > 0 && l ~ /^link[*_ ]*:/ && match(t, /https?:\/\/[^] )>|`"]+/) { print substr(t, RSTART, RLENGTH) }' "$1"; }
-D2N='function d2n(s, a) { if (s !~ /^[0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9]$/) return -1; split(s, a, "-"); return ((a[1] * 12) + a[2] - 1) * 100 + a[3] }'
+D2N='function d2n(s, a) { if (s !~ /^[0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9]$/) return -1; split(s, a, "-"); if (a[2] < 1 || a[2] > 12 || a[3] < 1 || a[3] > 31) return -1; return ((a[1] * 12) + a[2] - 1) * 100 + a[3] }'
 # optcheck FILE: a proposal holds 2-3 options from fresh web research, each with its exact link, a date inside the window
 # (at most N months before the research), and what this project takes from it
 optcheck() { _root=${1%/design/options/*}; awk -v N="$(months "$_root")" -v today="$(date +%F)" "$D2N"'
@@ -157,15 +157,18 @@ newrev() { ls -t "$dir/design/reviews/options/"*.md 2>/dev/null | while IFS= rea
 cleared() { _rv=$(newrev "$1"); [ -n "$_rv" ] && [ "$_rv" -nt "$dir/$1" ] && [ "$(sh "$0" optreview "$_rv" 2>/dev/null)" = pass ]; }
 # system KIND: every piece the kind needs (For: names it) holds the owner's OK on its current text
 system() { _k=$1; [ "$_k" = screen ] && _k=screens
+  # the pieces every system holds for the kind, whatever its For: lines say (deleting one does not drop it)
+  if [ "$_k" = video ]; then _req="tone rhythm script typography colors motion"; else _req="typography colors components motion"; fi
   if [ ! -f "$dir/$SYS" ]; then
     # a project that keeps a design system cannot open its gate by deleting the file
     if grep -qs 'design/SYSTEM.md' "$dir/CLAUDE.md" || [ -n "$(sh "$TK" owned "$dir" 2>/dev/null)" ]; then
       echo "design/SYSTEM.md is missing, but this project keeps a design system: restore it (git) instead of deleting it"; return 1; fi
     return 3; fi
-  _ok=$(sh "$TK" owned "$dir" 2>/dev/null); _w=; _n=0
+  _ok=$(sh "$TK" owned "$dir" 2>/dev/null); _w=; _n=0; _seen=" "
   while IFS=$US read -r _p _f _s _o _pk _y; do
     [ -n "$_p" ] || continue
-    case $_f in *"$_k"*|*all*|*both*) ;; *) continue ;; esac
+    case " $_req " in *" $_p "*) _seen="$_seen$_p " ;;
+      *) case $_f in *"$_k"*|*all*|*both*) ;; *) continue ;; esac ;; esac
     _n=$((_n + 1))
     case $_s in chosen*|not\ applicable*|n/a*|na) ;; *) _w="$_w$_p is open; "; continue ;; esac
     _g=$(printf '%s\n' "$_ok" | awk -F '\t' -v i="design:$_p" '$1 == i { print $2 }')
@@ -174,7 +177,8 @@ system() { _k=$1; [ "$_k" = screen ] && _k=screens
   done <<EOF
 $(secs "$dir/$SYS")
 EOF
-  [ $_n -gt 0 ] || _w="it names no piece For: $_k; "
+  for _r in $_req; do case $_seen in *" $_r "*) ;; *) _w="$_w$_r is missing (put its section back from the plugin's template); " ;; esac; done
+  [ $_n -gt 0 ] || _w="${_w}it names no piece For: $_k; "
   [ -z "$_w" ] && return 0
   printf 'the design system (design/SYSTEM.md) is not done for %s: %s\n' "$_k" "${_w%; }"; return 1; }
 
@@ -288,13 +292,19 @@ $v
 "
         case $lc in *reject*) r=reject ;; *keep*) r=keep ;; *) r=; e="$e- $u: keep or reject, and why
 " ;; esac
-        [ "$v" = pass ] && { [ "$r" = reject ] || case $sc in [23]??) false ;; *) true ;; esac; } &&
-          e="$e- Verdict: pass, but $u is rejected or did not open (status ${sc:-none}): a pass keeps every link
+        [ "$v" = pass ] && { [ "$r" = reject ] || case $sc in 2??) false ;; *) true ;; esac; } &&
+          e="$e- Verdict: pass, but $u is rejected or did not open (status ${sc:-none}; follow a redirect and give the final page's status): a pass keeps every link
 "
       done
     fi
     [ -n "$e" ] && { printf '%s' "$e"; exit 1; }
     echo "$v" ;;
+  searches)   # the searches a proposal lists under Searches:, one per line, as written
+    awk '{ sub(/\r$/, ""); t = $0; sub(/^[*_ -]+/, "", t); ll = tolower(t) }
+      tolower($0) ~ /^##+ *option/ { exit }
+      ll ~ /^searches[*_ ]*:/ { on = 1; v = t; sub(/^[^:]*: */, "", v); if (v ~ /[A-Za-z0-9]/) print v; next }
+      on && $0 ~ /^[ ]*([-*+]|[0-9]+[.)]) / { v = $0; sub(/^[ ]*([-*+]|[0-9]+[.)]) +/, "", v); print v; next }
+      on && (ll ~ /^[a-z ]+:/ || /^#/) { on = 0 }' "$2" ;;
   unreviewed)
     for f in "$dir"/design/options/*.md; do [ -f "$f" ] || continue; r=${f#"$dir/"}
       cleared "$r" || links "$f"; done ;;

@@ -69,7 +69,7 @@ mutate "a piece counts as picked without the owner's OK" scripts/screens.sh "$DS
 mutate "a piece changed after the owner's OK still counts" scripts/screens.sh "$DS" \
   'elif [ "$_g" != "$(psum "$_p" "$_o")" ]; then' 'elif false; then'
 mutate "a proposal needs no web search in its turn" scripts/protocol.sh "$DS" \
-  '[ -f "$st/web" ] || { p="${p:+$p' 'true || { p="${p:+$p'
+  'if [ ! -f "$st/web" ]; then p="${p:+$p' 'if false; then p="${p:+$p'
 mutate "an old reference passes" scripts/screens.sh "$DS" \
   'else if (rn >= 0 && dn < rn - N * 100)' 'else if (0)'
 mutate "one option is a choice" scripts/screens.sh "$DS" \
@@ -92,4 +92,16 @@ mutate "a render is not seen as video" scripts/screens.sh "$DS" \
   '*.mp4|*.mov|*.webm|*.m4v|*.mkv) cat >/dev/null; echo video' '*.nothing) cat >/dev/null; echo video'
 mutate "agents may write the plugin's data" scripts/protocol.sh "$DS" \
   'case $rp in "$(real "$DATA")"/*|' 'case $rp in /nonexistent/*|'
+mutate "a piece deleted from the design system stops counting" scripts/screens.sh "$DS" \
+  '*) _w="$_w$_r is missing' '*) _w="$_w'
+mutate "a proposal counts any web search, not one it names" scripts/protocol.sh "$DS" \
+  'grep -qxF "$q" "$st/webq" 2>/dev/null &&' 'true &&'
+mutate "the owner approves a pick without seeing it" scripts/protocol.sh "$DS" \
+  '[ -n "$dp" ] && printf '"'"' You are approving piece' 'false && printf '"'"' You are approving piece'
+mutate "a page carrying unreviewed references is published" scripts/protocol.sh "$DS" \
+  'for u in $ul; do grep -qF "$u" "$f" 2>/dev/null || continue' 'for u in $ul; do continue'
+mutate "an impossible date passes" scripts/screens.sh "$DS" \
+  'if (a[2] < 1 || a[2] > 12 || a[3] < 1 || a[3] > 31) return -1;' ''
+mutate "a redirect passes as an opened link" scripts/screens.sh "$DS" \
+  'case $sc in 2??) false' 'case $sc in [23]??) false'
 echo "caught=$caught missed=$missed"; [ "$missed" = 0 ]
