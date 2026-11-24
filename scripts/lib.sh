@@ -176,6 +176,9 @@ cos_limit() {
   wait "$_p"; _r=$?; cat "$_o"; rm -f "$_o"; return $_r
 }
 # cos_cache NAME KEY -> a file for this computer's cache (never in a library or the workspace), one per KEY
+# cos_hsum -> a sha256 of stdin (cksum where neither shasum nor sha256sum exists)
+cos_hsum() { if command -v shasum > /dev/null 2>&1; then shasum -a 256 | cut -c1-64
+  elif command -v sha256sum > /dev/null 2>&1; then sha256sum | cut -c1-64; else cksum | tr -d ' \t'; fi; }
 cos_cache() { printf '%s/%s-%s' "${CLAUDE_PLUGIN_DATA:-$HOME/.cache/chief-of-staff}" "$1" "$(printf '%s' "$2" | cksum | cut -d' ' -f1)"; }
 # cos_ids LIB -> the note ids of LIB, one per line, from a cache that stays valid until notes/ changes (adding,
 # removing or renaming a note changes the folder's mtime; ids are file names, so an edit inside a note cannot

@@ -46,6 +46,10 @@ the owner to pick, in the same round of buttons if possible.
    an existing `CLAUDE.md` is the owner's, never rewrite it) from
    `${CLAUDE_PLUGIN_ROOT}/templates/project/` (copy the literal path shown here), filling the
    `{{...}}` fields from the answers. Put the answers in STATE.md section 2.
+   Copy `${CLAUDE_PLUGIN_ROOT}/templates/design/SYSTEM.md` to `design/SYSTEM.md` when the project will show the owner
+   a screen or a video: its pieces are picked with the owner one by one before any screen or video is built (the
+   `specialists` skill, "The design system"). A project with neither marks every piece `not applicable` with `Why:`,
+   with the owner's OK.
    Copy the chosen track to `TRACK.md`. Set `delivery:` to the stage that
    delivers what the owner asked for (the success answer): that is the planned end. Then run
    `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" baseline "$PWD"` once, which records how

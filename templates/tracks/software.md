@@ -23,12 +23,13 @@ Gate: the problem is evidenced, scope in and out is written, and success has a n
 - [ ] review-1 | Independent review of stage 1: verdict and fixes | card: reviewer | needs: blind-spots, problem, user-evidence, requirements, success-metric, data-classes | evidence:
 ## Stage 2: Design and architecture
 Gate: flows, states, architecture and threats are documented before code that depends on them is written.
+- [ ] design-system | The owner picked each piece the screens need (typography, colors, components, motion) in design/SYSTEM.md, from 2-3 recent references the reviewer opened | card: designer | needs: requirements | evidence: design/SYSTEM.md
 - [ ] flows | Core user flow diagram with entry, primary action, success, error and exit paths | card: designer | needs: requirements | evidence:
-- [ ] ui-spec | Screens with empty, loading, error and first-use states, using existing components, with measured contrast ratios against WCAG 2.2 AA | card: designer | needs: flows | evidence:
+- [ ] ui-spec | Screens with empty, loading, error and first-use states, using existing components, with measured contrast ratios against WCAG 2.2 AA, following the picked design system and 1-2 real reference apps (a References: section with links) found by fresh web research, with a Library: line; screen code waits for it | card: designer | needs: flows, design-system | evidence:
 - [ ] architecture | Architecture note: components, data model, external services, build-versus-buy choices, the main risk and how it is tested early | card: engineer | needs: requirements | evidence:
 - [ ] threat-model | Threat model of assets, entry points, trust boundaries and abuse cases, with a mitigation or accepted risk for each | card: security | needs: architecture, data-classes | evidence:
 - [ ] estimate | Effort estimate by the people who will build it, with the riskiest piece spiked first | card: engineer | needs: architecture | evidence:
-- [ ] review-2 | Independent review of stage 2: verdict and fixes | card: reviewer | needs: flows, ui-spec, architecture, threat-model, estimate | evidence:
+- [ ] review-2 | Independent review of stage 2: verdict and fixes | card: reviewer | needs: design-system, flows, ui-spec, architecture, threat-model, estimate | evidence:
 ## Stage 3: Build and verify
 Gate: acceptance criteria pass in tests, security and accessibility checks are done, and legal terms match what the product does.
 - [ ] test-plan | Test plan mapping every acceptance criterion to a test, including failure paths and one end-to-end test of the main flow | card: engineer | needs: requirements, architecture | evidence:

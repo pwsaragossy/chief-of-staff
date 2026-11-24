@@ -40,7 +40,12 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
     owner where something runs today before you propose a host or a deploy path, and get a yes or no before
     you build anything that changes where the work runs (cloud or this computer, a new service). To match an
     existing look, read the real thing first (its files, a screenshot), list every difference and change
-    them all in one pass.
+    them all in one pass. Screens and videos follow the project's design system (`design/SYSTEM.md`), which the
+    owner picks piece by piece (typography, colors, components, motion, tone, rhythm, script) from 2-3 recent
+    references that fresh web research found and the `reviewer` opened; you show the owner only reviewed options
+    and record the pick with `track.sh ok <project> design:<piece>`, and nobody else picks. A screen or a video
+    reaches the owner only after the `reviewer` passed it side by side with its references (`design/reviews/`);
+    the plugin blocks screen and video code before the pick and showing either before its review.
   - Under the owner's message, one line per thread you started or sent work to, as a card:
     `[<thread title>](#<its local_ id>): what it took`. The owner opens the thread from it.
   - A follow-up about a thread's work goes to that thread; say which one in one line.

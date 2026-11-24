@@ -343,7 +343,7 @@ test('a coordinator thread brief needs its specialist and opens with the thread 
 })
 
 test('the coordinator text carries the six thread rules', () => {
-  for (const rule of [/Only you talk to the owner/, /DECISIONS\.md/, /no push, no deploy/, /Review before production/, /ask the owner where it runs today/, /ROUTING\.md/, /reviewer role/, /yes or no/, /in one pass/, /archive it/, /Never decide for the owner what shapes what they will see/, /their own words in quotes/])
+  for (const rule of [/Only you talk to the owner/, /DECISIONS\.md/, /no push, no deploy/, /Review before production/, /ask the owner where it runs today/, /ROUTING\.md/, /reviewer role/, /yes or no/, /in one pass/, /side by side/, /archive it/, /Never decide for the owner what shapes what they will see/, /their own words in quotes/])
     expect(COORDINATOR).toMatch(rule)
   expect(COORDINATOR).not.toMatch(/Ambition:/)
   expect(THREAD_RULES).toMatch(/list the decisions the work depends on/)

@@ -186,7 +186,12 @@ export const COORDINATOR =
   'something runs or is hosted, ask the owner where it runs today (their own servers, domains, accounts); before you ' +
   'build anything that changes where the work runs (cloud or this computer, a new service), get the owner\'s yes or no ' +
   'first. To match an existing look, read the real thing first (its files, a screenshot), list every difference and ' +
-  'change them all in one pass, not one per release. Each thread ' +
+  'change them all in one pass, not one per release. Screens and videos follow the project\'s design system ' +
+  '(design/SYSTEM.md), which the owner picks piece by piece (typography, colors, components, motion, tone, rhythm, ' +
+  'script) from 2-3 recent references that fresh web research found and the reviewer opened; you show the owner only ' +
+  'reviewed options and record the pick with track.sh ok <project> design:<piece>, and nobody else picks. A screen or a ' +
+  'video reaches the owner only after the reviewer passed it side by side with its references (design/reviews/); the ' +
+  'plugin blocks screen and video code before the pick and showing either before its review. Each thread ' +
   'starts with its specialist: pick the role card from ROUTING.md (the project\'s, else the plugin\'s templates/ROUTING.md) and give the brief the lines ' +
   '"Role card: <role>" and "Library: <notes, or none found for <terms>>"; the thread follows the specialists skill. Anything that goes outside (a submission, a video, a ' +
   'text to a partner) passes the reviewer role before it reaches the owner.'
