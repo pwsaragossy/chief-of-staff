@@ -254,6 +254,52 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
   a substantive turn (a deliverable file or a long answer) cannot end without a
   specialist and the reviewer; research alone is not substantive. Each push happens once per
   turn. Every turn is logged to `<project>/.protocol.log`, the adherence record.
+- Screens (`scripts/screens.sh`, called by `protocol.sh`), in a project folder. **No screen code before its
+  design**: a Write or Edit of a file that renders a screen (html, css, jsx, tsx, vue, svelte, astro; swift, kotlin,
+  dart, js or ts that use a UI framework; not tests) is blocked while the project's design item is not done. A design
+  item is a TRACK.md item with id `ui-spec` or a `screens:` field (path patterns of the product's screens, so a deck
+  is not held; an item with a `video:` field holds video files the same way); it is done when closed with evidence that holds a `References:` section (1-2
+  real apps, with links) and a `Library:` line, or marked not applicable with `why:`. The block tells the agent to
+  run the designer: fresh web research first, 1-2 real reference apps, then the design, with mockups under `design/`, which is
+  never held. Screen code a shell command wrote is caught at the end of the turn (pushed once). A project with no
+  design item is not held: once per turn it is told what a screen needs. **No screen to the owner before its
+  review**: every change of a screen file is recorded; an `Artifact` publish, a `SendUserFile` of a page or a
+  picture, and a shell `open` of a page or a local server are blocked until the newest review in `design/reviews/`
+  says `Verdict: pass`, is newer than every change and holds a screenshot taken after the last change. An answer
+  that points at a screen (a localhost address, a page, a screenshot) is pushed at the end of the turn, and that push
+  holds the second stop too, twice at most. A review is rejected on save without `Verdict:`, a `References:` section
+  with links and a `Side by side:` section naming two different, non-empty saved screenshots (this screen and the
+  reference); one written in a turn that ran no reviewer subagent is made void. Paths are compared as the disk
+  resolves them (`..`, symlinks, letter case), and a design item's evidence is one file of the project named by a
+  plain relative path. A designer subagent cannot finish without a `References:` section.
+  `sh scripts/screens.sh state <project>` says where the project stands.
+- The design system (`design/SYSTEM.md`, from `templates/design/SYSTEM.md`), in a project folder that keeps one.
+  **The owner picks every piece before anything is built on it**: typography, colors, components and motion for
+  screens; tone, rhythm and script (with typography, colors and motion) for video. Screen code and video code (a
+  HyperFrames, Remotion or Motion Canvas composition, or a rendered mp4, mov, webm, m4v or mkv) are blocked while a
+  piece they need is open or its text changed after the owner's OK; mockups under `design/` are free. A piece closes
+  in four steps the hooks hold: (1) its specialist (`designer`, or the new `tone`, `rhythm` and `script` cards) writes
+  `design/options/<piece>.md` with 2-3 references, each with its exact link, a date at most `refs-max-months` (the
+  project's setting, default 6) before the research, and what we take; the proposal is rejected on save without a
+  web search in the same turn that its `Searches:` list names exactly, or with today's date missing, and voided at the end of a turn that ran none; (2) the
+  reviewer writes `design/reviews/options/<YYYY-MM-DD HHMM> <piece>.md` with every link, its HTTP status and keep or
+  reject (a pass keeps every link, each with a 2xx status after redirects; a review written with no reviewer subagent is void); an answer that shows the
+  owner links not yet cleared is pushed back, and a page or file carrying them is not published or sent; (3) the owner picks, and only the coordinator records it with
+  `track.sh ok <project> design:<piece> <words>`, which the owner approves, after `screens.sh piece` confirms the
+  proposal, its passing review newer than it, a `Pick:` naming one of its links and research under a month old;
+  (4) the OK freezes the piece above its `### Applied` part and its proposal (a sha256): any change needs a new OK.
+  Each kind always needs its own pieces, so deleting one from the file or changing its `For:` line holds the gate
+  again. Deleting `design/SYSTEM.md` does not open the gate in a project whose CLAUDE.md names it or that holds an OK on
+  a piece. A designer, tone, rhythm or script subagent cannot finish without `References:` and a web search in its
+  turn. A role card the plugin ships reaches a project that keeps its own `specialists/` folder (the project's card
+  wins when both exist). Agents write nothing in the plugin's data folder. A project with no design system yet (one
+  that started before it) is not locked as it stands: edits of its existing screen and video files go on, with a
+  notice once per turn, and its first new screen or video (a file not on disk or not in the last commit; without git, every file already
+  on disk counts as existing) waits while the
+  design system is proposed to the owner, with what the project already uses as one option per piece
+  (`## Option A (current)` with `From:` its file, no link or date) beside 1-2 fresh references. The owner may turn it
+  off for a project with `design-system: off` in its settings; then only TRACK.md design items hold its screens. `sh scripts/screens.sh system <project>
+  screens|video` says where it stands.
 - The same Stop hook runs `scripts/track.sh check` in a project session: a stage below `stage:` with
   an open item, an item marked done whose proof file does not exist or whose prerequisites are
   open, a not-applicable item without a reason, a reviewer item marked not applicable, a stage
@@ -349,6 +395,19 @@ What is ours, with no equivalent found in ECC:
 - The near-duplicate file notice compares names only, among files with the same extension (letter case,
   separators and a final s ignored), and never blocks: it asks the agent to check whether one duplicates the other.
 - The hooks check that specialists and the reviewer ran, not that they were good.
+- The design-system gates check that each reference has a link, a date inside the window and a line in the
+  reviewer's file with its status, not that the reviewer opened it or that the work is the best: the reviewer's card
+  holds that. The web search they require is one the proposal names, run in the same turn, not proof it found the best work.
+  An answer that describes the options without their links is not caught. A video is known
+  by its composition markers or its file extension; a video made another way is held only by a `video:` item.
+- The screen gates know a screen file by its extension (and, for scripts and native code, by a UI framework in its
+  text), and a shown screen by the tool (`Artifact`, `SendUserFile`) or by words in the answer. A screen opened in
+  the browser pane to check one's own work (`preview_start`) is not blocked: that is how the builder and the
+  reviewer see it, and the owner can see that pane. Pointing the owner at a screen in the answer is pushed at most
+  three times per turn, not locked. A shell command that writes screen code is caught at the end of the turn, not
+  before. The review gate checks the review's form and its times, not its judgement: the newest passing review clears
+  every screen of the project, and a design item's evidence is checked for references and the library, not for
+  quality. A screen changed in the same second as its review counts as changed after it.
 - A track gate checks that a proof file exists, not what it says. An agent can still write a
   thin file; the stage's reviewer item, which can never be skipped, is where that is caught.
 - The role cards' sources were checked once by a reviewer on 2026-10-22; a few dates and versions

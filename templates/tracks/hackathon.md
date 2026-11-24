@@ -29,7 +29,7 @@ Gate: scope is frozen, the thinnest end-to-end path runs, and nothing in the bui
 - [ ] skeleton | Thinnest end-to-end path running (input to visible output) before any extra feature is built | card: engineer | needs: scope | evidence:
 - [ ] licences | Licences of dependencies, datasets and third-party assets checked against the rules and the intended licence | card: legal | needs: rules | evidence:
 - [ ] secrets | No keys or personal data in the repository or demo, keys in environment variables, keys rotated if exposed | card: security | needs: skeleton | evidence:
-- [ ] look | Name and one consistent visual style across product screens and deck, readable at projector size | card: designer | needs: scope | evidence:
+- [ ] look | Name and one consistent visual style across product screens and deck, readable at projector size | card: designer | needs: scope | screens: * | evidence:
 - [ ] review-2 | Independent review of stage 2: verdict and fixes | card: reviewer | needs: scope, skeleton, licences, secrets, look | evidence:
 ## Stage 3: Demo and pitch
 Gate: the demo runs without live dependencies, a recorded backup exists, and the pitch has been rehearsed against the clock.
