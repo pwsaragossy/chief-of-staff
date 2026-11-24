@@ -166,6 +166,8 @@ git -C "$E" init -q && git -C "$E" add video/approved.html && git -C "$E" -c use
 turn e1
 check "a new video in a project with no design system waits for the proposal, which offers what the project already uses" 'o=$(h "$(w "$E/video/next.html" "<div data-composition-id=\\\"n\\\">")" "$E" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "propose the design system to the owner" && printf "%s" "$o" | grep -q "## Option A (current)" && printf "%s" "$o" | grep -q "1-2 fresh references"'
 check "an edit of a video the project already has goes on, with the advice to propose the design system" '[ "$(rc "$(w "$E/video/approved.html" "<div data-composition-id=\\\"look\\\">")" "$E")" = 0 ] && h "$(pw "$E/video/approved.html")" "$E" | grep -q "keeps no design system yet: propose it to the owner"'
+printf '<div data-composition-id="n">' > "$E/video/staged.html"; git -C "$E" add video/staged.html
+check "a new video only staged with git add is still new" '[ "$(rc "$(w "$E/video/staged.html" "<div data-composition-id=\\\"n\\\">")" "$E")" = 2 ]'
 check "a new render waits too" '[ "$(rc "$(w "$E/video/next.mp4" "x")" "$E")" = 2 ]'
 cp "$E/.chief-of-staff" "$T/e.bak"; chmod u+w "$E/.chief-of-staff"; printf 'design-system: off\n' >> "$E/.chief-of-staff"
 check "the owner may turn the design system off for a project (design-system: off in its settings)" '[ "$(rc "$(w "$E/video/next.html" "<div data-composition-id=\\\"n\\\">")" "$E")" = 0 ]'

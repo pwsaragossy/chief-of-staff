@@ -41,9 +41,10 @@ US=$(printf '\037')
 # a reference is at most this many months older than the research that found it (the owner's setting, else 6)
 # the owner's setting design-system: off keeps a project without a design system (only TRACK.md design items hold it)
 dsoff() { grep -qsi '^design-system: *off *$' "$1/.chief-of-staff"; }
-# isnew FILE: a screen or video that is new (not on disk yet, or not in the project's git history)
+# isnew FILE: a screen or video that is new: not on disk yet, or not in the project's last commit (git add alone does
+# not make it old). ponytail: a project without git counts its files on disk as existing
 isnew() { [ -e "$1" ] || return 0; git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || return 1
-  ! git -C "$dir" ls-files --error-unmatch -- "$1" >/dev/null 2>&1; }
+  ! git -C "$dir" cat-file -e "HEAD:${1#"$dir/"}" 2>/dev/null; }
 months() { _m=$(sed -n 's/^refs-max-months: *\([0-9][0-9]*\) *$/\1/p' "$1/.chief-of-staff" 2>/dev/null | head -n 1); echo "${_m:-6}"; }
 
 # isui FILE: by extension; a script or native source counts when it uses a UI framework (new text or file on disk)

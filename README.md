@@ -294,7 +294,8 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
   turn. A role card the plugin ships reaches a project that keeps its own `specialists/` folder (the project's card
   wins when both exist). Agents write nothing in the plugin's data folder. A project with no design system yet (one
   that started before it) is not locked as it stands: edits of its existing screen and video files go on, with a
-  notice once per turn, and its first new screen or video (a file not on disk or not in git yet) waits while the
+  notice once per turn, and its first new screen or video (a file not on disk or not in the last commit; without git, every file already
+  on disk counts as existing) waits while the
   design system is proposed to the owner, with what the project already uses as one option per piece
   (`## Option A (current)` with `From:` its file, no link or date) beside 1-2 fresh references. The owner may turn it
   off for a project with `design-system: off` in its settings; then only TRACK.md design items hold its screens. `sh scripts/screens.sh system <project>
