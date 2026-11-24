@@ -40,10 +40,36 @@ cos_workdir() { wd=$2
 # <claude>/plugins/data/<plugin>-<marketplace>); else ~/.cache/chief-of-staff (a copy run from a checkout)
 cos_data() {
   [ -n "${CLAUDE_PLUGIN_DATA:-}" ] && { printf '%s\n' "$CLAUDE_PLUGIN_DATA"; return; }
+  [ -n "${GROK_PLUGIN_DATA:-}" ] && { printf '%s\n' "$GROK_PLUGIN_DATA"; return; }
   _h=$(cd "$(dirname "$0")" 2>/dev/null && pwd -P)
   case $_h in */plugins/cache/?*/?*/?*/scripts) _v=${_h%/scripts}; _p=${_v%/*}; _m=${_p%/*}
     printf '%s/data/%s-%s\n' "${_m%/cache/*}" "${_p##*/}" "${_m##*/}" ;;
     *) printf '%s\n' "$HOME/.cache/chief-of-staff" ;; esac
+}
+# cos_alias_tools: a Grok or Cursor hook names its own tools. Rewrite tool_name and toolName to the Claude
+# names the gates already match. Nothing else in the payload changes.
+cos_alias_tools() {
+  sed -E \
+    -e 's/("tool_name"|"toolName")( *: *)"run_terminal_command"/\1\2"Bash"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"run_terminal_cmd"/\1\2"Bash"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"Shell"/\1\2"Bash"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"hashline_read"/\1\2"Read"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"read_file"/\1\2"Read"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"hashline_grep"/\1\2"Grep"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"grep"/\1\2"Grep"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"list_dir"/\1\2"Glob"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"web_search"/\1\2"WebSearch"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"open_page_with_find"/\1\2"WebFetch"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"open_page"/\1\2"WebFetch"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"web_fetch"/\1\2"WebFetch"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"spawn_subagent"/\1\2"Agent"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"task"/\1\2"Agent"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"hashline_edit"/\1\2"Edit"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"search_replace"/\1\2"Edit"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"StrReplace"/\1\2"Edit"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"write"/\1\2"Write"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"ask_user_question"/\1\2"AskUserQuestion"/g' \
+    -e 's/("tool_name"|"toolName")( *: *)"AskQuestion"/\1\2"AskUserQuestion"/g'
 }
 # A project folder: the folder the owner creates, its own root, marker line "kind: project" (project.sh init)
 cos_isproj() { grep -qx 'kind: project' "$1/.chief-of-staff" 2>/dev/null; }

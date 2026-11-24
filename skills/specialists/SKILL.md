@@ -15,7 +15,7 @@ use each, the checks a senior professional never skips, the evidence standard an
    bear on the request. What it returns goes into every brief, so no specialist redoes research the
    project already has. Design work is the exception: a design-system piece, a screen or a video starts with fresh
    web research of the last months (below), which the library and memory never replace.
-3. **Brief each specialist as a subagent.** The brief contains, in this order:
+3. **Brief each specialist as a subagent.** On Grok that tool is `spawn_subagent`. The brief lines are the same. A read-only helper is `Role card: utility`. The brief contains, in this order:
    - the line `Role card: <role>` or `Role card: <project>/specialists/<role>.md` (the role name is
      enough; a path may hold spaces; the hook blocks a brief without it) and "read your role card first and follow it". Do not paste the card: at 8-12 KB
      each, pasted cards crowd the task out of the brief, and the subagent reads the file itself;

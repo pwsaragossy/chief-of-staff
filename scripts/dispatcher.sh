@@ -10,6 +10,7 @@
 #        COS_PUSH=1                          push the project after the runs (the backup)
 #        COS_ALLOW_NO_BACKUP=1               run even if the project git repo has no remote
 #        CLAUDE_BIN (default claude)         absolute path recommended under launchd or cron
+#        COS_ENGINE=grok                     run grok -p instead (also when CLAUDE_BIN is grok, or claude is missing)
 . "$(dirname "$0")/lib.sh"
 
 root=$(cd "${1:?usage: dispatcher.sh /path/to/project}" && pwd) || exit 1
@@ -25,7 +26,14 @@ note() { printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$log"; }
 git_fingerprint() { cat "$root/.git/config" "$root"/.git/hooks/* 2>/dev/null | cksum; }
 safegit() { git -C "$root" -c core.hooksPath=/dev/null -c core.fsmonitor= -c diff.external= "$@"; }
 
-command -v "$bin" >/dev/null 2>&1 || { note "refused: '$bin' not found; set CLAUDE_BIN to its absolute path"; exit 1; }
+engine=claude
+case ${COS_ENGINE:-} in grok) engine=grok ;; esac
+if ! command -v "$bin" >/dev/null 2>&1; then
+  if [ "$bin" = claude ] && command -v grok >/dev/null 2>&1; then bin=$(command -v grok); engine=grok
+    note "claude not found; using grok"
+  else note "refused: '$bin' not found; set CLAUDE_BIN to its absolute path"; exit 1; fi
+fi
+case "$(basename "$bin")" in grok|grok.exe) engine=grok ;; esac
 
 # Backup first: unattended edits without an off-machine copy are not allowed by default.
 if [ -z "$(git -C "$root" remote 2>/dev/null)" ] && [ "${COS_ALLOW_NO_BACKUP:-0}" != 1 ]; then
@@ -67,6 +75,20 @@ for s in "$@"; do
   # The whole project folder is reachable (board, ROUTING.md); agent rules, settings, git internals and
   # the dispatcher's own files are denied by absolute paths ("//" + root). Permission rules, not a sandbox.
   before=$(git_fingerprint)
+  if [ "$engine" = grok ]; then
+    # No dollar cap on grok. The tool list is the guard: read and edit only, no shell, web, questions or subagents.
+    note "grok run: no dollar budget; --max-turns 40"
+    (cos_gitenv_off; cd "$(dirname "$s")" && exec "$bin" -p "$prompt" \
+      --cwd "$(dirname "$s")" \
+      --add-dir "$root" \
+      --permission-mode bypassPermissions \
+      --max-turns 40 \
+      --tools read_file,grep,list_dir,search_replace,write \
+      --disallowed-tools run_terminal_command,ask_user_question,web_search,web_fetch,open_page,spawn_subagent \
+      --deny "Edit(/$root/**/CLAUDE.md)" --deny "Edit(/$root/**/.claude/**)" --deny "Edit(/$root/.git/**)" \
+      --deny "Edit(/$root/**/.gitattributes)" --deny "Edit(/$root/.dispatch*)" \
+      >> "$root/.dispatch-$p.out" 2>&1) &
+  else
   (cos_gitenv_off; cd "$(dirname "$s")" && exec "$bin" -p "$prompt" \
     --add-dir "$root" \
     --permission-mode default \
@@ -75,6 +97,7 @@ for s in "$@"; do
     --disallowedTools Bash AskUserQuestion \
       "Edit(/$root/**/CLAUDE.md)" "Edit(/$root/**/.claude/**)" "Edit(/$root/.git/**)" "Edit(/$root/**/.gitattributes)" "Edit(/$root/.dispatch*)" \
     >> "$root/.dispatch-$p.out" 2>&1) &
+  fi
   run=$!
   rm -f "$lock/timeout"
   # Watcher: kills the run after $limit seconds. It polls in 1 s steps, so no long sleep outlives it

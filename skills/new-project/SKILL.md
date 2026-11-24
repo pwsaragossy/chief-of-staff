@@ -7,8 +7,9 @@ description: Open a new project with the fixed playbook (opening questions, cohe
 
 The project is the folder this conversation runs in (the owner opened it there, or asked for a new
 folder: create it and continue there). There is no hub folder above projects: this conversation becomes the
-project's coordinator at the end. `project.sh` is `${CLAUDE_PLUGIN_ROOT}/scripts/project.sh` (copy the
-literal path; the variable is not set in your shell).
+project's coordinator at the end. `project.sh` is `${CLAUDE_PLUGIN_ROOT}/scripts/project.sh`
+(`${GROK_PLUGIN_ROOT}` on Grok; copy the literal path; the variable is not set in your shell).
+Export `CLAUDE_PLUGIN_DATA` to `${GROK_PLUGIN_DATA}` before it when the shell does not have it.
 
 ## 0. Ambition first
 Run the `ambition` skill on the owner's request before asking anything: it proposes, it builds

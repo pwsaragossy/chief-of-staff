@@ -5,8 +5,8 @@ description: The library, the company's second brain. Search it before any resea
 
 # The library: one company memory, used by every project
 
-`library.sh` is `${CLAUDE_PLUGIN_ROOT}/scripts/library.sh`; that variable is resolved in this text
-only, so copy the literal path into your commands. Every note is one file in the library's `notes/`
+`library.sh` is `${CLAUDE_PLUGIN_ROOT}/scripts/library.sh` (`${GROK_PLUGIN_ROOT}` on Grok); that variable is resolved in this text
+only, so copy the literal path into your commands. Export `CLAUDE_PLUGIN_DATA` to `${GROK_PLUGIN_DATA}` first when the shell does not have it. Every note is one file in the library's `notes/`
 folder (`library.sh where` prints it), readable in Obsidian. Hooks check every note you write: a bad
 note is rejected the moment you save it, and the turn cannot end while a note written in it has a
 problem.

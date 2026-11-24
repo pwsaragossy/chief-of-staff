@@ -8,12 +8,15 @@ description: First use of chief of staff on this computer - pick where the compa
 A project is the folder the owner works in; the plugin only keeps, in its
 own data folder, the list of project folders and where the library lives. `setup.sh` and `project.sh`
 are `${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh` and `.../project.sh`; that variable is resolved in this
-text only, not in your shell, so copy the literal paths into your commands. The owner answers once, by
-clicking; you do everything else.
+text only, not in your shell, so copy the literal paths into your commands. On Grok the same folder is
+`${GROK_PLUGIN_ROOT}`. Before `project.sh`, export `CLAUDE_PLUGIN_DATA` to `${GROK_PLUGIN_DATA}` when
+the shell does not already have it, so the library path is the folder the hooks read. The owner answers
+once, by clicking; you do everything else. Ask with `ask_user_question` on Grok and `AskUserQuestion`
+on Claude Code.
 
 1. Look before asking, and say nothing yet: `sh setup.sh detect` prints the places where the library
    could live, best first: `<label> TAB <folder> TAB <why>`.
-2. Ask ONE AskUserQuestion: "Where should the company library (its second brain) live?" Options: the
+2. Ask the owner once: "Where should the company library (its second brain) live?" Options: the
    first lines of `detect`, at most 4, in its order (it puts an Obsidian vault first only when there is
    exactly one; with several, which vault belongs to this company is the owner's pick); label = the
    label, description = the folder and the why. The first is the recommendation, marked "(Recommended)".
