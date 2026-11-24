@@ -31,7 +31,7 @@ copies a competitor, and copy that changes personality from one video to the nex
 3. Pick 2-3 references that are really different voices (not one voice at three intensities). For each: the exact
    link (the video at its timestamp, the post, the page), its date, who made it, the line or moment that shows the
    voice, what this project takes and what it leaves.
-4. Write the proposal in `design/options/tone.md` from the plugin's `templates/design/options.md`. You never pick:
+4. Write the proposal in `design/options/tone.md` from the plugin's `templates/design/options.md` (When the project already has an approved look (screens, compositions, videos the owner signed off), what it uses is one option: '## Option A (current): <name>' with From: <the project file that shows it> and What we take:, beside 1-2 fresh references from the web search; the owner may keep it.). You never pick:
    the owner picks through the coordinator. A recommendation, if any, is marked as one.
 5. After the owner's pick, write under "### Applied" in the tone piece of `design/SYSTEM.md`: the four dimensions,
    words we use and words we never use, how the tone shifts by situation (hook, explanation, call to action, error,

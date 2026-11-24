@@ -158,6 +158,40 @@ mkdir -p "$D/specialists"; cp "$S/../templates/specialists/designer.md" "$D/spec
 check "a card the plugin added reaches a project that keeps its own specialists folder" '[ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: script\\nLibrary: none found for x\"}")")" = 0 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: nobody\\nLibrary: none found for x\"}")")" = 2 ]'
 rm -rf "$D/specialists"
 
+# a project that has no design system yet: the first new screen or video waits for the proposal, with what the
+# project already uses as one option beside 1-2 fresh references; edits of existing files go on
+E=$T/existing; mkdir -p "$E/video"; sh "$S/project.sh" init "$E" >/dev/null
+printf '<div data-composition-id="look">approved</div>' > "$E/video/approved.html"
+git -C "$E" init -q && git -C "$E" add video/approved.html && git -C "$E" -c user.name=t -c user.email=t@t commit -qm look
+turn e1
+check "a new video in a project with no design system waits for the proposal, which offers what the project already uses" 'o=$(h "$(w "$E/video/next.html" "<div data-composition-id=\\\"n\\\">")" "$E" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "propose the design system to the owner" && printf "%s" "$o" | grep -q "## Option A (current)" && printf "%s" "$o" | grep -q "1-2 fresh references"'
+check "an edit of a video the project already has goes on, with the advice to propose the design system" '[ "$(rc "$(w "$E/video/approved.html" "<div data-composition-id=\\\"look\\\">")" "$E")" = 0 ] && h "$(pw "$E/video/approved.html")" "$E" | grep -q "keeps no design system yet: propose it to the owner"'
+check "a new render waits too" '[ "$(rc "$(w "$E/video/next.mp4" "x")" "$E")" = 2 ]'
+cp "$E/.chief-of-staff" "$T/e.bak"; chmod u+w "$E/.chief-of-staff"; printf 'design-system: off\n' >> "$E/.chief-of-staff"
+check "the owner may turn the design system off for a project (design-system: off in its settings)" '[ "$(rc "$(w "$E/video/next.html" "<div data-composition-id=\\\"n\\\">")" "$E")" = 0 ]'
+cp "$T/e.bak" "$E/.chief-of-staff"
+mkdir -p "$E/design/options" "$E/design/reviews/options"; cp "$S/../templates/design/SYSTEM.md" "$E/design/SYSTEM.md"
+# cprop FILE FROM [WEB...]: a tone proposal whose option A is what the project already uses
+cprop() { f=$1 fr=$2; shift 2; { printf 'Piece: tone\nResearched: %s\nSearches:\n- best tone 2026\n\n## Option A (current): the approved look\nFrom: %s\nWhat we take: the voice the owner approved\n' "$today" "$fr"
+  for x in "$@"; do printf '\n## Option %s: fresh\nLink: https://example.com/tone-%s\nDate: %s\nWhat we take: the pacing\n' "$x" "$x" "$(ago 1)"; done; } > "$f"; }
+cprop "$E/design/options/tone.md" video/approved.html B
+check "what the project already uses is an option: From: its file, no link or date" 'sh "$S/screens.sh" options "$E/design/options/tone.md"'
+cprop "$E/design/options/x.md" video/gone.html B
+check "its From: must be a file of the project" 'sh "$S/screens.sh" options "$E/design/options/x.md" | grep -q "From: video/gone.html is not a file in the project"'
+cprop "$E/design/options/x.md" ../../etc/hosts B
+check "its From: never leaves the project" 'sh "$S/screens.sh" options "$E/design/options/x.md" | grep -q "a From: line with the project file"'
+cprop "$E/design/options/x.md" video/approved.html
+printf '\n## Option B (current): again\nFrom: video/approved.html\nWhat we take: x\n' >> "$E/design/options/x.md"
+check "one current option at most, and at least one fresh reference beside it" 'o=$(sh "$S/screens.sh" options "$E/design/options/x.md"); printf "%s" "$o" | grep -q "one \"(current)\" option at most" && printf "%s" "$o" | grep -q "at least one option from the fresh web research"'
+rm -f "$E/design/options/x.md"
+turn e2; reviewer; orev "$E/design/reviews/options/$today 0900 tone.md" design/options/tone.md pass "https://example.com/tone-B | status 200 | $(ago 1) | keep: current leader"
+check "the reviewer checks only the web links; the current option needs no status line" '[ "$(sh "$S/screens.sh" optreview "$E/design/reviews/options/$today 0900 tone.md")" = pass ]'
+awk '/^## / { on = (tolower(substr($0, 4)) == "tone") } on && /^(Status|Options|Pick):/ { next } { print } on && /^For:/ { print "Status: chosen"; print "Options: design/options/tone.md"; print "Pick: keep what we have, video/approved.html" }' "$E/design/SYSTEM.md" > "$T/es.md" && cp "$T/es.md" "$E/design/SYSTEM.md"
+check "the owner may keep what the project already uses: the pick names its file" 'CLAUDE_PROJECT_DIR=$E sh "$S/track.sh" ok "$E" design:tone "keep ours" | grep -q "the owner picks design:tone"'
+
+# the owner's approval describes the pick only for one plain command
+check "a command split over lines is flagged to the owner instead of described" 'o=$(h "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"true\\nsh $S/track.sh ok $D design:typography Option A\"}")"); printf "%s" "$o" | grep -q "cannot read for sure" && ! printf "%s" "$o" | grep -q "You are approving piece"'
+
 # the cards and the skill say the same
 C=$S/../templates/specialists
 check "the tone, rhythm and script cards exist in the card format" '( for r in tone rhythm script; do f="$C/$r.md"; for s in "^role: $r$" "^## Mission" "^## Method" "^## Never skip" "^## Checked by" "^## Output format" "^## Sources of this method" "shapes what the owner will see or use" "References:" "design/options/"; do grep -q "$s" "$f" || { echo "$r misses $s"; exit 1; }; done; done )'

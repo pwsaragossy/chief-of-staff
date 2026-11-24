@@ -28,7 +28,7 @@ hook, say three things at once, end without an ask, or need sound to make sense.
    or proof, the payoff, the ask. Note what is said, what is shown, and what is on-screen text for sound off.
 3. Pick 2-3 references with really different structures (not one structure on three topics). For each: the exact
    link at its timestamp, its date, who made it, the beat map, what this project takes and what it leaves.
-4. Write `design/options/script.md` from the plugin's `templates/design/options.md`. You never pick: the owner picks
+4. Write `design/options/script.md` from the plugin's `templates/design/options.md` (When the project already has an approved look (screens, compositions, videos the owner signed off), what it uses is one option: '## Option A (current): <name>' with From: <the project file that shows it> and What we take:, beside 1-2 fresh references from the web search; the owner may keep it.). You never pick: the owner picks
    through the coordinator. A recommendation, if any, is marked as one.
 5. After the pick, write under "### Applied" in the script piece of `design/SYSTEM.md`: the beat template with
    seconds, hook rules, one-message rule, how proof is shown, the ending and ask, and the on-screen text rule.

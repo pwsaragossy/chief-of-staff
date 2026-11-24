@@ -62,7 +62,9 @@ For each open piece, at the start of the project:
 2. **2-3 concrete references.** The specialist writes `design/options/<piece>.md` from the plugin's
    `templates/design/options.md`: per option the exact link (the component's page on its gallery, the screen of a real
    app, the video at its timestamp), its date, who made it, what we take and what we leave. The specialist never
-   picks between them.
+   picks between them. When the project already has an approved look (a project that started before its design
+   system), what it uses is one option, `## Option A (current): <name>` with `From:` (the project file that shows
+   it) instead of a link, beside 1-2 fresh references: the owner may keep it.
 3. **The reviewer opens every link** and writes `design/reviews/options/<YYYY-MM-DD HHMM> <piece>.md` (Options:,
    Verdict:, Links checked: with status and date per link). An old, weak or broken reference is rejected and
    replaced; the owner sees only options whose review passed (the turn-end hook stops an answer that shows links not
@@ -74,6 +76,11 @@ For each open piece, at the start of the project:
    owner approves. A piece that does not apply is `Status: not applicable` with `Why:`, and needs the owner's OK too.
 5. **Applied.** The specialist writes what follows from the pick under the piece's `### Applied` (exact values,
    tokens, rules). The OK froze the piece above that line and its proposal; changing them needs a new pick.
+
+A project that has no design system yet is not locked as it stands: edits of its existing screens and videos go
+on, and its first new screen or video waits while the design system is proposed to the owner this way, with what
+the project already uses as one option per piece. The owner may turn it off for a project (`design-system: off` in
+its settings), and then only TRACK.md design items hold its screens.
 
 After that, screens and videos follow the design system without asking the owner again. When a new screen or video
 needs something the system does not cover (a chart style, a new kind of video), add it as a new piece (`## <Piece>`,

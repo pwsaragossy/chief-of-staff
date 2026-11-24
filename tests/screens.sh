@@ -11,6 +11,8 @@ T=$(cd "$(mktemp -d)" && pwd -P); trap 'rm -rf "$T"' EXIT
 export CLAUDE_PLUGIN_DATA="$T/data"
 P=$T/app; Q=$T/plain; mkdir -p "$P" "$Q"
 { sh "$S/project.sh" init "$P" && sh "$S/project.sh" init "$Q"; } >/dev/null || { echo "FAIL fixture: project.sh init"; exit 1; }
+# P tests the TRACK.md design items alone: its owner turned the design system off (tests/design-system.sh covers it)
+chmod u+w "$P/.chief-of-staff" && printf 'design-system: off\n' >> "$P/.chief-of-staff"
 mkdir -p "$P/out" "$P/content" "$P/design/reviews" "$P/shots"
 track() { cat > "$P/TRACK.md" <<EOF
 ---
@@ -63,7 +65,7 @@ check "screens: limits the gate to the product's screens (a video composition is
 track '- [ ] look | Look | card: designer | needs: flows | screens: * | evidence:'
 check "any item with screens: is a design item, whatever its id" 'h "$(w "$P/x.vue" "x")" "$P" 2>&1 | grep -q "the design item look in TRACK.md is open"'
 : > "$Q/b.css"; : > "$Q/index.html"; touch -t 202512310000 "$Q/b.css" "$Q/index.html"   # older than the reviews below
-check "a project with no design system and no design item is not held, and is told once per turn to start one" 'h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$Q" >/dev/null; [ "$(rc "$(w "$Q/index.html" "x")" "$Q")" = 0 ] && o=$(h "$(pw "$Q/index.html" "x")" "$Q") && printf "%s" "$o" | grep -q "additionalContext\":\"chief-of-staff: this turn changes screen code (index.html)" && printf "%s" "$o" | grep -q "This project keeps no design system yet" && [ -z "$(h "$(pw "$Q/b.css" "x")" "$Q")" ]'
+check "an existing screen of a project with no design system yet is not held, and the session is told once per turn to propose one" 'h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$Q" >/dev/null; [ "$(rc "$(w "$Q/index.html" "x")" "$Q")" = 0 ] && o=$(h "$(pw "$Q/index.html" "x")" "$Q") && printf "%s" "$o" | grep -q "additionalContext\":\"chief-of-staff: this turn changes screen code (index.html)" && printf "%s" "$o" | grep -q "This project keeps no design system yet" && [ -z "$(h "$(pw "$Q/b.css" "x")" "$Q")" ]'
 check "outside a project the gates are silent" '[ "$(rc "$(w "$T/loose/a.html" "x")" "$T/loose")" = 0 ] && [ "$(rc "$(art "$T/loose/a.html")" "$T/loose")" = 0 ]'
 
 # the review gate

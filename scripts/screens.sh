@@ -7,10 +7,13 @@
 #                                 3 neither a design system nor a design item of TRACK.md covers the file (the hooks
 #                                 only ask for the designer)
 #   system  <project_dir> <kind>  0 every piece of design/SYSTEM.md the kind needs holds the owner's OK on its current
-#                                 text; 1 + why not; 3 the project keeps no design system
+#                                 text; 1 + why not; 3 the owner turned the design system off for this project
+#                                 (design-system: off in its settings); 4 + what to do: the project keeps no design
+#                                 system yet, so a new screen or video waits for its proposal to the owner
 #   piece   <project_dir> <piece> prints the sum the owner's OK freezes (the piece's text and its options file) when
 #                                 the piece is ready for the owner's pick; 1 + why not (track.sh ok design:<piece>)
-#   options <file>                checks a proposal in design/options/: 2-3 references, each with link, date, what we take
+#   options <file>                checks a proposal in design/options/: 2-3 options, each a reference with link, date and
+#                                 what we take, or one "(current)" option: what the project already uses, From: its file
 #   optreview <file>              checks a reference review in design/reviews/options/: prints its verdict; 1 + problems
 #   unreviewed <project_dir>      the links of proposals with no passing reference review newer than them
 #   touch   <project_dir> <file>  records a change of a screen file (its mtime), for the review gate
@@ -36,6 +39,11 @@ SYS=design/SYSTEM.md
 TK="$(dirname "$0")/track.sh"
 US=$(printf '\037')
 # a reference is at most this many months older than the research that found it (the owner's setting, else 6)
+# the owner's setting design-system: off keeps a project without a design system (only TRACK.md design items hold it)
+dsoff() { grep -qsi '^design-system: *off *$' "$1/.chief-of-staff"; }
+# isnew FILE: a screen or video that is new (not on disk yet, or not in the project's git history)
+isnew() { [ -e "$1" ] || return 0; git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || return 1
+  ! git -C "$dir" ls-files --error-unmatch -- "$1" >/dev/null 2>&1; }
 months() { _m=$(sed -n 's/^refs-max-months: *\([0-9][0-9]*\) *$/\1/p' "$1/.chief-of-staff" 2>/dev/null | head -n 1); echo "${_m:-6}"; }
 
 # isui FILE: by extension; a script or native source counts when it uses a UI framework (new text or file on disk)
@@ -116,15 +124,19 @@ okpath() { case $1 in design/options/*.md) case $1 in *..*|*/./*|*//*|*' '*|*'	'
 # links FILE: the Link: address of each option of a proposal, in order
 links() { awk '{ sub(/\r$/, ""); t = $0; sub(/^[*_ -]+/, "", t); l = tolower(t) } tolower($0) ~ /^##+ *option/ { k++ }
   k > 0 && l ~ /^link[*_ ]*:/ && match(t, /https?:\/\/[^] )>|`"]+/) { print substr(t, RSTART, RLENGTH) }' "$1"; }
+# froms FILE: the From: path of a proposal's "(current)" option (what the project already uses)
+froms() { awk '{ sub(/\r$/, ""); t = $0; sub(/^[*_ -]+/, "", t); l = tolower(t) } tolower($0) ~ /^##+ *option/ { c = (tolower($0) ~ /\(current\)/) }
+  c && l ~ /^from[*_ ]*:/ { sub(/^[^:]*: */, "", t); gsub(/[`*]/, "", t); sub(/ +$/, "", t); print t }' "$1"; }
 D2N='function d2n(s, a) { if (s !~ /^[0-9][0-9][0-9][0-9]-[01][0-9]-[0-3][0-9]$/) return -1; split(s, a, "-"); if (a[2] < 1 || a[2] > 12 || a[3] < 1 || a[3] > 31) return -1; return ((a[1] * 12) + a[2] - 1) * 100 + a[3] }'
 # optcheck FILE: a proposal holds 2-3 options from fresh web research, each with its exact link, a date inside the window
 # (at most N months before the research), and what this project takes from it
-optcheck() { _root=${1%/design/options/*}; awk -v N="$(months "$_root")" -v today="$(date +%F)" "$D2N"'
+optcheck() { _root=${1%/design/options/*}; awk -v N="$(months "$_root")" -v today="$(date +%F)" -v root="$_root" "$D2N"'
   function val(l) { sub(/^[^:]*: */, "", l); gsub(/[`*_]/, "", l); return l }
   { sub(/\r$/, ""); l = $0; t = l; sub(/^[*_ -]+/, "", t); ll = tolower(t) }
   ll ~ /^void:/ { vd = 1 }
-  tolower(l) ~ /^##+ *option/ { k++; sr = 0; next }
+  tolower(l) ~ /^##+ *option/ { k++; sr = 0; if (tolower(l) ~ /\(current\)/) { cur[k] = 1; nc++ } next }
   /^#/ { sr = 0 }
+  k > 0 && ll ~ /^from[*_ ]*:/ { f = val(t); sub(/^ */, "", f); sub(/ +$/, "", f); fr[k] = f }
   k == 0 && ll ~ /^piece[*_ ]*:/ { pc = 1 }
   k == 0 && ll ~ /^researched[*_ ]*:/ { r = val(t); sub(/^ */, "", r); sub(/[^0-9-].*/, "", r); rd = r }
   k == 0 && ll ~ /^searches[*_ ]*:/ { sr = 1; if (val(t) ~ /[A-Za-z0-9]/) ns++; next }
@@ -140,7 +152,15 @@ optcheck() { _root=${1%/design/options/*}; awk -v N="$(months "$_root")" -v toda
     else if (rn > tn) p = p "- Researched: " rd " is in the future\n"
     if (ns < 1) p = p "- a Searches: section listing the web searches run for it (fresh research of what the top of the market shipped in the last months; the library and memory never replace it)\n"
     if (k < 2 || k > 3) p = p "- 2 or 3 sections \"## Option <letter>: <name>\" (found " k + 0 ")\n"
+    if (nc > 1) p = p "- one \"(current)\" option at most: what the project already uses\n"
+    if (k >= 2 && k - nc < 1) p = p "- at least one option from the fresh web research beside what the project already uses\n"
     for (i = 1; i <= k; i++) {
+      if (cur[i]) {   # what the project already uses: its file in the project, no date window, no web link needed
+        if (fr[i] == "" || fr[i] ~ /^\/|^[a-z]+:|(^|\/)\.\.(\/|$)|[^A-Za-z0-9._\/ -]/) p = p "- option " i ": a From: line with the project file that shows what it already uses (a relative path: the approved composition, a still, a screenshot)\n"
+        else if ((getline x < (root "/" fr[i])) < 0) p = p "- option " i ": From: " fr[i] " is not a file in the project\n"
+        else close(root "/" fr[i])
+        if (!tk[i]) p = p "- option " i ": a What we take: line (what this project takes from it)\n"
+        continue }
       if (nl[i] != 1 || ln[i] == "") p = p "- option " i ": one Link: line with the exact address (the component page, the app screen, the video at its timestamp)\n"
       else if (seen[ln[i]]++) p = p "- option " i ": its link repeats another option\n"
       dn = d2n(dt[i])
@@ -163,7 +183,8 @@ system() { _k=$1; [ "$_k" = screen ] && _k=screens
     # a project that keeps a design system cannot open its gate by deleting the file
     if grep -qs 'design/SYSTEM.md' "$dir/CLAUDE.md" || [ -n "$(sh "$TK" owned "$dir" 2>/dev/null)" ]; then
       echo "design/SYSTEM.md is missing, but this project keeps a design system: restore it (git) instead of deleting it"; return 1; fi
-    return 3; fi
+    dsoff "$dir" && return 3
+    echo "this project keeps no design system yet, and this is a new $_k file: propose the design system to the owner before it. Copy the plugin's templates/design/SYSTEM.md to design/SYSTEM.md; for each piece $_k needs, write design/options/<piece>.md with what the project already uses as one option ('## Option A (current): <name>' with From: <the project file that shows it, such as the approved composition, a still or a screenshot> and What we take:) beside 1-2 fresh references from web research; the reviewer opens every link; the owner picks each piece. Edits of existing files go on meanwhile"; return 4; fi
   _ok=$(sh "$TK" owned "$dir" 2>/dev/null); _w=; _n=0; _seen=" "
   while IFS=$US read -r _p _f _s _o _pk _y; do
     [ -n "$_p" ] || continue
@@ -194,7 +215,8 @@ case $cmd in
     hit=; why=
     # the design system first: the owner's pick, piece by piece
     sw=$(system "$k"); sr=$?
-    [ $sr = 3 ] || hit=1; [ $sr = 1 ] && why="$sw. "
+    if [ $sr = 4 ]; then isnew "$3" && { hit=1; why="$sw. "; }
+    else [ $sr = 3 ] || hit=1; [ $sr = 1 ] && why="$sw. "; fi
     items=; [ -f "$dir/TRACK.md" ] && items=$(awk '{ sub(/\r$/, "") } /^- \[.\] / {
         m = substr($0, 4, 1); k = split(substr($0, 7), f, / \| /); id = f[1]; gsub(/^ +| +$/, "", id); ev = sc = vd = ""; s = v = 0
         for (j = 2; j <= k; j++) { x = f[j]; gsub(/^ +| +$|`/, "", x)
@@ -248,6 +270,9 @@ $q
             e="$e- its research ($rd) is more than a month old: research again before the owner picks
 "
           hp=; for u in $(links "$dir/$o"); do case $pk in *"$u"*) hp=1 ;; esac; done
+          while IFS= read -r u; do [ -n "$u" ] && case $pk in *"$u"*) hp=1 ;; esac; done <<EOF2
+$(froms "$dir/$o")
+EOF2
           [ -n "$hp" ] || e="$e- a Pick: line with the link of the option the owner picked
 "
           rv=$(newrev "$o")

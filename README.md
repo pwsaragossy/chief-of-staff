@@ -292,8 +292,12 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
   again. Deleting `design/SYSTEM.md` does not open the gate in a project whose CLAUDE.md names it or that holds an OK on
   a piece. A designer, tone, rhythm or script subagent cannot finish without `References:` and a web search in its
   turn. A role card the plugin ships reaches a project that keeps its own `specialists/` folder (the project's card
-  wins when both exist). Agents write nothing in the plugin's data folder. A project with no design system and no
-  design item is not held: once per turn it is told to start one. `sh scripts/screens.sh system <project>
+  wins when both exist). Agents write nothing in the plugin's data folder. A project with no design system yet (one
+  that started before it) is not locked as it stands: edits of its existing screen and video files go on, with a
+  notice once per turn, and its first new screen or video (a file not on disk or not in git yet) waits while the
+  design system is proposed to the owner, with what the project already uses as one option per piece
+  (`## Option A (current)` with `From:` its file, no link or date) beside 1-2 fresh references. The owner may turn it
+  off for a project with `design-system: off` in its settings; then only TRACK.md design items hold its screens. `sh scripts/screens.sh system <project>
   screens|video` says where it stands.
 - The same Stop hook runs `scripts/track.sh check` in a project session: a stage below `stage:` with
   an open item, an item marked done whose proof file does not exist or whose prerequisites are

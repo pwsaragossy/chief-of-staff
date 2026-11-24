@@ -28,7 +28,7 @@ copied from a format that does not fit, and edits that only work with sound on.
    Note the timestamps you measured.
 3. Pick 2-3 references with really different rhythms. For each: the exact link at its timestamp, its date, who made
    it, the measured numbers, what this project takes and what it leaves.
-4. Write `design/options/rhythm.md` from the plugin's `templates/design/options.md`. You never pick: the owner picks
+4. Write `design/options/rhythm.md` from the plugin's `templates/design/options.md` (When the project already has an approved look (screens, compositions, videos the owner signed off), what it uses is one option: '## Option A (current): <name>' with From: <the project file that shows it> and What we take:, beside 1-2 fresh references from the web search; the owner may keep it.). You never pick: the owner picks
    through the coordinator. A recommendation, if any, is marked as one.
 5. After the pick, write under "### Applied" in the rhythm piece of `design/SYSTEM.md`: shot length range, cut rules,
    hold rules, the hook window, music and voice timing, and what changes for sound off.

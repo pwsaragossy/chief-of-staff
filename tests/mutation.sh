@@ -95,7 +95,7 @@ mutate "agents may write the plugin's data" scripts/protocol.sh "$DS" \
 mutate "a piece deleted from the design system stops counting" scripts/screens.sh "$DS" \
   '*) _w="$_w$_r is missing' '*) _w="$_w'
 mutate "a proposal counts any web search, not one it names" scripts/protocol.sh "$DS" \
-  'grep -qxF "$q" "$st/webq" 2>/dev/null &&' 'true &&'
+  'grep -qxF -e "$q" -- "$st/webq" 2>/dev/null &&' 'true &&'
 mutate "the owner approves a pick without seeing it" scripts/protocol.sh "$DS" \
   '[ -n "$dp" ] && printf '"'"' You are approving piece' 'false && printf '"'"' You are approving piece'
 mutate "a page carrying unreviewed references is published" scripts/protocol.sh "$DS" \
@@ -104,4 +104,12 @@ mutate "an impossible date passes" scripts/screens.sh "$DS" \
   'if (a[2] < 1 || a[2] > 12 || a[3] < 1 || a[3] > 31) return -1;' ''
 mutate "a redirect passes as an opened link" scripts/screens.sh "$DS" \
   'case $sc in 2??) false' 'case $sc in [23]??) false'
+mutate "a new screen in a project with no design system goes through" scripts/screens.sh "$DS" \
+  'isnew "$3" && { hit=1;' 'false && { hit=1;'
+mutate "the current option's From: may name no file" scripts/screens.sh "$DS" \
+  'else if ((getline x < (root "/" fr[i])) < 0) p = p' 'else if (0) p = p'
+mutate "two current options pass" scripts/screens.sh "$DS" \
+  'if (nc > 1) p = p' 'if (0) p = p'
+mutate "the current option alone needs no fresh reference" scripts/screens.sh "$DS" \
+  'if (k >= 2 && k - nc < 1) p = p' 'if (0) p = p'
 echo "caught=$caught missed=$missed"; [ "$missed" = 0 ]
