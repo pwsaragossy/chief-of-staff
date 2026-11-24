@@ -35,9 +35,15 @@ Find what is wrong, missing, unsupported or contradictory, and say what evidence
 10. Run a pre-mortem: assume the owner followed this and it failed in six months; write the most plausible cause.
 11. Rank findings by severity, give the evidence for each, and state the verdict.
 
-Screen review (a page, an app view, a mockup, before the owner sees it)
-1. Open the screen as built and each reference app the designer named (its `References:` section). Save a screenshot of each at the same size inside the project folder (for example `design/reviews/shots/`).
-2. Compare them side by side: layout, hierarchy, type, spacing, colour, density, states (empty, loading, error). List every difference that makes this screen worse than its references, with severity.
+Reference review (a proposal in `design/options/<piece>.md`, before the owner sees any of its options)
+1. Open every link of the proposal yourself (a web fetch, the browser), not the specialist's summary. Note the HTTP status and the date the page shows for the work (published or last updated).
+2. Reject a reference that is old (dated before the project's window, `refs-max-months`, default 6 months before the research, or with no date to be found), weak (a template, a clone, a tutorial, a page that does not show the work, a maker who does not lead the field today) or broken (does not open, redirects elsewhere, paywalled so the work cannot be seen). Old, weak or broken references never reach the owner.
+3. Check that the 2-3 options are really different, that each "What we take" is concrete and visible at that link, and that the specialist did not pick for the owner.
+4. Write `design/reviews/options/<YYYY-MM-DD HHMM> <piece>.md` with `Options: design/options/<piece>.md`, `Verdict: pass` or `Verdict: fail`, and a `Links checked:` section, one line per link: `- <link> | status <HTTP code> | <date on the page> | keep: <why it is the top of the market now>` or `reject: <old, weak or broken, and why>`. A pass keeps every link; with any reject the verdict is fail, the specialist replaces it and you review again. The hooks reject a review that leaves a link out, and void one written in a turn that ran no reviewer subagent.
+
+Screen or video review (a page, an app view, a mockup, a video, before the owner sees it)
+1. Open the screen or the video as built and each reference the designer named or the owner picked (its `References:` section and the picked pieces of `design/SYSTEM.md`). Save a screenshot of each at the same size inside the project folder (for example `design/reviews/shots/`); for a video, stills of the same beats (the hook, a cut, the ending) from ours and from the reference at its timestamp.
+2. Compare them side by side: layout, hierarchy, type, spacing, colour, density, states (empty, loading, error); for a video also pace, cuts, hook and tone against the picked rhythm, script and tone. List every difference that makes this work worse than its references, or that breaks the design system, with severity.
 3. `Verdict: pass` only when the screen holds up next to its references and no critical or major finding is left; otherwise `Verdict: fail`. A failed screen is fixed and reviewed again: it never reaches the owner, and the hooks block showing it.
 4. Write `design/reviews/<YYYY-MM-DD HHMM> <screen>.md` with `Verdict: pass` or `Verdict: fail`, a `References:` section (the apps, with links), a `Side by side:` section (the screenshot paths, this screen and the reference) and the findings. The hooks reject a review without them, and void one written in a turn that ran no reviewer subagent.
 
@@ -70,6 +76,7 @@ Screen review (a page, an app view, a mockup, before the owner sees it)
 - [ ] Every claim was checked by something outside the specialist (a run, a source, the arithmetic) with its evidence (the output or the file), not by the specialist's opinion. The work does only what the brief asked, with the size and tone the owner asked for; no choice that shapes what the owner will see or use (what gets built, reuse or rebuild, its look and format, its scope, what a sample is) was made without the owner's own words in quotes; whatever goes past the request is under the owner's questions, as an option, not in the work.
 - [ ] Each finding states severity and evidence; claims without evidence are labeled as suspicion.
 - [ ] A screen was judged side by side with the designer's reference apps from saved screenshots, and its verdict file is in design/reviews/ (not applicable when no screen was reviewed).
+- [ ] Every link of a proposal was opened and logged under Links checked: with its status and date; old, weak or broken references were rejected (not applicable when no proposal was reviewed).
 
 ## Evidence standard
 - A finding needs evidence you can point to: the quoted line of the output, the source passage, the recomputed number, the conflicting note path. Write `[FACT] (where)` for observed and `[SUSPICION]` for a doubt without proof.

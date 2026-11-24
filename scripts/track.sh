@@ -14,6 +14,8 @@
 #   runs the frozen check. verify <project_dir> runs it any time and keeps the result in .check-runs.
 # "| owner: ok" marks an item that closes only with the owner's OK, recorded in <project>/.owner-ok by
 #   track.sh ok <project_dir> <id> <the owner's words>   (the coordinator only; the hook asks the owner to approve it)
+#   track.sh ok <project_dir> design:<piece> <words>: the owner's pick of a piece of design/SYSTEM.md (screens.sh piece
+#   checks it is ready); the OK freezes the piece and its proposal. owned <project_dir>: design:<piece> TAB that sum
 #   track.sh ok <project_dir> untrack <words>: the owner files came through git; takes them out of the index, keeps them
 #   out (.gitignore) and rebuilds a missing .owner-items from the owner: ok items. It records no OK
 # No TRACK.md: silent, exit 0 (old projects keep working).
@@ -36,7 +38,8 @@ if [ "$cmd" = decide ]; then
 fi
 if [ ! -f "$t" ]; then # a project made from the template names TRACK.md in its CLAUDE.md: deleting the file must not open the gate
   [ "$cmd" = check ] && grep -qs 'TRACK.md' "$dir/CLAUDE.md" 2>/dev/null && { echo "TRACK.md is missing, but this project's CLAUDE.md requires it: restore it (git) instead of deleting it"; exit 1; }
-  exit 0
+  # the owner's pick of a design-system piece needs no track
+  case "$cmd:${3:-}" in owned:*|ok:design:*) t=/dev/null ;; *) exit 0 ;; esac
 fi
 US=$(printf '\037')
 rawstage=$(fm_get "$t" stage); cur=$rawstage; case $cur in ''|*[!0-9]*) cur=1 ;; esac
@@ -262,6 +265,9 @@ check() {
 }
 
 case $cmd in
+  owned)   # the owner's OKs on design-system pieces: design:<piece> TAB the sum that OK froze (the latest OK of each)
+    awk -F '\t' '$1 ~ /^design:[a-z0-9-]+$/ { s = ""; for (i = 4; i <= NF; i++) if ($i ~ /^sum=/) s = substr($i, 5); if (s != "") o[$1] = s }
+      END { for (k in o) print k "\t" o[k] }' "$OKF" 2>/dev/null ;;
   check)
     p=$(check); [ -z "$p" ] && exit 0
     printf '%s\n' "$p"; exit 1 ;;
@@ -304,7 +310,13 @@ case $cmd in
       fi
       echo "no OK is recorded: the owner gives each again (track.sh ok <project> <item|check> <words>)"; exit 0
     fi
+    _ds=
     case $id in
+      # the owner's pick of a design-system piece: screens.sh checks the proposal, its reference review and the Pick:
+      # line, and the OK freezes the piece's text and its proposal (any later change needs a new OK)
+      design:*) _dp=${id#design:}
+        case $_dp in ''|*[!a-z0-9-]*) echo "track.sh ok: name the piece as design:<piece>, its heading in design/SYSTEM.md in lower case with - for spaces" >&2; exit 1 ;; esac
+        _ds=$(sh "$(dirname "$0")/screens.sh" piece "$dir" "$_dp") || { printf 'track.sh ok: design:%s is not ready for the owner.s pick:\n%s\n' "$_dp" "$_ds" >&2; exit 1; } ;;
       check) [ -n "$has_tc" ] && [ -n "$tgt" ] && [ -n "$chk" ] || { echo "track.sh ok: write target: and check: in TRACK.md first" >&2; exit 1; } ;;
       delivery) [ -n "$runnable" ] || { echo "track.sh ok: the delivery OK runs the check, and TRACK.md has none to run" >&2; exit 1; } ;;
       *) printf '%s\n' "$rows" | awk -F "$US" -v i="$id" '$1 == "I" && $4 == i && $9 == "ok" { f = 1 } END { exit !f }' ||
@@ -312,7 +324,8 @@ case $cmd in
     esac
     case $(printf '%s' "$forged" | tr 'A-Z' 'a-z') in *.owner-ok*) echo "track.sh ok: .owner-ok is tracked by git, so it is not this computer's owner's: take it out of git first with track.sh ok <project> untrack <the owner's words>" >&2; exit 1 ;; esac
     w=$(printf '%s' "$*" | tr -d '\000-\037' | cut -c1-300); x=
-    if [ "$id" = check ]; then x="${TB}freeze=$(tcsum)"; _fl=$(tcfiles)
+    if [ -n "$_ds" ]; then x="${TB}sum=$_ds"; echo "the owner picks design:$_dp as design/SYSTEM.md writes it"
+    elif [ "$id" = check ]; then x="${TB}freeze=$(tcsum)"; _fl=$(tcfiles)
       echo "the owner approves the target '$tgt' and the command '$chk'${_fl:+, frozen with its files: $_fl}"
     elif [ -n "$runnable" ] && { [ "$id" = delivery ] || [ "$(printf '%s\n' "$rows" | awk -F "$US" -v i="$id" '$1 == "I" && $4 == i { print $2 }')" -ge "$del" ]; }; then
       # the delivery OK: the frozen check runs now, in front of the owner; a failing one needs the owner's waiver

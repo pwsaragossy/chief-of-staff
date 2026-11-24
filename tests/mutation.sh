@@ -42,7 +42,7 @@ mutate "project.sh trust runs without asking" scripts/protocol.sh "the guard ask
 mutate "a background launch is not credited" scripts/protocol.sh "the turn that applies a background report is credited" \
   "*'\"status\":\"async_launched\"'*|*'\"status\": \"async_launched\"'*|" ""
 mutate "screen code is written before its design" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
-  'why=$(sh "$SC" gate "$root" "$sfp") || [ $? != 1 ] || {' 'why=; true || {'
+  'why=$(sh "$SC" gate "$root" "$sfp" "$sk") || [ $? != 1 ] || {' 'why=; true || {'
 mutate "a design item closed with a stub opens screen code" scripts/screens.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
   'x) w=$(refs "$ev") || why=' 'x) w=$(true) || why='
 mutate "design/../ passes as a mockup" scripts/screens.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
@@ -61,4 +61,35 @@ mutate "screen code written by a shell command goes unseen" scripts/protocol.sh 
   'chg=$(cos_limit 1 sh "$SC" changed "$root" "$st/start" "$st/head") || chg=' 'chg='
 mutate "a screen not cleared lets go on the second stop" scripts/protocol.sh "screens: no screen code before its design, no screen to the owner before its side-by-side review" \
   '[ -n "$sgaps" ] && [ "$(count screenpush)" -lt 2 ] && {' 'false && {'
+DS="design system: the owner picks each piece from 2-3 recent references the reviewer opened before screens or videos are built"
+mutate "an open design-system piece lets screen code through" scripts/screens.sh "$DS" \
+  '[ $sr = 1 ] && why="$sw. "' ':'
+mutate "a piece counts as picked without the owner's OK" scripts/screens.sh "$DS" \
+  'if [ -z "$_g" ]; then _w="$_w$_p has no OK from the owner; "' 'if false; then :'
+mutate "a piece changed after the owner's OK still counts" scripts/screens.sh "$DS" \
+  'elif [ "$_g" != "$(psum "$_p" "$_o")" ]; then' 'elif false; then'
+mutate "a proposal needs no web search in its turn" scripts/protocol.sh "$DS" \
+  '[ -f "$st/web" ] || { p="${p:+$p' 'true || { p="${p:+$p'
+mutate "an old reference passes" scripts/screens.sh "$DS" \
+  'else if (rn >= 0 && dn < rn - N * 100)' 'else if (0)'
+mutate "one option is a choice" scripts/screens.sh "$DS" \
+  'if (k < 2 || k > 3)' 'if (0)'
+mutate "a reference review may leave a link out" scripts/screens.sh "$DS" \
+  '[ -n "$l" ] || { e="$e- $u is not in Links checked' 'true || { e="$e- $u is not in Links checked'
+mutate "a pass may keep a rejected link" scripts/screens.sh "$DS" \
+  '[ "$v" = pass ] && { [ "$r" = reject ]' 'false && { [ "$r" = reject ]'
+mutate "references reach the owner before their review" scripts/protocol.sh "$DS" \
+  '[ -n "$ul" ] && sgaps=' 'false && sgaps='
+mutate "a pick is recorded without a passing reference review" scripts/screens.sh "$DS" \
+  'elif [ "$v" != pass ]; then e="$e- its reference review' 'elif false; then e="$e- its reference review'
+mutate "deleting the design system opens the gate" scripts/screens.sh "$DS" \
+  'if grep -qs '"'"'design/SYSTEM.md'"'"' "$dir/CLAUDE.md" ||' 'if false &&'
+mutate "a design specialist finishes without a web search" scripts/protocol.sh "$DS" \
+  '[ -f "$st/web" ] || { echo "Design work starts' 'true || { echo "Design work starts'
+mutate "a proposal written with no web search stays valid" scripts/protocol.sh "$DS" \
+  'if [ ! -f "$st/web" ]; then op=' 'if false; then op='
+mutate "a render is not seen as video" scripts/screens.sh "$DS" \
+  '*.mp4|*.mov|*.webm|*.m4v|*.mkv) cat >/dev/null; echo video' '*.nothing) cat >/dev/null; echo video'
+mutate "agents may write the plugin's data" scripts/protocol.sh "$DS" \
+  'case $rp in "$(real "$DATA")"/*|' 'case $rp in /nonexistent/*|'
 echo "caught=$caught missed=$missed"; [ "$missed" = 0 ]

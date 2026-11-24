@@ -257,8 +257,8 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
 - Screens (`scripts/screens.sh`, called by `protocol.sh`), in a project folder. **No screen code before its
   design**: a Write or Edit of a file that renders a screen (html, css, jsx, tsx, vue, svelte, astro; swift, kotlin,
   dart, js or ts that use a UI framework; not tests) is blocked while the project's design item is not done. A design
-  item is a TRACK.md item with id `ui-spec` or a `screens:` field (path patterns of the product's screens, so a video
-  composition or a deck is not held); it is done when closed with evidence that holds a `References:` section (1-2
+  item is a TRACK.md item with id `ui-spec` or a `screens:` field (path patterns of the product's screens, so a deck
+  is not held; an item with a `video:` field holds video files the same way); it is done when closed with evidence that holds a `References:` section (1-2
   real apps, with links) and a `Library:` line, or marked not applicable with `why:`. The block tells the agent to
   run the designer: library first, 1-2 real reference apps, then the design, with mockups under `design/`, which is
   never held. Screen code a shell command wrote is caught at the end of the turn (pushed once). A project with no
@@ -273,6 +273,27 @@ shown in one session only, answered or not (`kb-offered` in the data folder; del
   resolves them (`..`, symlinks, letter case), and a design item's evidence is one file of the project named by a
   plain relative path. A designer subagent cannot finish without a `References:` section.
   `sh scripts/screens.sh state <project>` says where the project stands.
+- The design system (`design/SYSTEM.md`, from `templates/design/SYSTEM.md`), in a project folder that keeps one.
+  **The owner picks every piece before anything is built on it**: typography, colors, components and motion for
+  screens; tone, rhythm and script (with typography, colors and motion) for video. Screen code and video code (a
+  HyperFrames, Remotion or Motion Canvas composition, or a rendered mp4, mov, webm, m4v or mkv) are blocked while a
+  piece they need is open or its text changed after the owner's OK; mockups under `design/` are free. A piece closes
+  in four steps the hooks hold: (1) its specialist (`designer`, or the new `tone`, `rhythm` and `script` cards) writes
+  `design/options/<piece>.md` with 2-3 references, each with its exact link, a date at most `refs-max-months` (the
+  project's setting, default 6) before the research, and what we take; the proposal is rejected on save without a
+  web search in the same turn or with today's date missing, and voided at the end of a turn that ran none; (2) the
+  reviewer writes `design/reviews/options/<YYYY-MM-DD HHMM> <piece>.md` with every link, its HTTP status and keep or
+  reject (a pass keeps every link; a review written with no reviewer subagent is void); an answer that shows the
+  owner links not yet cleared is pushed back; (3) the owner picks, and only the coordinator records it with
+  `track.sh ok <project> design:<piece> <words>`, which the owner approves, after `screens.sh piece` confirms the
+  proposal, its passing review newer than it, a `Pick:` naming one of its links and research under a month old;
+  (4) the OK freezes the piece above its `### Applied` part and its proposal (a sha256): any change needs a new OK.
+  Deleting `design/SYSTEM.md` does not open the gate in a project whose CLAUDE.md names it or that holds an OK on
+  a piece. A designer, tone, rhythm or script subagent cannot finish without `References:` and a web search in its
+  turn. A role card the plugin ships reaches a project that keeps its own `specialists/` folder (the project's card
+  wins when both exist). Agents write nothing in the plugin's data folder. A project with no design system and no
+  design item is not held: once per turn it is told to start one. `sh scripts/screens.sh system <project>
+  screens|video` says where it stands.
 - The same Stop hook runs `scripts/track.sh check` in a project session: a stage below `stage:` with
   an open item, an item marked done whose proof file does not exist or whose prerequisites are
   open, a not-applicable item without a reason, a reviewer item marked not applicable, a stage
@@ -368,6 +389,10 @@ What is ours, with no equivalent found in ECC:
 - The near-duplicate file notice compares names only, among files with the same extension (letter case,
   separators and a final s ignored), and never blocks: it asks the agent to check whether one duplicates the other.
 - The hooks check that specialists and the reviewer ran, not that they were good.
+- The design-system gates check that each reference has a link, a date inside the window and a line in the
+  reviewer's file with its status, not that the reviewer opened it or that the work is the best: the reviewer's card
+  holds that. The web search they require is any search in the same turn, not one about that piece. A video is known
+  by its composition markers or its file extension; a video made another way is held only by a `video:` item.
 - The screen gates know a screen file by its extension (and, for scripts and native code, by a UI framework in its
   text), and a shown screen by the tool (`Artifact`, `SendUserFile`) or by words in the answer. A screen opened in
   the browser pane to check one's own work (`preview_start`) is not blocked: that is how the builder and the

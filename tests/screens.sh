@@ -37,7 +37,7 @@ send() { ev PreToolUse ",\"tool_name\":\"SendUserFile\",\"tool_input\":{\"files\
 stop() { ev Stop ",\"stop_hook_active\":false,\"last_assistant_message\":\"$1\""; }
 
 # the design gate
-check "screen code waits while the design item is open, and the block says how the designer works" 'o=$(h "$(w "$P/content/app.html" "<div>")" "$P" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "the design item ui-spec in TRACK.md is open" && printf "%s" "$o" | grep -q "Role card: designer" && printf "%s" "$o" | grep -q "searches the library first" && printf "%s" "$o" | grep -q "1-2 real apps" && printf "%s" "$o" | grep -q "References:"'
+check "screen code waits while the design item is open, and the block says how the designer works" 'o=$(h "$(w "$P/content/app.html" "<div>")" "$P" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "the design item ui-spec in TRACK.md is open" && printf "%s" "$o" | grep -q "Role card: designer" && printf "%s" "$o" | grep -q "fresh web research first" && printf "%s" "$o" | grep -q "1-2 real apps" && printf "%s" "$o" | grep -q "References:"'
 check "an Edit and a MultiEdit of screen code wait too" '[ "$(rc "$(w "$P/content/app.css" "a{}" Edit)" "$P")" = 2 ] && [ "$(rc "$(w "$P/src/Home.tsx" "x" MultiEdit)" "$P")" = 2 ]'
 check "the designer writes mockups under design/" '[ "$(rc "$(w "$P/design/home.html" "<div>")" "$P")" = 0 ]'
 check "text, tests and plain scripts are not screen code" '[ "$(rc "$(w "$P/out/notes.md" "x")" "$P")" = 0 ] && [ "$(rc "$(w "$P/src/util.ts" "export const a = 1")" "$P")" = 0 ] && [ "$(rc "$(w "$P/src/Home.test.tsx" "x")" "$P")" = 0 ] && [ "$(rc "$(w "$P/tests/page.html" "x")" "$P")" = 0 ]'
@@ -63,7 +63,7 @@ check "screens: limits the gate to the product's screens (a video composition is
 track '- [ ] look | Look | card: designer | needs: flows | screens: * | evidence:'
 check "any item with screens: is a design item, whatever its id" 'h "$(w "$P/x.vue" "x")" "$P" 2>&1 | grep -q "the design item look in TRACK.md is open"'
 : > "$Q/b.css"; : > "$Q/index.html"; touch -t 202512310000 "$Q/b.css" "$Q/index.html"   # older than the reviews below
-check "a project with no design item is not held, and is told once per turn what a screen needs" 'h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$Q" >/dev/null; [ "$(rc "$(w "$Q/index.html" "x")" "$Q")" = 0 ] && o=$(h "$(pw "$Q/index.html" "x")" "$Q") && printf "%s" "$o" | grep -q "additionalContext\":\"chief-of-staff: this turn changes screen code (index.html)" && printf "%s" "$o" | grep -q "run the designer now, before more screen code" && [ -z "$(h "$(pw "$Q/b.css" "x")" "$Q")" ]'
+check "a project with no design system and no design item is not held, and is told once per turn to start one" 'h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$Q" >/dev/null; [ "$(rc "$(w "$Q/index.html" "x")" "$Q")" = 0 ] && o=$(h "$(pw "$Q/index.html" "x")" "$Q") && printf "%s" "$o" | grep -q "additionalContext\":\"chief-of-staff: this turn changes screen code (index.html)" && printf "%s" "$o" | grep -q "This project keeps no design system yet" && [ -z "$(h "$(pw "$Q/b.css" "x")" "$Q")" ]'
 check "outside a project the gates are silent" '[ "$(rc "$(w "$T/loose/a.html" "x")" "$T/loose")" = 0 ] && [ "$(rc "$(art "$T/loose/a.html")" "$T/loose")" = 0 ]'
 
 # the review gate
@@ -115,7 +115,7 @@ check "a screen that is not cleared holds the second stop too, twice at most, th
 track '- [ ] ui-spec | Screens | card: designer | needs: flows | evidence:'
 SID=u5; h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$P" >/dev/null; sleep 1
 echo '<div>' > "$P/content/shell.html"
-check "screen code a shell command wrote while the design is open cannot end the turn quietly" 'o=$(h "$(stop "ok")" "$P" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "changed screen code by a shell command while its design is not done: content/shell.html"'
+check "screen code a shell command wrote while the design is open cannot end the turn quietly" 'o=$(h "$(stop "ok")" "$P" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "changed screen or video code by a shell command while its design is not done: content/shell.html"'
 check "and it is recorded for the review gate" 'h "$(art "$P/content/shell.html")" "$P" 2>&1 | grep -q "content/shell.html changed and design/reviews/ holds no review"'
 SID=u6; h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$P" >/dev/null; sleep 1; echo '<p>' > "$P/design/mock.html"
 check "a mockup a shell command wrote under design/ is the designer's" '! h "$(stop "ok")" "$P" 2>&1 | grep -q "by a shell command"'
@@ -134,7 +134,8 @@ if command -v git >/dev/null; then
 fi
 
 # the designer names its references
-check "a designer cannot finish without its references" 'o=$(h "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: designer ## Never-skip checklist ok\"")" "$P" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "1-2 real apps"'
+h "$(ev PostToolUse ",\"tool_name\":\"WebSearch\",\"tool_input\":{\"query\":\"apps\"}")" "$P" >/dev/null
+check "a designer cannot finish without its references" 'o=$(h "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: designer ## Never-skip checklist ok\"")" "$P" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "References:"'
 check "a designer with references finishes" '[ "$(rc "$(ev SubagentStop ",\"stop_hook_active\":false,\"last_assistant_message\":\"Role: designer References: Linear https://linear.app ## Never-skip checklist ok\"")" "$P")" = 0 ]'
 
 # the cards and the templates say the same

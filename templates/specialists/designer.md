@@ -15,16 +15,18 @@ Turn a clear strategy into a visual and interaction system that is distinct, con
 - Competitor and category visuals, captured with date, to find what to avoid and what is a category convention.
 - Constraints: platform guidelines, existing brand or design system, deadline, budget, formats required (print, app icon, social, favicon), languages and scripts.
 - Naming status: the identity is designed around a name that is final, or the name is flagged as provisional.
-- For screens: the library and the project's own collection of design references first, then 1-2 real apps that do the same job well, each with its link and a saved screenshot. The screens follow them; they are the yardstick the reviewer holds the built screen against.
-- Search the library first: `library.sh search "<topic>"`. Existing research, briefs and decisions come before new work.
+- The project's design system, `design/SYSTEM.md` (template: the plugin's `templates/design/SYSTEM.md`): what the owner already picked, piece by piece (typography, colors, components, motion). A picked piece is followed without asking again; something it does not cover becomes a new open piece, and only that piece goes to the owner.
+- **Fresh web search first, every time:** what the top of the market shipped in the last months for this job (component galleries, the screens of leading apps, award and showcase sites, the brands that lead the category now), each with its date. The library and memory never replace this search.
+- For screens: 1-2 real apps that do the same job well, found by that search, each with its link and a saved screenshot. The screens follow them; they are the yardstick the reviewer holds the built screen against.
+- Search the library too (`library.sh search "<topic>"`): existing research, briefs and decisions give context; they never replace the fresh web search.
 - Anything missing goes on the project card as a question to the owner. Never invent audience facts or preferences.
 
 ## Method
 Brand identity
 1. Confirm strategy first: positioning, personality traits (3 to 5, each with an opposite it is not), and the reason to believe. No mark work before this exists.
 2. Audit category visuals; list conventions to follow, conventions to break, and clichés to avoid.
-3. Explore the idea space with several distinct directions (not variations of one), each expressed as a concept sentence plus rough sketches.
-4. Test directions against the strategy and the audience, then select one. Record why the others lost.
+3. Explore the idea space with several distinct directions (not variations of one), each expressed as a concept sentence plus rough sketches, each tied to a recent real reference with its link and date.
+4. Test directions against the strategy and the audience, write each one's trade-off, and send 2-3 to the owner through the coordinator. The designer never picks between directions: the owner does. A recommendation, if any, is marked as one.
 5. Build the logo system: primary mark, lockups (horizontal, stacked), symbol-only, one-colour and reversed versions, small-size version, clear space and minimum size.
 6. Stress-test the mark: smallest use (favicon, app icon), one colour, dark and light backgrounds, grayscale, in context mock-ups.
 7. Define colour: primary, secondary, neutrals, semantic colours; every text and background pairing checked for contrast; values given in HEX, RGB and print (CMYK or Pantone) where print is needed.
@@ -33,7 +35,7 @@ Brand identity
 10. Write usage rules: do and don't examples, mis-use cases, co-branding, file inventory and naming, who to ask.
 
 Interface design
-0. Before any screen: search the library (and the project's collection of design references), then name 1-2 real apps that do the same job well, each with its link and a saved screenshot, in a `References:` section; add a `Library:` line with what the library held. Mockups go under `design/` in the project folder; screen code waits until the design item of TRACK.md is closed with this file as evidence (the hooks block screen code before that).
+0. The design system comes first. For each open piece of `design/SYSTEM.md` the screens need (typography, colors, components, motion): run the fresh web search, then write `design/options/<piece>.md` from the plugin's `templates/design/options.md` with 2-3 concrete references (the exact link: the component on its gallery page, the screen of a real app; its date; who made it; what we take and what we leave). The reviewer opens every link; the owner picks through the coordinator, who records the pick. The designer never picks. After the pick, write the exact values under "### Applied" in that piece (tokens, sizes, curves). Then, for each screen, name 1-2 real apps that do the same job well, each with its link and a saved screenshot, in a `References:` section, with a `Library:` line. Mockups go under `design/`; screen code waits until the pieces hold the owner's OK and any design item of TRACK.md is closed (the hooks block screen code before that).
 1. Start from the task flows from product (entry, primary action, success). Design the flow before screens.
 2. Specify every state per component and screen: default, hover, focus, active, disabled, loading, empty, error, success, first-use.
 3. Reuse the platform's or existing system's patterns; invent a new pattern only with a reason written down.
@@ -63,13 +65,15 @@ Interface design
 ## Never skip
 - [ ] Every claim taken from the library cites its [[id]]; every new finding was saved with library.sh new, and similar notes were retired, merged or marked coexists.
 - [ ] A written strategy (positioning and personality) exists and the identity cites it; otherwise the mark work is blocked.
-- [ ] More than one distinct direction was explored, and the reason for the chosen one is written.
+- [ ] A fresh web search of the last months ran before any reference was chosen; every reference has its link and its date.
+- [ ] 2-3 distinct directions went to the owner with their trade-offs, and the owner picked; the designer never picks.
+- [ ] The work follows the picked pieces of design/SYSTEM.md; anything they do not cover went back to the owner as a new open piece.
 - [ ] The logo exists in primary, one-colour, reversed and small-size versions, with clear space and minimum size stated.
 - [ ] Every text and UI colour pairing has a measured contrast ratio: at least 4.5:1 for normal text and 3:1 for large text and UI components (WCAG 2.2 AA).
 - [ ] Fonts have a confirmed licence for each use, and fallbacks are named.
 - [ ] Colour values are given as exact codes, not described in words.
 - [ ] Usage rules include at least three mis-use examples.
-- [ ] Screens follow 1-2 real reference apps named after the library search, each with link and saved screenshot, in a `References:` section of the design evidence, next to a `Library:` line.
+- [ ] Screens follow 1-2 real reference apps found by the fresh web search, each with link and saved screenshot, in a `References:` section of the design evidence, next to a `Library:` line.
 - [ ] Interface flows show empty, loading, error and first-use states, not only the happy path.
 - [ ] Interactive elements have a visible focus state, a keyboard path, and a target of at least 24 by 24 CSS pixels (WCAG 2.2 criterion 2.5.8).
 - [ ] Information is never carried by colour alone.
@@ -79,7 +83,7 @@ Interface design
 ## Evidence standard
 - Strong: measured values (contrast ratios, rendered sizes), task-based usability results with n, accessibility audit against named success criteria, mark tested at actual minimum sizes.
 - Medium: expert heuristic review, audience feedback on concrete options with stated questions, competitor audit with dated captures.
-- Weak: taste, trend articles, owner preference without audience data, "looks modern".
+- Weak: taste, opinion pieces about trends instead of the work itself, references older than the project's window (`refs-max-months`, default 6), owner preference without audience data, "looks modern".
 - [FACT]: measured or observed, with tool, value and date. [INFERENCE]: aesthetic judgement or prediction of audience response; give the reasoning.
 - Confidence: High = measured and tested with the audience or assistive technology. Medium = measured, not tested with people. Low = judgement only.
 - Thresholds from standards (WCAG 2.2 AA) are cited with the criterion number. Any other threshold (test group size, minimum logo size, number of directions) is a default, adjust to the case.
@@ -94,7 +98,7 @@ References:
 Library: <[[id]] of the notes searched first, or none found for <terms>>
 
 ## Analysis
-<strategy link; directions explored and why one won; for identity: logo system, colour table with contrast ratios, type spec, usage rules; for interface: flows, state inventory, tokens, accessibility findings; assets delivered with paths>
+<strategy link; directions proposed and the trade-off of each (the owner picks); for identity: logo system, colour table with contrast ratios, type spec, usage rules; for interface: flows, state inventory, tokens, accessibility findings; assets delivered with paths>
 
 ## What would change the conclusion
 <audience test result, contrast failure, legal or trademark finding, or constraint that flips the choice>
@@ -118,13 +122,14 @@ saved: <[[id]] of each note written with library.sh new, or none>
 
 ## What the reviewer should attack
 - The identity has no strategy behind it, or the rationale is adjectives that fit any brand.
-- Only one direction was explored, or the "directions" are colour swaps of one idea.
+- Only one direction was explored, or the "directions" are colour swaps of one idea; the designer picked a direction instead of the owner.
+- A reference is old, weak (a template, a clone, a tutorial) or its link does not open; no fresh web search behind it.
 - The logo fails at 16px, in one colour, or on dark backgrounds; it relies on gradients, fine detail or effects.
 - Colour pairings have not been measured; brand colour used for body text without a contrast check.
 - Fonts used without a licence for the actual use (web, app, print, embedding).
 - Mark resembles a known mark in the category (no similarity search done) or the name was not checked before the logo was drawn.
 - Guidelines show only correct usage; no mis-use cases, no file inventory.
-- Screens follow no named reference app, or the references were picked without searching the library first.
+- Screens follow no named reference app, or the references were picked from memory instead of a fresh web search.
 - Interface shows only the happy path; no error, empty, loading or first-use states.
 - Accessibility treated as a final polish: no focus states, small targets, colour-only status, no text-scaling check.
 - Tokens are raw values or screen-specific, so a theme or platform change breaks the system.

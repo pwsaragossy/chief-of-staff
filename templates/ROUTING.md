@@ -13,7 +13,10 @@ tools and when to use each, and what it never skips. Edit cards and rows freely:
 | law, contracts, IP, privacy, regulation | `legal` (AI prepares, a licensed human signs) | `reviewer` |
 | marketing, positioning, channels, launch | `marketing` | `reviewer` |
 | design: brand identity, logo, interface, deck | `designer` | `reviewer` |
-| a screen: built, changed, or about to be shown to the owner | `designer` first (library, 1-2 real reference apps, the design), then the screen code | `reviewer` side by side with those apps, verdict in `design/reviews/` |
+| the design system, piece by piece, at the start of a project: typography, colors, components, motion | `designer`: fresh web research, 2-3 references with link and date in `design/options/<piece>.md`; the owner picks | `reviewer` opens every link (`design/reviews/options/`) |
+| the video pieces of the design system: voice and tone; pace and cuts; structure, hook and ask | `tone`; `rhythm`; `script` (same steps as the row above) | `reviewer` opens every link |
+| a screen: built, changed, or about to be shown to the owner | `designer` first (the picked design system, 1-2 real reference apps, the design), then the screen code | `reviewer` side by side with those apps, verdict in `design/reviews/` |
+| a video: scripted, cut or rendered, or about to be shown to the owner | `script`, then `rhythm`, following the picked design system | `reviewer` side by side with the picked references (stills), verdict in `design/reviews/` |
 | risk, security, privacy, operational failure | `security` | `reviewer` |
 | opening a new project | `new-project` skill, in the project's own folder, which copies a track to TRACK.md | coherence check of the success criteria |
 | the next deliverable of a project | the role card named on its line in TRACK.md | the stage's `review-<n>` item |

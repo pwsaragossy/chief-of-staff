@@ -1141,4 +1141,5 @@ check "no code path still knows the old layout or the team code" '[ ! -e "$here/
 chmod -R u+w "$PF" 2>/dev/null; rm -rf "$PF"; chmod u+w "$REG" 2>/dev/null; rm -f "$REG" "$CLAUDE_PLUGIN_DATA/library"
 # screens: the design gate and the review gate have their own suite (it builds its own projects)
 check "screens: no screen code before its design, no screen to the owner before its side-by-side review (tests/screens.sh)" 'o=$(sh "$here/../tests/screens.sh" 2>&1) || { printf "%s\n" "$o" | grep "^FAIL"; false; }'
+check "design system: the owner picks each piece from 2-3 recent references the reviewer opened before screens or videos are built (tests/design-system.sh)" 'o=$(sh "$here/../tests/design-system.sh" 2>&1) || { printf "%s\n" "$o" | grep "^FAIL"; false; }'
 [ $fail = 0 ] && echo "selftest: all passed" || { echo "selftest: FAILED"; exit 1; }
