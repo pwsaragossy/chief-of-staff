@@ -118,4 +118,31 @@ mutate "two current options pass" scripts/screens.sh "$DS" \
   'if (nc > 1) p = p' 'if (0) p = p'
 mutate "the current option alone needs no fresh reference" scripts/screens.sh "$DS" \
   'if (k >= 2 && k - nc < 1) p = p' 'if (0) p = p'
+OW="the owner's words hold: approved work stays intact, a drop is recorded at once, a large task counts its deliverables, a grant keeps its package from stage 1"
+mutate "a file the owner approved is written over" scripts/protocol.sh "$OW" \
+  '[ -n "$hz" ] && { echo "Blocked by chief-of-staff: ${afp##*/} holds work' 'false && { echo "Blocked by chief-of-staff: ${afp##*/} holds work'
+mutate "a frozen file changed by a shell command goes unseen" scripts/protocol.sh "$OW" \
+  '[ "$(fsum "$z")" = "$s" ] ||' 'true ||'
+mutate "a frozen folder holds only its own path" scripts/protocol.sh "$OW" \
+  'case $rpf in ("$z"|"$z"/*) printf' 'case $rpf in ("$z") printf'
+mutate "the owner's approval passes without a word" scripts/protocol.sh "$OW" \
+  'print "approve\t" substr(s' 'print "approvx\t" substr(s'
+mutate "the first deliverable is made before the list is counted" scripts/protocol.sh "$OW" \
+  'if [ -n "${dl:-}" ] && [ -z "${nd:-}" ]' 'if false && [ -z "${nd:-}" ]'
+mutate "a drop the owner said ends the turn unrecorded" scripts/protocol.sh "$OW" \
+  'if [ -n "$project" ] && [ -f "$st/drop" ] &&' 'if false && [ -f "$st/drop" ] &&'
+mutate "a negated word counts as a drop or an approval" scripts/protocol.sh "$OW" \
+  'gsub(/(n(\303\243|\303\203|a)o|sem|nunca' 'if (0) gsub(/(n(\303\243|\303\203|a)o|sem|nunca'
+mutate "a later session is not told what the owner dropped" scripts/briefing.sh "$OW" \
+  '[ -n "$df" ] && { out "Dropped or frozen' 'false && { out "Dropped or frozen'
+mutate "the grant package is built from scratch at each stage" templates/tracks/grant.md "$OW" \
+  '| needs: package-1, evidence, budget, technical |' '| needs: evidence, budget, technical |'
+mutate "the grant form is read late" templates/tracks/grant.md "$OW" \
+  '- [ ] form | The real application form pulled now' '- [ ] form | The application form'
+mutate "a hard link to a frozen file is written over" scripts/protocol.sh "$OW" \
+  'if [ -z "$hz" ] && [ -f "$afp" ] &&' 'if false &&'
+mutate "a thread lifts a freeze in DECISIONS.md" scripts/protocol.sh "$OW" \
+  'if [ -n "$project" ] && ! isowner && case $(printf '"'"'%s'"'"' "$afp" | tr' 'if false && case $(printf '"'"'%s'"'"' "$afp" | tr'
+mutate "a freeze path stops at a bracket" scripts/lib.sh "$OW" \
+  "s/; *[A-Za-z]+:.*//; s/\\) *\$//" "s/[;)].*//"
 echo "caught=$caught missed=$missed"; [ "$missed" = 0 ]

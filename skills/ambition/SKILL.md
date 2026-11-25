@@ -25,6 +25,8 @@ Based on Felix Rieseberg, "How to be more ambitious" (altitude, depth, range, an
    what a sample is) are questions for the owner, as are money, signing, accounts, identity and legal
    decisions. A brief, an old note or your reading of the owner's words is not their answer. A
    decision is recorded only with the owner's own words in quotes and the time they said them.
+   In a large task, count the request's real deliverables before producing the first (2 lanes =
+   2 submissions = 2 videos = 2 scripts) and show the list to the owner once to confirm.
 4. **Offer, with a recommendation.** The bigger version goes to the owner as an option next to the
    request as asked: what they would get, what it costs (time, money, risk), and your
    recommendation. The owner's own number or target is theirs: never raise or lower it yourself;
@@ -52,7 +54,7 @@ Based on Felix Rieseberg, "How to be more ambitious" (altitude, depth, range, an
 
 ## Output
 - First line: the conclusion, including "this does not work as asked".
-- The request as asked, and what it would deliver.
+- The request as asked, and what it would deliver: in a large task, its real deliverables, counted.
 - The options beyond it: one line each with what the owner gets, its cost and the source; your
   recommendation first.
 - The decisions waiting on the owner, one question each.

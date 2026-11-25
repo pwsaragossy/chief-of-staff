@@ -34,6 +34,14 @@ if [ "$cmd" = decide ]; then
   case "$x$who" in *'|'*|*"$nl"*|*"$cr"*) echo "decide: one line, without |" >&2; exit 1 ;; esac
   case $x in ''|revoked:*) echo "decide: write the decision itself; to revoke or replace one, edit DECISIONS.md (the turn then goes through the specialists)" >&2; exit 1 ;; esac
   [ ${#x} -le 300 ] && [ -n "$who" ] && [ ${#who} -le 60 ] || { echo "decide: the decision is at most 300 characters and who decided at most 60" >&2; exit 1; }
+  # what the owner froze or dropped is recorded by the coordinator, the owner's session at the project's root
+  case $(printf '%s' "$x" | tr 'A-Z' 'a-z') in *frozen:*|*dropped:*)
+    _s=${CLAUDE_PROJECT_DIR:-$PWD}; cos_owner "$dir" "$_s" && [ "$(cd "$_s" 2>/dev/null && pwd -P)" = "$(cd "$dir" && pwd -P)" ] ||
+      { echo "decide: only the project's coordinator records what the owner froze or dropped; send it to the coordinator" >&2; exit 1; } ;; esac
+  case $x in [Ff][Rr][Oo][Zz][Ee][Nn]:*)
+    _fp=$(printf '%s\n' "$x" | cos_freezepaths); [ -n "$_fp" ] || { echo "decide: a Frozen: decision names what it freezes: (owner: <their words>; freeze: <file or folder>, <file or folder>)" >&2; exit 1; }
+    printf '%s\n' "$_fp" | while IFS= read -r _f; do case $_f in /*) ;; *) _f="$dir/$_f" ;; esac
+      [ -e "$_f" ] || echo "decide: warning: $_f does not exist yet, so nothing there is frozen until it does" >&2; done ;; esac
   printf -- '- %s | %s | %s | replaces: -\n' "$(date '+%F %H:%M')" "$x" "$who" | tee -a "$f"; exit 0
 fi
 if [ ! -f "$t" ]; then # a project made from the template names TRACK.md in its CLAUDE.md: deleting the file must not open the gate

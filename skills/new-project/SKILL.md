@@ -22,7 +22,7 @@ Ask them together, in as few rounds as the question tool allows (it takes at mos
 this is two calls back to back). Offer likely answers as options; free text goes through "Other".
 1. **What** is it, in one sentence?
 2. **Kind**: real project, experiment, or a test of the method? (A test stays a test: no real
-   accounts, money, or legal steps.) And which track: hackathon, software, brand, launch or
+   accounts, money, or legal steps.) And which track: hackathon, grant, software, brand, launch or
    research (the files in `${CLAUDE_PLUGIN_ROOT}/templates/tracks/`); recommend the one that fits.
 3. **Success**: what result, by when?
 4. **Investment**: hours per week and money the owner accepts to spend.

@@ -22,7 +22,7 @@ What it gives you:
   Text is reviewed before video or images are rendered, and the coordinator asks where things run
   before it proposes a host.
 - **A fixed project playbook with tracks.** Opening questions, a coherence check of the success
-  criteria, then a track for the kind of project (hackathon, software, brand, launch, research):
+  criteria, then a track for the kind of project (hackathon, grant, software, brand, launch, research):
   stages of minimum deliverables, each naming the specialist who makes it, what it needs first and
   the file that proves it. A hook stops any session that moves past a stage with an open item, a
   missing proof file, or no reviewer verdict. Each track has a delivery line, the stage that
@@ -81,6 +81,12 @@ What it gives you:
   same task as a plain prompt and as a prompt with a target and a check: 11.1 s and a failing check
   without them, 1.43 s and a passing one with them (target under 3 s). That measured the prompt, the
   idea this feature builds into every track.
+- **The owner's words hold.** What the owner approves or calls perfect is recorded as `Frozen:` with the
+  files it covers, and the hooks block an edit of them: a change is a new version in a new file. A "forget X"
+  ("esquece", "deixa pra lá", "never mind") is a decision at once: the coordinator's turn does not end until a
+  `Dropped:` line is recorded, and the briefing lists every dropped and frozen item to each later session. The
+  first deliverable a session writes asks for the request's real deliverables, counted and shown to the owner
+  once. A negation, a quote or a report handed back decides nothing.
 - **A decision log and facts with a time.** Each project keeps `DECISIONS.md`, one line per decision
   (`date time | decision | who | replaces`); a later line replaces or revokes an earlier one, and the
   briefing shows the decisions in force. A decision may say `guard: <term>`: a `git push` whose commits
