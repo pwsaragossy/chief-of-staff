@@ -73,6 +73,7 @@ SID=u2; h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$Q" >/dev/null
 mkdir -p "$Q/design/reviews" "$Q/shots"; echo ours > "$Q/shots/ours.png"; echo linear > "$Q/shots/linear.png"
 echo '<div>' > "$Q/index.html"; touch -t 202601010000 "$Q/index.html"; h "$(pw "$Q/index.html" "x")" "$Q" >/dev/null
 check "a changed screen with no review is not shown: an Artifact, a file sent" 'o=$(h "$(art "$Q/index.html")" "$Q" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "holds no review of the screens" && printf "%s" "$o" | grep -q "Role card: reviewer" && printf "%s" "$o" | grep -q "side by side" && [ "$(rc "$(send "$Q/shots/ours.png")" "$Q")" = 2 ]'
+check "a drawing, a pdf or an avif picture of the screen is held too: sent, published, opened or pointed at" '[ "$(rc "$(send "$Q/shots/home.svg")" "$Q")" = 2 ] && [ "$(rc "$(send "$Q/out/home.PDF")" "$Q")" = 2 ] && [ "$(rc "$(art "$Q/home.avif")" "$Q")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"open shots/home.svg\"}")" "$Q")" = 2 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"open out/home.pdf\"}")" "$Q")" = 2 ] && o=$(h "$(stop "Pronto: veja out/home.pdf")" "$Q" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "points at a screen"'
 check "what is not a page or a picture, and an Artifact read or list, pass" '[ "$(rc "$(send "$Q/report.md")" "$Q")" = 0 ] && [ "$(rc "$(art "$Q/index.html" ",\"action\":\"list\"")" "$Q")" = 0 ]'
 check "an answer that points the owner at the screen cannot end before the review" 'o=$(h "$(stop "Pronto: abre http://localhost:3013")" "$Q" 2>&1); [ $? = 2 ] && printf "%s" "$o" | grep -q "This answer points at a screen" && ! h "$(stop "Feito, sem tela.")" "$Q" 2>&1 | grep -q "points at a screen"'
 printf 'Verdict: pass\n' > "$Q/design/reviews/2026-01-01 0100 home.md"
@@ -104,6 +105,7 @@ SID=u4; h "$(ev UserPromptSubmit ",\"prompt\":\"x\"")" "$Q" >/dev/null; sleep 1
 review pass "2026-01-01 0500 home" 202601010500; touch "$Q/design/reviews/2026-01-01 0500 home.md"
 h "$(ev PostToolUse ",\"tool_name\":\"Agent\",\"tool_input\":{\"prompt\":\"Role card: reviewer. Library: none found for home\"}")" "$Q" >/dev/null
 check "a review the reviewer subagent wrote stands and clears the screen" '[ "$(rc "$(stop "ok")" "$Q")" = 0 ] && ! grep -q "^Void: " "$Q/design/reviews/2026-01-01 0500 home.md" && [ "$(rc "$(art "$Q/index.html")" "$Q")" = 0 ] && [ "$(rc "$(ev PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"open http://localhost:3013\"}")" "$Q")" = 0 ]'
+check "once the screen is cleared, a pdf and a drawing reach the owner" '[ "$(rc "$(send "$Q/out/home.pdf")" "$Q")" = 0 ] && [ "$(rc "$(send "$Q/shots/home.svg")" "$Q")" = 0 ]'
 touch -t 202601010600 "$Q/index.html"; h "$(pw "$Q/index.html" "x" Edit)" "$Q" >/dev/null; touch -t 202601010550 "$Q/shots/ours.png" "$Q/shots/linear.png"
 review pass "2026-01-01 0700 home" 202601010700
 check "a passing review whose screenshots are all older than the last change does not clear it" 'h "$(art "$Q/index.html")" "$Q" 2>&1 | grep -q "has no screenshot taken after the last change of index.html"'
