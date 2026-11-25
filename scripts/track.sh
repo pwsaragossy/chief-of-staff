@@ -42,7 +42,9 @@ if [ "$cmd" = decide ]; then
     _fp=$(printf '%s\n' "$x" | cos_freezepaths); [ -n "$_fp" ] || { echo "decide: a Frozen: decision names what it freezes: (owner: <their words>; freeze: <file or folder>, <file or folder>)" >&2; exit 1; }
     printf '%s\n' "$_fp" | while IFS= read -r _f; do case $_f in /*) ;; *) _f="$dir/$_f" ;; esac
       [ -e "$_f" ] || echo "decide: warning: $_f does not exist yet, so nothing there is frozen until it does" >&2; done ;; esac
-  printf -- '- %s | %s | %s | replaces: -\n' "$(date '+%F %H:%M')" "$x" "$who" | tee -a "$f"; exit 0
+  _now=$(date '+%F %H:%M')
+  grep -q "^- $_now |" "$f" && echo "decide: note: $_now already holds a decision; a later revoke of $_now lifts both lines, so revoke one of them by writing the other again in a new line" >&2
+  printf -- '- %s | %s | %s | replaces: -\n' "$_now" "$x" "$who" | tee -a "$f"; exit 0
 fi
 if [ ! -f "$t" ]; then # a project made from the template names TRACK.md in its CLAUDE.md: deleting the file must not open the gate
   [ "$cmd" = check ] && grep -qs 'TRACK.md' "$dir/CLAUDE.md" 2>/dev/null && { echo "TRACK.md is missing, but this project's CLAUDE.md requires it: restore it (git) instead of deleting it"; exit 1; }

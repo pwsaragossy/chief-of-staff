@@ -108,7 +108,7 @@ owords() { promptof 4000 | tr 'A-Z' 'a-z' | LC_ALL=C awk '{ s = s $0 " " } END {
     while ((i = index(s, lq)) > 0) { r = substr(s, i + 3); j = index(r, rq); if (!j) { s = substr(s, 1, i - 1); break } s = substr(s, 1, i - 1) " " substr(r, j + 3) }
     gsub(/(n(\303\243|\303\203|a)o|sem|nunca|nem|nada|quase|not|never|almost|isn.?t|wasn.?t) +([^ ]+ +)?(de +)?(esque|perfe|aprov|approv|deixa|desist|forget|drop)/, " x", s)
     s = " " s " "
-    if (match(s, /[^a-z](esquece|esque(\303\247|\303\207|c)a|pode esquecer|deixa (pra|para) l(\303\241|\303\201|a)|n(\303\243|\303\203|a)o (quero|precisa|precisamos) mais|desiste|desista|forget (it|about|that|this|the)|never ?mind|drop (it|that|this|the)|scrap (it|that|this|the)|don.?t do|do not do)[^a-z]/))
+    if (match(s, /[^a-z](esquece|esque(\303\247|\303\207|c)a|pode esquecer|deixa (pra|para) l(\303\241|\303\201|a)|n(\303\243|\303\203|a)o (quero|precisa|precisamos) mais|desiste|desista|forget (it|about|that|this|the)|never ?mind|drop (it|that|this)|scrap (it|that|this|the))[^a-z]/))
       print "drop\t" substr(s, (RSTART > 40 ? RSTART - 40 : 1), RLENGTH + 80)
     if (match(s, /[^a-z](perfeit(o|a|os|as)|aprovad(o|a|os|as)|aprovo|aprovei|approved|i approve|perfect|(ficou|est(\303\241|\303\201|a)|t(\303\241|\303\201|a)) ((\303\263|\303\223|o)tim(o|a)|lind(o|a))|love it)[^a-z]/))
       print "approve\t" substr(s, (RSTART > 40 ? RSTART - 40 : 1), RLENGTH + 80) }' | tr -d '"\\`\000-\010\013-\037'; }
@@ -171,7 +171,8 @@ case $(jget hook_event_name) in
     fi
     # The owner's words that decide by themselves: a drop is recorded this turn (the coordinator's Stop holds until a
     # new Dropped: line), an approval is frozen. A report handed back or a notice is not the owner speaking
-    case $in in *'[Subagent hand-back]'*|*'<task-notification>'*|*'<side-sessions-event>'*|*'<ci-monitor-event>'*) ow= ;; *) ow=$(owords) ;; esac
+    # A brief ('Role card:') is the coordinator speaking, also when a thread shares the project's folder
+    case $in in *'[Subagent hand-back]'*|*'<task-notification>'*|*'<side-sessions-event>'*|*'<ci-monitor-event>'*|*'Role card:'*) ow= ;; *) ow=$(owords) ;; esac
     if [ -n "$ow" ]; then own=; [ -n "$project" ] && isowner && own=1
       dw=$(printf '%s\n' "$ow" | sed -n 's/^drop\t//p' | head -n 1 | cut -c1-160)
       aw=$(printf '%s\n' "$ow" | sed -n 's/^approve\t//p' | head -n 1 | cut -c1-160)
@@ -364,8 +365,11 @@ $REVIEW_HOW" >&2
           Bash)
             # DECISIONS.md is the coordinator's: a thread records a decision only through track.sh decide, which appends a
             # line that replaces nothing (and refuses a freeze or a drop), and reads the file with the Read or Grep tool.
-            # Any shell command of a thread that names it is blocked: no shell parser can tell every read from a write
-            if [ -n "$project" ] && ! isowner && printf '%s' "$lc" | grep -q 'decisions\.md'; then
+            # Any shell command of a thread that names it is blocked (no shell parser can tell every read from a write),
+            # except a plain git add, commit or status, so the handoff commits the files it touched by name
+            if [ -n "$project" ] && ! isowner && printf '%s' "$lc" | grep -q 'decisions\.md' &&
+              ! printf '%s' "$lc" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | head -n 1 |
+                grep -Eq '^ *git +(add|commit|status)( [^;&|<>`$]*)?$'; then
               echo "Blocked by chief-of-staff: DECISIONS.md is written by the project's coordinator. Read it with the Read or Grep tool; record a decision with sh \"$TS\" decide <project> \"<decision>\" <who>; what the owner froze, dropped or lifted goes to the coordinator." >&2; exit 2
             fi
             # opening a page or a local server in the owner's browser (open, xdg-open, start) is showing the screen

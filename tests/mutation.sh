@@ -146,5 +146,15 @@ mutate "a thread lifts a freeze in DECISIONS.md" scripts/protocol.sh "$OW" \
 mutate "a freeze path stops at a bracket" scripts/lib.sh "$OW" \
   "s/; *[A-Za-z]+:.*//; s/\\) *\$//" "s/[;)].*//"
 mutate "a thread writes DECISIONS.md with a shell command" scripts/protocol.sh "$OW" \
-  'if [ -n "$project" ] && ! isowner && printf '"'"'%s'"'"' "$lc" | grep -q '"'"'decisions\.md'"'"'; then' 'if false; then'
+  'if [ -n "$project" ] && ! isowner && printf '"'"'%s'"'"' "$lc" | grep -q '"'"'decisions\.md'"'"' &&' 'if false &&'
+mutate "a thread chains a write after a git add of DECISIONS.md" scripts/protocol.sh "$OW" \
+  "grep -Eq '^ *git +(add|commit|status)( [^;&|<>\`\$]*)?\$'" "grep -Eq '^ *git +(add|commit|status)( .*)?\$'"
+mutate "a brief is read as the owner speaking" scripts/protocol.sh "$OW" \
+  "*'<ci-monitor-event>'*|*'Role card:'*) ow= ;;" "*'<ci-monitor-event>'*) ow= ;;"
+mutate "an engineering 'drop the' counts as a drop" scripts/protocol.sh "$OW" \
+  'drop (it|that|this)|scrap' 'drop (it|that|this|the)|scrap'
+mutate "two decisions in one minute go unflagged" scripts/track.sh "$OW" \
+  'grep -q "^- $_now |" "$f" &&' 'false &&'
+mutate "the grant portal account waits for the last day" templates/tracks/grant.md "$OW" \
+  "- [ ] account | The applicant's account on the program's portal opened now" "- [ ] account | The applicant's account on the program's portal"
 echo "caught=$caught missed=$missed"; [ "$missed" = 0 ]

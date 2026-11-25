@@ -82,11 +82,14 @@ What it gives you:
   without them, 1.43 s and a passing one with them (target under 3 s). That measured the prompt, the
   idea this feature builds into every track.
 - **The owner's words hold.** What the owner approves or calls perfect is recorded as `Frozen:` with the
-  files it covers, and the hooks block an edit of them: a change is a new version in a new file. A "forget X"
+  files it covers, and the hooks block an edit of them (a shell command that changes one holds the turn at its
+  end): a change is a new version in a new file. A "forget X"
   ("esquece", "deixa pra lá", "never mind") is a decision at once: the coordinator's turn does not end until a
   `Dropped:` line is recorded, and the briefing lists every dropped and frozen item to each later session. The
   first deliverable a session writes asks for the request's real deliverables, counted and shown to the owner
-  once. A negation, a quote or a report handed back decides nothing.
+  once. A negation, a quote, a brief or a report handed back decides nothing (a word list, not a language model).
+  Only the coordinator freezes or drops; a thread is held to that when it runs in a subfolder or its own worktree,
+  since a thread in the project's own folder looks like the coordinator to the hooks.
 - **A decision log and facts with a time.** Each project keeps `DECISIONS.md`, one line per decision
   (`date time | decision | who | replaces`); a later line replaces or revokes an earlier one, and the
   briefing shows the decisions in force. A decision may say `guard: <term>`: a `git push` whose commits
