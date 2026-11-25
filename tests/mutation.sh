@@ -142,7 +142,7 @@ mutate "the grant form is read late" templates/tracks/grant.md "$OW" \
 mutate "a hard link to a frozen file is written over" scripts/protocol.sh "$OW" \
   'if [ -z "$hz" ] && [ -f "$afp" ] &&' 'if false &&'
 mutate "a thread lifts a freeze in DECISIONS.md" scripts/protocol.sh "$OW" \
-  'if [ -n "$project" ] && ! isowner && case $(printf '"'"'%s'"'"' "$afp" | tr' 'if false && case $(printf '"'"'%s'"'"' "$afp" | tr'
+  '[ -n "$dhit" ] && { echo "Blocked by chief-of-staff: DECISIONS.md is written' 'false && { echo "Blocked by chief-of-staff: DECISIONS.md is written'
 mutate "a freeze path stops at a bracket" scripts/lib.sh "$OW" \
   "s/; *[A-Za-z]+:.*//; s/\\) *\$//" "s/[;)].*//"
 echo "caught=$caught missed=$missed"; [ "$missed" = 0 ]

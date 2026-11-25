@@ -362,10 +362,15 @@ $REVIEW_HOW" >&2
         lc=$(printf '%s' "$in" | tr 'A-Z' 'a-z' | cos_fold)
         case $(jget tool_name) in
           Bash)
-            # what the owner froze, dropped or lifted is written only by the coordinator (track.sh decide refuses it too)
-            if [ -n "$project" ] && ! isowner && printf '%s' "$lc" | grep -q 'decisions\.md' && printf '%s' "$lc" | grep -Eq '(frozen|dropped|revoked) *:' &&
-              printf '%s' "$lc" | grep -Eq '>|(^|[^a-z0-9_.-])(tee|sed|perl|python[0-9.]*|ruby|node|awk|cp|mv|dd|ed|ex|printf|echo|cat)([^a-z0-9_.-]|$)'; then
-              echo "Blocked by chief-of-staff: only the project's coordinator records what the owner froze, dropped or lifted in DECISIONS.md. Send it to the coordinator." >&2; exit 2; fi
+            # DECISIONS.md is the coordinator's: a thread records a decision only through track.sh decide, which appends a
+            # line that replaces nothing (and refuses a freeze or a drop). A command that names the file and could write it
+            # (a redirect, tee, sed -i, cp, mv, a script interpreter) is blocked; reading it is fine
+            # ponytail: a word list, not a shell parser; a name built in a variable is not seen
+            if [ -n "$project" ] && ! isowner && printf '%s' "$lc" | grep -q 'decisions\.md'; then
+              dq=$(printf '%s' "$lc" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | head -n 1 | sed 's|[0-9]*>&[0-9]||g; s|[0-9]*>> */dev/null||g; s|[0-9]*> */dev/null||g')
+              if printf '%s' "$dq" | grep -Eq '>|(^|[^a-z0-9_.-])(tee|perl[0-9.]*|python[0-9.]*|ruby|node|deno|bun|cp|mv|dd|ed|ex|install|rsync|ln|truncate|patch|osascript)([^a-z0-9_.-]|$)|sed( .*)? -[a-z]*i|--in-place'; then
+                echo "Blocked by chief-of-staff: DECISIONS.md is written by the project's coordinator. A thread records a decision with sh \"$TS\" decide <project> \"<decision>\" <who>; what the owner froze, dropped or lifted goes to the coordinator." >&2; exit 2; fi
+            fi
             # opening a page or a local server in the owner's browser (open, xdg-open, start) is showing the screen
             # ponytail: a word list, not a shell parser; the Artifact and SendUserFile blocks are the hard part
             rl=$(cd "$root" && pwd -P | tr 'A-Z' 'a-z')
@@ -554,9 +559,12 @@ WS
              [ -n "$fp" ] || fp=$(printf '%s' "$in" | sed -n 's/.*"notebook_path" *: *"\([^"]*\)".*/\1/p' | head -n 1)
              # a relative path is read from the session's folder
              afp=$fp; case $fp in /*|'') ;; *) afp="${CLAUDE_PROJECT_DIR:-$PWD}/$fp" ;; esac
-             if [ -n "$project" ] && ! isowner && case $(printf '%s' "$afp" | tr 'A-Z' 'a-z') in */decisions.md) true ;; *) false ;; esac &&
-               printf '%s' "$lc" | grep -Eq '(frozen|dropped|revoked) *:'; then
-               echo "Blocked by chief-of-staff: only the project's coordinator records what the owner froze, dropped or lifted in DECISIONS.md. Send it to the coordinator." >&2; exit 2; fi
+             # DECISIONS.md is the coordinator's, by any spelling of its path (.., a symlink, letter case, a hard link)
+             if [ -n "$project" ] && ! isowner && [ -n "$afp" ]; then
+               dpath=$(real "$pdir/DECISIONS.md"); dhit=; [ "$(real "$afp")" = "$dpath" ] && dhit=1
+               [ -z "$dhit" ] && [ -f "$afp" ] && [ -f "$pdir/DECISIONS.md" ] && [ "$(ls -di "$afp" | awk '{ print $1 }')" = "$(ls -di "$pdir/DECISIONS.md" | awk '{ print $1 }')" ] && dhit=1
+               [ -n "$dhit" ] && { echo "Blocked by chief-of-staff: DECISIONS.md is written by the project's coordinator. A thread records a decision with sh \"$TS\" decide <project> \"<decision>\" <who>; what the owner froze, dropped or lifted goes to the coordinator." >&2; exit 2; }
+             fi
              # what the owner approved stays as it is (a decision in force froze it): a change is a new version beside it
              if [ -n "$project" ] && [ -n "$afp" ] && fr=$(frozen) && [ -n "$fr" ]; then
                rpf=$(real "$afp")
