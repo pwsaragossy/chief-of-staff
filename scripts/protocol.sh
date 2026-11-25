@@ -363,14 +363,10 @@ $REVIEW_HOW" >&2
         case $(jget tool_name) in
           Bash)
             # DECISIONS.md is the coordinator's: a thread records a decision only through track.sh decide, which appends a
-            # line that replaces nothing (and refuses a freeze or a drop). A thread's command that names the file runs only
-            # when it is plainly a read: no redirect, and each part that names it starts with a reader (cat, grep, head...)
-            # ponytail: a word list, not a shell parser; a name built in a variable is not seen
+            # line that replaces nothing (and refuses a freeze or a drop), and reads the file with the Read or Grep tool.
+            # Any shell command of a thread that names it is blocked: no shell parser can tell every read from a write
             if [ -n "$project" ] && ! isowner && printf '%s' "$lc" | grep -q 'decisions\.md'; then
-              dq=$(printf '%s' "$lc" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | head -n 1 | sed 's/\\[tn]/ /g; s/\\"/"/g; s|[0-9]*>&[0-9]||g; s|[0-9]*>> */dev/null||g; s|[0-9]*> */dev/null||g')
-              if printf '%s' "$dq" | grep -q '[>`]\|\$(' || printf '%s\n' "$dq" | tr ';&|' '\n\n\n' | grep 'decisions\.md' |
-                sed -E 's/^[ (!{]*([a-z_][a-z0-9_]*=[^ ]* +)*//; s/^([^ ]*\/)?//' | grep -Evq '^(cat|grep|egrep|fgrep|rg|head|tail|less|more|wc|diff|cmp|ls|stat|file|nl)( |$)'; then
-                echo "Blocked by chief-of-staff: DECISIONS.md is written by the project's coordinator. A thread records a decision with sh \"$TS\" decide <project> \"<decision>\" <who>; what the owner froze, dropped or lifted goes to the coordinator." >&2; exit 2; fi
+              echo "Blocked by chief-of-staff: DECISIONS.md is written by the project's coordinator. Read it with the Read or Grep tool; record a decision with sh \"$TS\" decide <project> \"<decision>\" <who>; what the owner froze, dropped or lifted goes to the coordinator." >&2; exit 2
             fi
             # opening a page or a local server in the owner's browser (open, xdg-open, start) is showing the screen
             # ponytail: a word list, not a shell parser; the Artifact and SendUserFile blocks are the hard part
