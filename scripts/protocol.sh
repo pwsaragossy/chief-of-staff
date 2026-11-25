@@ -366,10 +366,11 @@ $REVIEW_HOW" >&2
             # DECISIONS.md is the coordinator's: a thread records a decision only through track.sh decide, which appends a
             # line that replaces nothing (and refuses a freeze or a drop), and reads the file with the Read or Grep tool.
             # Any shell command of a thread that names it is blocked (no shell parser can tell every read from a write),
-            # except a plain git add, commit or status, so the handoff commits the files it touched by name
+            # except a plain git add, commit or status, so the handoff commits the files it touched by name: plain words
+            # and paths, at most one -m "message" of plain words; a JSON escape (\n), $, a chain or a redirect refuses it
             if [ -n "$project" ] && ! isowner && printf '%s' "$lc" | grep -q 'decisions\.md' &&
               ! printf '%s' "$lc" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | head -n 1 |
-                grep -Eq '^ *git +(add|commit|status)( [^;&|<>`$]*)?$'; then
+                grep -Eq '^ *git +(add|commit|status)( +([-a-z0-9._/]+|-m +\\"[a-z0-9 ._,:-]*\\"))* *$'; then
               echo "Blocked by chief-of-staff: DECISIONS.md is written by the project's coordinator. Read it with the Read or Grep tool; record a decision with sh \"$TS\" decide <project> \"<decision>\" <who>; what the owner froze, dropped or lifted goes to the coordinator." >&2; exit 2
             fi
             # opening a page or a local server in the owner's browser (open, xdg-open, start) is showing the screen

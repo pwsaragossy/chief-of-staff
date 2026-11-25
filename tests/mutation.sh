@@ -148,7 +148,7 @@ mutate "a freeze path stops at a bracket" scripts/lib.sh "$OW" \
 mutate "a thread writes DECISIONS.md with a shell command" scripts/protocol.sh "$OW" \
   'if [ -n "$project" ] && ! isowner && printf '"'"'%s'"'"' "$lc" | grep -q '"'"'decisions\.md'"'"' &&' 'if false &&'
 mutate "a thread chains a write after a git add of DECISIONS.md" scripts/protocol.sh "$OW" \
-  "grep -Eq '^ *git +(add|commit|status)( [^;&|<>\`\$]*)?\$'" "grep -Eq '^ *git +(add|commit|status)( .*)?\$'"
+  '( +([-a-z0-9._/]+|-m +' '( +(.+|-m +'
 mutate "a brief is read as the owner speaking" scripts/protocol.sh "$OW" \
   "*'<ci-monitor-event>'*|*'Role card:'*) ow= ;;" "*'<ci-monitor-event>'*) ow= ;;"
 mutate "an engineering 'drop the' counts as a drop" scripts/protocol.sh "$OW" \
