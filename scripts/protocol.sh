@@ -363,12 +363,13 @@ $REVIEW_HOW" >&2
         case $(jget tool_name) in
           Bash)
             # DECISIONS.md is the coordinator's: a thread records a decision only through track.sh decide, which appends a
-            # line that replaces nothing (and refuses a freeze or a drop). A command that names the file and could write it
-            # (a redirect, tee, sed -i, cp, mv, a script interpreter) is blocked; reading it is fine
+            # line that replaces nothing (and refuses a freeze or a drop). A thread's command that names the file runs only
+            # when it is plainly a read: no redirect, and each part that names it starts with a reader (cat, grep, head...)
             # ponytail: a word list, not a shell parser; a name built in a variable is not seen
             if [ -n "$project" ] && ! isowner && printf '%s' "$lc" | grep -q 'decisions\.md'; then
-              dq=$(printf '%s' "$lc" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | head -n 1 | sed 's|[0-9]*>&[0-9]||g; s|[0-9]*>> */dev/null||g; s|[0-9]*> */dev/null||g')
-              if printf '%s' "$dq" | grep -Eq '>|(^|[^a-z0-9_.-])(tee|perl[0-9.]*|python[0-9.]*|ruby|node|deno|bun|cp|mv|dd|ed|ex|install|rsync|ln|truncate|patch|osascript)([^a-z0-9_.-]|$)|sed( .*)? -[a-z]*i|--in-place'; then
+              dq=$(printf '%s' "$lc" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | head -n 1 | sed 's/\\[tn]/ /g; s/\\"/"/g; s|[0-9]*>&[0-9]||g; s|[0-9]*>> */dev/null||g; s|[0-9]*> */dev/null||g')
+              if printf '%s' "$dq" | grep -q '[>`]\|\$(' || printf '%s\n' "$dq" | tr ';&|' '\n\n\n' | grep 'decisions\.md' |
+                sed -E 's/^[ (!{]*([a-z_][a-z0-9_]*=[^ ]* +)*//; s/^([^ ]*\/)?//' | grep -Evq '^(cat|grep|egrep|fgrep|rg|head|tail|less|more|wc|diff|cmp|ls|stat|file|nl)( |$)'; then
                 echo "Blocked by chief-of-staff: DECISIONS.md is written by the project's coordinator. A thread records a decision with sh \"$TS\" decide <project> \"<decision>\" <who>; what the owner froze, dropped or lifted goes to the coordinator." >&2; exit 2; fi
             fi
             # opening a page or a local server in the owner's browser (open, xdg-open, start) is showing the screen
@@ -562,7 +563,7 @@ WS
              # DECISIONS.md is the coordinator's, by any spelling of its path (.., a symlink, letter case, a hard link)
              if [ -n "$project" ] && ! isowner && [ -n "$afp" ]; then
                dpath=$(real "$pdir/DECISIONS.md"); dhit=; [ "$(real "$afp")" = "$dpath" ] && dhit=1
-               [ -z "$dhit" ] && [ -f "$afp" ] && [ -f "$pdir/DECISIONS.md" ] && [ "$(ls -di "$afp" | awk '{ print $1 }')" = "$(ls -di "$pdir/DECISIONS.md" | awk '{ print $1 }')" ] && dhit=1
+               [ -z "$dhit" ] && [ -f "$afp" ] && [ -f "$pdir/DECISIONS.md" ] && [ "$(ls -diL "$afp" | awk '{ print $1 }')" = "$(ls -diL "$pdir/DECISIONS.md" | awk '{ print $1 }')" ] && dhit=1
                [ -n "$dhit" ] && { echo "Blocked by chief-of-staff: DECISIONS.md is written by the project's coordinator. A thread records a decision with sh \"$TS\" decide <project> \"<decision>\" <who>; what the owner froze, dropped or lifted goes to the coordinator." >&2; exit 2; }
              fi
              # what the owner approved stays as it is (a decision in force froze it): a change is a new version beside it
@@ -587,7 +588,7 @@ $SYSTEM_HOW
 Mockups under design/ are free; screen and video code continue once the pieces hold the owner's OK.$tr" >&2
                  exit 2; }
              fi
-             case $fp in /*) rp=$(real "$fp")
+             case $afp in /*) rp=$(real "$afp")
                [ -n "$rp" ] || { echo "Blocked by chief-of-staff: write $fp by its plain path, without . or .. parts." >&2; exit 2; } ;; *) rp= ;; esac
              o=$(cos_libs "$root" | while IFS="$TAB" read -r n q; do [ -d "$q" ] || continue
                case $rp in ("$(cd "$q" && pwd -P | tr 'A-Z' 'a-z')"/*) echo "$n"; break ;; esac; done)

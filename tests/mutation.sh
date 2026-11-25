@@ -145,4 +145,6 @@ mutate "a thread lifts a freeze in DECISIONS.md" scripts/protocol.sh "$OW" \
   '[ -n "$dhit" ] && { echo "Blocked by chief-of-staff: DECISIONS.md is written' 'false && { echo "Blocked by chief-of-staff: DECISIONS.md is written'
 mutate "a freeze path stops at a bracket" scripts/lib.sh "$OW" \
   "s/; *[A-Za-z]+:.*//; s/\\) *\$//" "s/[;)].*//"
+mutate "a thread writes DECISIONS.md with a command not on the readers list" scripts/protocol.sh "$OW" \
+  "grep -Evq '^(cat|grep|egrep" "grep -Evq '^(|cat|grep|egrep"
 echo "caught=$caught missed=$missed"; [ "$missed" = 0 ]
