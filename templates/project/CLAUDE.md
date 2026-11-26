@@ -109,6 +109,13 @@ A conversation opened here handles **one thing only**: {{ONE_LINE_GOAL}}.
   gate): `sh "${CLAUDE_PLUGIN_ROOT}/scripts/track.sh" decide . "<decision>" "<who>"` appends the line. Never edit an
   old line; to replace or revoke one, add a line by hand (`date time | decision | who | replaces: <its date time>`).
   Before acting against a decision in force, read it there.
+- **The owner's words hold from the moment they are said.** What the owner approves or calls perfect stays
+  intact: record it `Frozen: <what> (owner: <their words>; freeze: <file or folder>)` with `track.sh decide`, and
+  a later change is a new version in a new file ("add X" changes only X); the hooks block an edit of a frozen
+  file. A "forget X" is a decision at once: record `Dropped: <what> (owner: <their words>)` in the same turn, and
+  no session proposes or works on X again unless the owner asks. In a large task, count the request's real
+  deliverables before producing the first (2 lanes = 2 submissions = 2 videos = 2 scripts) and show the list to
+  the owner once to confirm.
 - **Re-measure what changes on its own.** What runs in production, balances, public links and deploy
   state are measured again before you repeat them (to the owner, a card, a deliverable), never copied
   from STATE.md, a card or an earlier turn. Write each fact with `verified: YYYY-MM-DD HH:MM`.

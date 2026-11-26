@@ -257,6 +257,11 @@ cos_decisions() {
       n++; I[n] = id; D[n] = $2; Wh[n] = $3 }
     END { for (i = 1; i <= n; i++) if (!(I[i] in R) && D[i] !~ /^revoked:/) { d = D[i]; w = Wh[i]; gsub(/[\001-\037]/, "", d); gsub(/[\001-\037]/, "", w); print I[i] "\t" d "\t" w } }' "$1" 2>/dev/null
 }
+# cos_freezepaths: the paths "Frozen:" decisions on stdin name after "freeze:", one per line. The list runs to the next
+# "; <key>:" or to the ")" that closes the decision, so a name may hold ")" or ";" ("final (1).mp4"); paths are split
+# at a comma followed by a space
+cos_freezepaths() { LC_ALL=C sed -n 's/.*[Ff][Rr][Ee][Ee][Zz][Ee]: *//p' | LC_ALL=C sed -E 's/; *[A-Za-z]+:.*//; s/\) *$//' |
+  LC_ALL=C awk '{ n = split($0, a, /, +/); for (i = 1; i <= n; i++) { p = a[i]; gsub(/^[ `]+|[ `]+$/, "", p); sub(/\/+$/, "", p); if (p != "") print p } }'; }
 # a key or token in a file that would go to the team or in a team message (the panel's import check list, plus
 # Stellar secret seeds)
 COS_SECRETS='sk_live_[0-9A-Za-z]{20}|rk_live_[0-9A-Za-z]{20}|_authToken=[^ ]{20}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40}|sk-[A-Za-z0-9_-]{32}|xox[baprs]-[A-Za-z0-9-]{10}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10}[.]eyJ[A-Za-z0-9_-]{10}[.]|(^|[^A-Z0-9])S[A-Z2-7]{55}([^A-Z0-9]|$)'

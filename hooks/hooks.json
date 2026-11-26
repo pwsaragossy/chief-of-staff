@@ -35,7 +35,7 @@
         ]
       },
       {
-        "matcher": "Agent|Task|spawn_subagent|Write|Edit|MultiEdit|write|search_replace|hashline_edit|StrReplace|Bash|run_terminal_command|run_terminal_cmd|Shell|Artifact|SendUserFile",
+        "matcher": "Agent|Task|spawn_subagent|Write|Edit|MultiEdit|NotebookEdit|write|search_replace|hashline_edit|StrReplace|Bash|run_terminal_command|run_terminal_cmd|Shell|Artifact|SendUserFile",
         "hooks": [
           {
             "type": "command",

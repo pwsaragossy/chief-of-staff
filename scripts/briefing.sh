@@ -107,6 +107,11 @@ reverify() {
     out "This session is the agent of project '$p', its coordinator: it talks with the owner and asks the owner's decisions itself. Work that runs long or in parallel goes to threads it starts (CLAUDE.md, Threads); the Threads pane beside it lists them."
   fi
   out "A task that comes up and is not this job: one line in board/Inbox.md, Unassigned: <task> (from <who>, <date>)."
+  # what the owner dropped or froze, all of it (the newest 6, then a count): before the cut at 1900 characters, so
+  # every session sees it, a Grok one included (Grok drops the prompt hook's text)
+  df=$(cos_decisions "$root/DECISIONS.md" | awk -F '\t' 'tolower($2) ~ /^ *(dropped|frozen):/ { n++; L[n] = "- " substr($2, 1, 140) " (" $1 ")" }
+    END { for (i = (n > 6 ? n - 5 : 1); i <= n; i++) print L[i]; if (n > 6) print "- and " n - 6 " older ones in DECISIONS.md" }')
+  [ -n "$df" ] && { out "Dropped or frozen by the owner (DECISIONS.md): no session proposes, works on or changes these unless the owner asks; a change to something frozen is a new version in a new file:"; out "$df"; }
   if [ -f "$s" ]; then
     out "STATE.md: status $(fm "$s" status), updated $(fm "$s" updated), dispatch $(fm "$s" dispatch)."
     out "Next action recorded: $(fm "$s" next)"

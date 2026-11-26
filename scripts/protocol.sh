@@ -41,7 +41,7 @@ rel=${CLAUDE_PROJECT_DIR:-$PWD}; rel=${rel#"$root"}; rel=${rel#/}
 # the session's library and its state; lst != 0: offline or misconfigured (library.sh where)
 if [ -n "$lite" ]; then lname=; lib=/nonexistent-library; lst=1
 else lname=$(cos_libname "$root" "${CLAUDE_PROJECT_DIR:-$PWD}"); lib=$(cos_libpath "$root" "$lname"); lst=$?; fi
-L="$(dirname "$0")/library.sh"; TAB=$(printf '\t')
+L="$(dirname "$0")/library.sh"; TAB=$(printf '\t'); TS="$(dirname "$0")/track.sh"
 # screens: the design gate before screen code, the review gate before the owner sees a screen (screens.sh)
 SC="$(dirname "$0")/screens.sh"
 REVIEW_HOW="Run the independent reviewer as a subagent ('Role card: reviewer'). It opens the screen and the 1-2 reference apps the designer named, saves a screenshot of each, compares them side by side (layout, hierarchy, type, spacing, states) and writes design/reviews/<YYYY-MM-DD HHMM> <screen>.md with 'Verdict: pass' or 'Verdict: fail', a 'References:' section (the apps, with links) and a 'Side by side:' section (the paths of the saved screenshots, this screen and the reference). A screen that fails is fixed and reviewed again; it never reaches the owner. Where things stand: sh \"$SC\" state <project folder>."
@@ -66,11 +66,52 @@ SPEC=$root/specialists; [ -d "$SPEC" ] || SPEC=$TPLS
 card() { [ -f "$SPEC/$1.md" ] && { printf '%s' "$SPEC/$1.md"; return 0; }; [ -f "$TPLS/$1.md" ] && printf '%s' "$TPLS/$1.md"; }
 # who records the owner's OK: the coordinator, the owner's session at the root of the registered project folder
 isowner() { cos_owner "$root" "${CLAUDE_PROJECT_DIR:-$PWD}"; }
+# frozen: what the owner approved and froze, from the decisions in force that start with "Frozen:" and name
+# "freeze: <path>, <path>" (relative to the project, or absolute inside it), each resolved like a written path. The
+# project's own control files and the project folder itself never freeze: a session must still record and hand off
+frozen() { [ -n "$project" ] && [ -f "$pdir/DECISIONS.md" ] || return 0; _fr=$(realp "$pdir"); _fl=$(printf '%s' "$_fr" | tr 'A-Z' 'a-z')
+  _dd=$(realp "$DATA" 2>/dev/null | tr 'A-Z' 'a-z')
+  cos_decisions "$pdir/DECISIONS.md" | cut -f2 | grep -i '^ *frozen:' | cos_freezepaths |
+  while IFS= read -r _f; do case $_f in /*) ;; *) _f="$pdir/$_f" ;; esac
+    _z=$(realp "$_f"); [ -n "$_z" ] || continue; _zl=$(printf '%s' "$_z" | tr 'A-Z' 'a-z')
+    case $_zl in "$_fl"/decisions.md|"$_fl"/state.md|"$_fl"/track.md|"$_fl"/claude.md|"$_fl"/delivery.md|"$_fl"/.protocol.log|"$_fl"/board|"$_fl"/board/*|"$_fl"/specialists|"$_fl"/specialists/*|*/.chief-of-staff|*/.chief-of-staff/*|*/.owner-ok|*/.owner-items|*/.git|*/.git/*) continue ;; esac
+    [ -n "$_dd" ] && case $_dd in "$_zl"|"$_zl"/*) continue ;; esac   # a folder that holds the plugin's own data
+    case $_z in "$_fr"/*) printf '%s\n' "$_z" ;; esac
+  done; }
+# fsum PATH: what a frozen file or folder holds now (a folder: its files and their content), "missing" when gone
+# Content is read for files under 20 MB, the first 500 of them; a bigger file, or one past 500, counts by its size and
+# date (ls -ln), and every name counts, so an added or deleted file is seen in any folder (the hook has about 5 s)
+fsum() { if [ -d "$1" ]; then (cd "$1" && find . -type f | LC_ALL=C sort | awk '{ print (NR <= 500 ? "c " : "l ") $0 }' | while read -r _k _f; do
+      if [ "$_k" = c ] && [ -n "$(find "$_f" -prune -size -20480k)" ]; then printf '%s ' "$_f"; cksum < "$_f"; else ls -ln "$_f"; fi; done) | cksum
+  elif [ -f "$1" ]; then if [ -n "$(find "$1" -prune -size -20480k)" ]; then cksum < "$1"; else ls -ln "$1"; fi; else echo missing; fi; }
+# dropped: how many decisions in force say the owner dropped something
+dropped() { [ -f "$pdir/DECISIONS.md" ] || { echo 0; return 0; }; cos_decisions "$pdir/DECISIONS.md" | cut -f2 | grep -ci '^ *dropped:'; return 0; }
 
 # Flat JSON field (hook input is compact JSON); good enough for ids, names and booleans.
 # wnorm: a search or link as compared (lower case, quotes and outer spaces dropped, spaces collapsed)
 wnorm() { tr 'A-Z' 'a-z' | sed "s/[\`\"']//g; s/^[[:space:]]*//; s/[[:space:]]*\$//; s/[[:space:]][[:space:]]*/ /g"; }
 jget() { printf '%s' "$in" | sed -n "s/.*\"$1\" *: *\"\{0,1\}\([^\",}]*\).*/\1/p" | head -n 1; }
+# promptof MAX: the message as typed (JSON escapes undone), cut at MAX characters (0: all of it)
+promptof() { printf '%s' "$in" | LC_ALL=C awk -v m="$1" '{ s = s $0 " " } END {
+  i = index(s, "\"prompt\":"); if (!i) exit; s = substr(s, i + 9); sub(/^ *"/, "", s); o = ""
+  for (j = 1; j <= length(s) && (m == 0 || length(o) < m); j++) { c = substr(s, j, 1)
+    if (c == "\\") { j++; c = substr(s, j, 1); o = o ((c == "n" || c == "t" || c == "r") ? " " : c); continue }
+    if (c == "\"") break; o = o c }
+  print o }'; }
+# owords: what the owner's message decides by its own words, one "drop<TAB>words" or "approve<TAB>words" line each.
+# Text inside quotes is someone else's (a rule, a brief, a report) and a negated word decides nothing ("não esquece
+# de", "esqueci", "not approved", "quase perfeito"). Accented letters are written as byte alternations (LC_ALL=C)
+# ponytail: a word list, not a language model; a miss costs a reminder, never a block
+owords() { promptof 4000 | tr 'A-Z' 'a-z' | LC_ALL=C awk '{ s = s $0 " " } END {
+    while ((i = index(s, "\"")) > 0) { r = substr(s, i + 1); j = index(r, "\""); if (!j) { s = substr(s, 1, i - 1); break } s = substr(s, 1, i - 1) " " substr(r, j + 1) }
+    lq = "\342\200\234"; rq = "\342\200\235"
+    while ((i = index(s, lq)) > 0) { r = substr(s, i + 3); j = index(r, rq); if (!j) { s = substr(s, 1, i - 1); break } s = substr(s, 1, i - 1) " " substr(r, j + 3) }
+    gsub(/(n(\303\243|\303\203|a)o|sem|nunca|nem|nada|quase|not|never|almost|isn.?t|wasn.?t) +([^ ]+ +)?(de +)?(esque|perfe|aprov|approv|deixa|desist|forget|drop)/, " x", s)
+    s = " " s " "
+    if (match(s, /[^a-z](esquece|esque(\303\247|\303\207|c)a|pode esquecer|deixa (pra|para) l(\303\241|\303\201|a)|n(\303\243|\303\203|a)o (quero|precisa|precisamos) mais|desiste|desista|forget (it|about|that|this|the)|never ?mind|drop (it|that|this)|scrap (it|that|this|the))[^a-z]/))
+      print "drop\t" substr(s, (RSTART > 40 ? RSTART - 40 : 1), RLENGTH + 80)
+    if (match(s, /[^a-z](perfeit(o|a|os|as)|aprovad(o|a|os|as)|aprovo|aprovei|approved|i approve|perfect|(ficou|est(\303\241|\303\201|a)|t(\303\241|\303\201|a)) ((\303\263|\303\223|o)tim(o|a)|lind(o|a))|love it)[^a-z]/))
+      print "approve\t" substr(s, (RSTART > 40 ? RSTART - 40 : 1), RLENGTH + 80) }' | tr -d '"\\`\000-\010\013-\037'; }
 # the role a brief names: "Role card: <role>", or the card's path "Role card: <root>/specialists/<role>.md", which
 # the subagent reads itself (pasting 8-12 KB cards into every brief crowded out the task). A path elsewhere names no card
 # A path may hold spaces (a folder in "My Drive"): it runs up to /specialists/<role>.md
@@ -121,12 +162,34 @@ case $(jget hook_event_name) in
       pt=$( echo "Chief-of-staff protocol for this request (checked by hooks at the end of the turn):"
       echo "- A deliverable for other people or a decision that crosses areas goes through the specialists skill: at least one specialist and the independent reviewer, as subagents, each briefed with the line 'Role card: <role>' naming its card in $root/specialists/ (the subagent reads the card itself),$([ -z "$lite" ] && printf " a 'Library:' line,") and an 'Owner said:' line with the owner's constraints and corrections word for word. A new task from the owner (something to build or deliver) goes through the ambition skill first: it offers the bigger version to the owner as an option and never builds past the request. A question is answered at once, without ambition, specialists or a library note; when going deeper would help, the answer ends by offering it."
       echo "- Before you build, list the decisions the work depends on. The ones that shape what the owner will see or use (what gets built, reuse or rebuild, its look and format, its scope, what a sample is) are the owner's: ask, and build nothing on them before the answer. A decision is recorded only with the owner's own words in quotes and the time they said them. Engineering is the exception: how it is built under the hood (architecture, code, tests, security, performance, tooling, data model) is not the owner's area, and they do not want to be asked about it. Take it to what a top engineer would ship, decide it yourself, prove it with an outside judge, and tell the owner the result in one line."
+      echo "- The owner's words hold from the moment they are said. What the owner approves or calls perfect stays intact in every later edit: a change becomes a new version in a new file, and 'add X' changes only X. A 'forget X' (esquece, deixa pra lá, never mind) is a decision at once, and no session proposes or works on X again unless the owner asks.$([ -n "$project" ] && printf " The coordinator records both with track.sh decide ('Frozen: <what> (owner: <their words>; freeze: <path>)' and 'Dropped: <what> (owner: <their words>)'); a thread sends them to the coordinator.") In a large task, count the request's real deliverables before producing the first (2 lanes = 2 submissions = 2 videos = 2 scripts) and show the list to the owner once to confirm."
       cos_fast "$root" && echo "- Hackathon pace (pace: fast): internal work (plans, code, cards) needs one specialist subagent, no reviewer. The independent reviewer runs only on what goes outside: the submission, the video, the README, messages to judges, partners or users. Independent work goes to parallel sessions, not one long turn."
       [ -z "$lite" ] && echo "- Research starts in the library: sh \"$L\" search <terms> (workspace: $root). Web search only for what the library lacks; design work (a design-system piece, a screen, a video) starts with fresh web research of what the top of the market shipped in the last months, which the library and memory never replace. Every new finding, decision, how-to or option becomes a note: sh \"$L\" new <finding|decision|howto|option|topic> <origin> <title>, then fill it. Hooks check every note."
       echo "- Facts that change (what runs in production, balances, public links, deploy state) are measured again before they are repeated, never copied from STATE.md or a card." )
       # one write: a reader that stops at the first line (grep -q) cannot cut the text before it is marked seen
       printf '%s\n' "$pt" && { rm -f "$st.full"; : > "$st.seen"; }
     fi
+    # The owner's words that decide by themselves: a drop is recorded this turn (the coordinator's Stop holds until a
+    # new Dropped: line), an approval is frozen. A report handed back or a notice is not the owner speaking
+    # A brief ('Role card:') is the coordinator speaking, also when a thread shares the project's folder
+    case $in in *'[Subagent hand-back]'*|*'<task-notification>'*|*'<side-sessions-event>'*|*'<ci-monitor-event>'*|*'Role card:'*) ow= ;; *) ow=$(owords) ;; esac
+    if [ -n "$ow" ]; then own=; [ -n "$project" ] && isowner && own=1
+      dw=$(printf '%s\n' "$ow" | sed -n 's/^drop\t//p' | head -n 1 | cut -c1-160)
+      aw=$(printf '%s\n' "$ow" | sed -n 's/^approve\t//p' | head -n 1 | cut -c1-160)
+      if [ -n "$dw" ]; then
+        if [ -n "$own" ]; then printf '%s\n%s\n' "$(dropped)" "$dw" > "$st/drop"
+          echo "chief-of-staff: the owner's message drops something (...$dw...). That is a decision now: record it this turn, before anything else, with sh \"$TS\" decide \"$pdir\" \"Dropped: <what> (owner: <their words>)\" owner. From now on no session proposes it or works on it unless the owner asks again."
+        elif [ -n "$project" ]; then echo "chief-of-staff: this message drops something (...$dw...). Do not work on it; send it to the project's coordinator, which records it in DECISIONS.md."
+        else echo "chief-of-staff: the owner's message drops something (...$dw...). That is a decision for the rest of this work: do not propose it or work on it unless the owner asks again."; fi
+      fi
+      if [ -n "$aw" ]; then
+        if [ -n "$own" ]; then echo "chief-of-staff: the owner approved something in this message (...$aw...). It stays intact from now on: record it with sh \"$TS\" decide \"$pdir\" \"Frozen: <what> (owner: <their words>; freeze: <file or folder, relative to the project>)\" owner. Later edits leave it as it is: a change is a new version in a new file, and a request to add X changes only X."
+        elif [ -n "$project" ]; then echo "chief-of-staff: this message approves something (...$aw...). It stays intact in every later edit (a change is a new version in a new file); send the approval to the project's coordinator, which freezes it in DECISIONS.md."
+        else echo "chief-of-staff: the owner approved something in this message (...$aw...). It stays intact in every later edit: a change is a new version in a new file, and a request to add X changes only X."; fi
+      fi
+    fi
+    # what is frozen as the turn starts, so a shell command that changes it is seen at the turn's end
+    [ -n "$project" ] && frozen | while IFS= read -r z; do printf '%s\t%s\n' "$z" "$(fsum "$z")"; done > "$st/frozen"
     # Every other prompt gets nothing: a one-line reminder on all of them (485 prompts, 82% with no specialist due)
     # pushed specialists onto trivial questions. The full text stays in context and the Stop gate still checks
     [ -n "$lite" ] && exit 0
@@ -141,12 +204,7 @@ case $(jget hook_event_name) in
     # a library whose automatic lookup did not finish inside its budget (a slow disk) is skipped until a note is added
     slow=$(cos_cache slow "$lib")
     [ "$slow" -nt "$lib/notes" ] && { echo "Library lookup skipped (too slow on this disk): run sh \"$L\" search <terms>."; exit 0; }
-    q=$(printf '%s' "$in" | LC_ALL=C awk '{ s = s $0 " " } END {
-      i = index(s, "\"prompt\":"); if (!i) exit; s = substr(s, i + 9); sub(/^ *"/, "", s); o = ""
-      for (j = 1; j <= length(s) && length(o) < 300; j++) { c = substr(s, j, 1)
-        if (c == "\\") { j++; c = substr(s, j, 1); o = o ((c == "n" || c == "t" || c == "r") ? " " : c); continue }
-        if (c == "\"") break; o = o c }
-      print o }')
+    q=$(promptof 300)
     [ -n "$q" ] || exit 0
     # The hook dies at 5 s and a killed hook loses everything it printed: the marker is written before the lookup
     # and removed only when the lookup ends inside its 2.5 s budget, so a lookup cut short is not tried again
@@ -213,8 +271,9 @@ $p"; fi ;;
               # owner asked for ("Sim, ajusta"), not a new deliverable: half the turn-end pushes in real use were such
               # follow-ups. A Write (a new file or a full rewrite) and DECISIONS.md (guarded decisions) always count
               [ -n "$ctl" ] || { printf '%s\n' "$fp" >> "$st/files"
-                case "$tool:$fp" in Edit:*/DECISIONS.md|MultiEdit:*/DECISIONS.md|Write:*) mark deliverable ;;
-                  *) grep -qxF -- "$fp" "$st.reviewed" 2>/dev/null || mark deliverable ;; esac; } ;; esac ;;
+                case "$tool:$fp" in Edit:*/DECISIONS.md|MultiEdit:*/DECISIONS.md|Write:*/DECISIONS.md) mark deliverable ;;
+                  Write:*) mark deliverable; dl=1 ;;
+                  *) grep -qxF -- "$fp" "$st.reviewed" 2>/dev/null || { mark deliverable; dl=1; } ;; esac; } ;; esac ;;
         esac ;; esac ;;
     esac
     case $in in *library.sh*search*|*"$lib/"*|*"$root/knowledge"*) [ "$tool" = Write ] || [ "$tool" = Edit ] || mark library ;; esac
@@ -251,9 +310,15 @@ $p" >&2; exit 2; } ;;
           if [ ! -f "$st/screens" ] && [ -z "${nd:-}" ]; then : > "$st/screens"
             ns=; sh "$SC" system "$root" "$sk" >/dev/null 2>&1; [ $? = 4 ] && ns=" This project keeps no design system yet: propose it to the owner now, before the next new screen or video (which waits for it). Copy the template to design/SYSTEM.md; for each piece, what the project already uses is one option ('## Option A (current)' with From: its file) beside 1-2 fresh references from web research; the reviewer opens every link; the owner picks."
             [ "$sk" = video ] && what="video (a composition or a render)" || what="screen code"
-            printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"chief-of-staff: this turn changes %s (%s). It follows the project design system (design/SYSTEM.md) and reaches the owner only after the independent reviewer (Role card: reviewer) compared it side by side with the references the owner picked (saved screenshots or stills of both) and wrote design/reviews/<YYYY-MM-DD HHMM> <name>.md with Verdict: pass, References: and Side by side:. Showing it before a passing review (an Artifact, a file sent, a link or a localhost address in the answer) is blocked.%s"}}\n' "$what" "$(printf '%s' "${sfp#"$rr/"}" | tr -d '"\\\000-\037')" "$ns"
+            said=1; printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"chief-of-staff: this turn changes %s (%s). It follows the project design system (design/SYSTEM.md) and reaches the owner only after the independent reviewer (Role card: reviewer) compared it side by side with the references the owner picked (saved screenshots or stills of both) and wrote design/reviews/<YYYY-MM-DD HHMM> <name>.md with Verdict: pass, References: and Side by side:. Showing it before a passing review (an Artifact, a file sent, a link or a localhost address in the answer) is blocked.%s"}}\n' "$what" "$(printf '%s' "${sfp#"$rr/"}" | tr -d '"\\\000-\037')" "$ns"
           fi
         fi ;; esac; fi
+    # In a large task the request's real deliverables are counted, and the list goes to the owner once, before the
+    # first one is made: the first deliverable a session writes says so (one JSON per call: not when a notice above
+    # already holds this one; the next deliverable carries it then)
+    if [ -n "${dl:-}" ] && [ -z "${nd:-}" ] && [ -z "${said:-}" ] && [ ! -f "$st.dlist" ]; then : > "$st.dlist"
+      printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"chief-of-staff: this is the first deliverable this session writes. In a large task the real deliverables of the request are counted before the first one is made (2 lanes = 2 submissions = 2 videos = 2 scripts), and the list goes to the owner once to confirm%s. If that list was not shown yet, show it now, before producing more."}}\n' "$([ -n "$project" ] && ! isowner && printf ' (a thread sends it to its coordinator)')"
+    fi
     ;;
   PreToolUse)
     case $(jget tool_name) in
@@ -292,12 +357,22 @@ $p" >&2; exit 2; } ;;
         echo "Blocked by chief-of-staff: the project's screens are not cleared to reach the owner: $why
 $REVIEW_HOW" >&2
         exit 2 ;;
-      Write|Edit|MultiEdit|Bash)   # the marker says where the library lives: only the owner edits it
+      Write|Edit|MultiEdit|NotebookEdit|Bash)   # the marker says where the library lives: only the owner edits it
         [ -n "$lite" ] && exit 0
         # macOS file names ignore case: .CHIEF-OF-STAFF is the marker, and so is .owner-oK with a Kelvin sign (cos_fold)
         lc=$(printf '%s' "$in" | tr 'A-Z' 'a-z' | cos_fold)
         case $(jget tool_name) in
           Bash)
+            # DECISIONS.md is the coordinator's: a thread records a decision only through track.sh decide, which appends a
+            # line that replaces nothing (and refuses a freeze or a drop), and reads the file with the Read or Grep tool.
+            # Any shell command of a thread that names it is blocked (no shell parser can tell every read from a write),
+            # except a plain git add, commit or status, so the handoff commits the files it touched by name: plain words
+            # and paths, at most one -m "message" of plain words; a JSON escape (\n), $, a chain or a redirect refuses it
+            if [ -n "$project" ] && ! isowner && printf '%s' "$lc" | grep -q 'decisions\.md' &&
+              ! printf '%s' "$lc" | sed -nE 's/.*"command" *: *"(([^"\\]|\\.)*)".*/\1/p' | head -n 1 |
+                grep -Eq '^ *git +(add|commit|status)( +([-a-z0-9._/]+|-m +\\"[a-z0-9 ._,:-]*\\"))* *$'; then
+              echo "Blocked by chief-of-staff: DECISIONS.md is written by the project's coordinator. Read it with the Read or Grep tool; record a decision with sh \"$TS\" decide <project> \"<decision>\" <who>; what the owner froze, dropped or lifted goes to the coordinator." >&2; exit 2
+            fi
             # opening a page or a local server in the owner's browser (open, xdg-open, start) is showing the screen
             # ponytail: a word list, not a shell parser; the Artifact and SendUserFile blocks are the hard part
             rl=$(cd "$root" && pwd -P | tr 'A-Z' 'a-z')
@@ -483,6 +558,24 @@ WS
             fi ;;
           *) # the library's git data and the plugin's own files. The path is resolved (.., symlinks, letter case) before it is compared
              fp=$(printf '%s' "$in" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/p' | head -n 1)
+             [ -n "$fp" ] || fp=$(printf '%s' "$in" | sed -n 's/.*"notebook_path" *: *"\([^"]*\)".*/\1/p' | head -n 1)
+             # a relative path is read from the session's folder
+             afp=$fp; case $fp in /*|'') ;; *) afp="${CLAUDE_PROJECT_DIR:-$PWD}/$fp" ;; esac
+             # DECISIONS.md is the coordinator's, by any spelling of its path (.., a symlink, letter case, a hard link)
+             if [ -n "$project" ] && ! isowner && [ -n "$afp" ]; then
+               dpath=$(real "$pdir/DECISIONS.md"); dhit=; [ "$(real "$afp")" = "$dpath" ] && dhit=1
+               [ -z "$dhit" ] && [ -f "$afp" ] && [ -f "$pdir/DECISIONS.md" ] && [ "$(ls -diL "$afp" | awk '{ print $1 }')" = "$(ls -diL "$pdir/DECISIONS.md" | awk '{ print $1 }')" ] && dhit=1
+               [ -n "$dhit" ] && { echo "Blocked by chief-of-staff: DECISIONS.md is written by the project's coordinator. A thread records a decision with sh \"$TS\" decide <project> \"<decision>\" <who>; what the owner froze, dropped or lifted goes to the coordinator." >&2; exit 2; }
+             fi
+             # what the owner approved stays as it is (a decision in force froze it): a change is a new version beside it
+             if [ -n "$project" ] && [ -n "$afp" ] && fr=$(frozen) && [ -n "$fr" ]; then
+               rpf=$(real "$afp")
+               hz=$([ -n "$rpf" ] && printf '%s\n' "$fr" | while IFS= read -r z; do z=$(printf '%s' "$z" | tr 'A-Z' 'a-z'); case $rpf in ("$z"|"$z"/*) printf '%s' "$z"; break ;; esac; done)
+               # a hard link is the same file under another name
+               if [ -z "$hz" ] && [ -f "$afp" ] && [ "$(ls -ld "$afp" | awk '{ print $2 }')" -gt 1 ] 2>/dev/null; then ino=$(ls -di "$afp" | awk '{ print $1 }')
+                 hz=$(printf '%s\n' "$fr" | while IFS= read -r z; do [ -f "$z" ] && [ "$(ls -di "$z" | awk '{ print $1 }')" = "$ino" ] && { printf '%s' "$z"; break; }; done); fi
+               [ -n "$hz" ] && { echo "Blocked by chief-of-staff: ${afp##*/} holds work the owner approved, frozen by a decision in force (DECISIONS.md, Frozen:). It stays as it is in every later edit. Write the change as a new version in a new file beside it, changing only what was asked; the approved one stays intact. If the owner asked to change this very file, the coordinator first records that with a new line in DECISIONS.md that revokes the freeze (- <now> | revoked: <why, with the owner's words> | owner | replaces: <its date and time>)." >&2; exit 2; }
+             fi
              # no screen is built before its design: screen code waits while a design item of TRACK.md is not done
              # (a block, not a reminder: screens can be built over several turns, and a turn-end push lets go on the
              # second stop). Mockups under design/ are the designer's. A path with .. parts is blocked further below
@@ -496,7 +589,7 @@ $SYSTEM_HOW
 Mockups under design/ are free; screen and video code continue once the pieces hold the owner's OK.$tr" >&2
                  exit 2; }
              fi
-             case $fp in /*) rp=$(real "$fp")
+             case $afp in /*) rp=$(real "$afp")
                [ -n "$rp" ] || { echo "Blocked by chief-of-staff: write $fp by its plain path, without . or .. parts." >&2; exit 2; } ;; *) rp= ;; esac
              o=$(cos_libs "$root" | while IFS="$TAB" read -r n q; do [ -d "$q" ] || continue
                case $rp in ("$(cd "$q" && pwd -P | tr 'A-Z' 'a-z')"/*) echo "$n"; break ;; esac; done)
@@ -643,8 +736,20 @@ $REVIEW_HOW Then rewrite the answer: a screen that failed is not shown."
       fi
       [ -n "$sgaps" ] && reason="${reason:+$reason }$sgaps"
     fi
+    # what the owner froze, changed this turn by a shell command (a Write or an Edit of it is blocked before it runs);
+    # put back as it was, it is no change. Only what is still frozen now counts: a freeze the owner lifted is lifted
+    if [ -n "$project" ] && [ -s "$st/frozen" ]; then fnow=$(frozen)
+      fch=$(while IFS="$TAB" read -r z s; do printf '%s\n' "$fnow" | grep -qxF -- "$z" || continue
+        [ "$(fsum "$z")" = "$s" ] || printf '%s ' "${z#"$(cd "$root" && pwd -P)/"}"; done < "$st/frozen")
+      [ -n "$fch" ] && reason="${reason:+$reason }This turn changed what the owner approved and froze (DECISIONS.md, Frozen:): $fch. Put it back as it was (git checkout -- <file>, or undo the change) and write the change as a new version in a new file, changing only what was asked."
+    fi
     pushed=$(jget stop_hook_active)
     violation=0; [ "$pushed" = true ] && [ -n "$reason" ] && violation=1
+    # a drop the owner said this turn and nobody recorded: pushed once, never a violation (the words may have dropped
+    # nothing, and the turn can say so)
+    if [ -n "$project" ] && [ -f "$st/drop" ] && [ "$(dropped)" -le "$(head -n 1 "$st/drop")" ]; then
+      reason="${reason:+$reason }The owner dropped something in this message (...$(sed -n 2p "$st/drop")...): that is a decision now. Record it before you finish: sh \"$TS\" decide \"$pdir\" \"Dropped: <what> (owner: <their words>)\" owner. From now on no session proposes it or works on it unless the owner asks again. If those words dropped nothing, say so in one line."
+    fi
     [ -n "$lslow" ] && reason="${reason:+$reason }Not checked this turn (slow disk):
 $lslow"
     printf '%s t=%s turn=%s project=%s substantive=%s agents=%s specialists=%s reviewers=%s library=%s web=%s saved=%s track=%s pushed=%s violation=%s notes=%s offline=%s rejected=%s slow=%s\n' \
